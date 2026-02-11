@@ -380,7 +380,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
-        CrearVehiculoTrabajoUnico(playerid, 498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 1, 1, CamioneroVehiculo[playerid]);
+        CrearVehiculoTrabajoUnico(playerid, 498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 0, 0, CamioneroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
 
         TrabajandoCamionero[playerid] = 1;
@@ -407,7 +407,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
         if(TotalRutasBasura <= 0) return SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de basura cargadas.");
 
-        CrearVehiculoTrabajoUnico(playerid, 408, PuntoPos[puntoBasurero][0] + 4.0, PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2] + 1.0, 0.0, 6, 6, BasureroVehiculo[playerid]);
+        CrearVehiculoTrabajoUnico(playerid, 440, PuntoPos[puntoBasurero][0] + 4.0, PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2] + 1.0, 0.0, 0, 0, BasureroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, BasureroVehiculo[playerid], 0);
         BasureroRecolectado[playerid] = 0;
         TrabajandoBasurero[playerid] = 1;
@@ -560,6 +560,8 @@ stock FinalizarTrabajo(playerid) {
     SendClientMessage(playerid, 0x00FF00FF, str);
     format(str, sizeof(str), "{FFD700}Progreso camionero:{FFFFFF} %d/%d | Nivel actual: %d/%d", CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, CamioneroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, str);
+    format(str, sizeof(str), "{FFD700}[CAMIONERO]{FFFFFF} Te pagaron: {00FF00}$%d", pago);
+    SendClientMessage(playerid, 0x00FF00FF, str);
     GameTextForPlayer(playerid, "~g~Pago recibido", 2500, 3);
 
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
@@ -628,6 +630,8 @@ public FinalizarEntregaPizza(playerid) {
     format(info, sizeof(info), "{FF4500}[PIZZERO]{FFFFFF} {66CCFF}Pago fijo:{FFFFFF} $%d {FF66CC}| Nivel:{FFFFFF} $%d {99FF66}| Distancia:{FFFFFF} $%d {00FF00}| Total:{FFFFFF} $%d", pagoBase, pagoNivel, pagoDistancia, pago);
     SendClientMessage(playerid, 0x00FF00FF, info);
     format(info, sizeof(info), "{FF4500}Progreso pizzero:{FFFFFF} %d/%d | Nivel actual: %d/%d", PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO);
+    SendClientMessage(playerid, 0x00FF00FF, info);
+    format(info, sizeof(info), "{FF4500}[PIZZERO]{FFFFFF} Te pagaron: {00FF00}$%d", pago);
     SendClientMessage(playerid, 0x00FF00FF, info);
     GameTextForPlayer(playerid, "~g~Pago recibido", 2000, 3);
 
@@ -1855,7 +1859,9 @@ stock FinalizarTrabajoBasurero(playerid) {
         }
 
         new msg[160];
-        format(msg, sizeof(msg), "{66FF66}[BASURERO]{FFFFFF} Pago: $%d | Progreso %d/%d | Nivel %d/%d", pago, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
+        format(msg, sizeof(msg), "{66FF66}Progreso basurero:{FFFFFF} %d/%d | Nivel actual: %d/%d", BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+        format(msg, sizeof(msg), "{66FF66}[BASURERO]{FFFFFF} Te pagaron: {00FF00}$%d", pago);
         SendClientMessage(playerid, 0x66FF66FF, msg);
     }
 
