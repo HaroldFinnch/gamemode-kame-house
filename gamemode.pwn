@@ -661,6 +661,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "No estas en una casa.");
         new casa = PlayerInCasa[playerid];
         PlayerInCasa[playerid] = -1;
+    TrabajandoCamionero[playerid] = 0;
+    TrabajandoPizzero[playerid] = 0;
+    CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
         SetPlayerPos(playerid, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ] + 1.0);
         SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
