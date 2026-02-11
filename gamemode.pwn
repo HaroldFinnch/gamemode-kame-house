@@ -101,17 +101,6 @@ stock GuardarArmaEnArmario(playerid, casa);
 stock GetAmmoByWeapon(playerid, WEAPON:weaponid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 
-// Adelantos de funciones usadas antes de su implementacion
-forward strtok(const string[], &index);
-forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
-forward GuardarCasas();
-forward GuardarCuenta(playerid);
-forward BajarHambre();
-forward ChequearLimitesMapa();
-forward AutoGuardadoGlobal();
-stock GetClosestCasa(playerid);
-stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
-
 // ================= [ MAIN & INIT ] =================
 main() {
     printf("Server KameHouse");
@@ -169,7 +158,8 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Armario dentro de casas
     if(PlayerInCasa[playerid] != -1 && IsPlayerInRangeOfPoint(playerid, 2.0, ARMARIO_X, ARMARIO_Y, ARMARIO_Z)) {
         new casaArmario = PlayerInCasa[playerid];
-        if(GetPlayerWeapon(playerid) > 0) {
+        new WEAPON:weaponActual = GetPlayerWeapon(playerid);
+        if(_:weaponActual > 0) {
             GuardarArmaEnArmario(playerid, casaArmario);
         } else {
             AbrirArmario(playerid, casaArmario);
@@ -420,18 +410,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
-        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
-        id = strval(tmp);
-
-        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
-        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
-        arma = strval(tmp);
-
-        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
-        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
         muni = strval(tmp);
 
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
+        if(arma <= 0 || arma >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "ID de arma invalida.");
+        if(muni <= 0) return SendClientMessage(playerid, -1, "Municion invalida.");
         GivePlayerWeapon(id, WEAPON:arma, muni);
         return 1;
     }
@@ -506,14 +489,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         Update3DTextLabelText(CasaLabel[casa], 0x00FF00FF, labelstr);
         SendClientMessage(playerid, 0x00FF00FF, "?Casa comprada exitosamente!");
         GuardarCasas();
-        return 1;
-    }
-
-    if(!strcmp(cmd, "/entrar", true)) {
-        new casa = GetClosestCasa(playerid);
-        if(casa == -1) return SendClientMessage(playerid, -1, "No estas cerca de una casa.");
-        if(PlayerTieneAccesoCasa(playerid, casa) == false) return SendClientMessage(playerid, -1, "No tienes acceso a esta casa.");
-        EntrarCasa(playerid, casa);
         return 1;
     }
 
@@ -645,8 +620,8 @@ stock EntrarCasa(playerid, casa) {
 
 stock GetAmmoByWeapon(playerid, WEAPON:weaponid) {
     new WEAPON:weapon, ammo;
-    for(new i = 0; i < 13; i++) {
-        GetPlayerWeaponData(playerid, i, weapon, ammo);
+    for(new WEAPON_SLOT:slot = WEAPON_SLOT_HAND; _:slot < 13; slot++) {
+        GetPlayerWeaponData(playerid, slot, weapon, ammo);
         if(weapon == weaponid) return ammo;
     }
     return 0;
@@ -654,16 +629,16 @@ stock GetAmmoByWeapon(playerid, WEAPON:weaponid) {
 
 stock GuardarArmaEnArmario(playerid, casa) {
     new WEAPON:weapon = GetPlayerWeapon(playerid);
-    if(weapon <= 0 || weapon >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "No tienes un arma valida en mano.");
+    if(_:weapon <= 0 || _:weapon >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "No tienes un arma valida en mano.");
 
     new ammo = GetAmmoByWeapon(playerid, weapon);
     if(ammo <= 0) return SendClientMessage(playerid, -1, "No tienes municion para guardar.");
 
-    CasaArmario[casa][weapon] += ammo;
+    CasaArmario[casa][_:weapon] += ammo;
     ResetPlayerWeapons(playerid);
 
     new str[128];
-    format(str, sizeof(str), "Guardaste arma ID %d con %d balas. Total en armario: %d.", weapon, ammo, CasaArmario[casa][weapon]);
+    format(str, sizeof(str), "Guardaste arma ID %d con %d balas. Total en armario: %d.", _:weapon, ammo, CasaArmario[casa][_:weapon]);
     SendClientMessage(playerid, 0x00FF00FF, str);
     return 1;
 }
@@ -896,7 +871,8 @@ public OnPlayerDisconnect(playerid, reason) {
     return 1; 
 }
 
-public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
+public OnPlayerInteriorChange(playerid, oldinterior, newinterior) {
+    #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
     if(PlayerInCasa[playerid] == -1 && newinterior != 0) {
@@ -919,7 +895,7 @@ public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
     return 1;
 }
 
-public OnPlayerRequestClass(playerid, CLASS:classid) {
+public OnPlayerRequestClass(playerid, classid) {
     #pragma unused classid
     SetPlayerPos(playerid, 2494.24, -1680.0, 15.0);
     return 1;
