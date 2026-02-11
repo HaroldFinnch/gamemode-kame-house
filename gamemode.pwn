@@ -7,13 +7,13 @@
 #define VIDA_AL_LOGUEAR     100.0
 #define CHALECO_AL_LOGUEAR  100.0
 #define DINERO_INICIAL      500
-#define COLOR_HAMBRE        0xFFA500FF 
+#define COLOR_HAMBRE        0xFFA500FF
 #define RADIO_CHAT_LOCAL    20.0
 #define PRECIO_COMIDA       25
 #define HAMBRE_POR_COMIDA   20
 #define DISTANCIA_PAGO_MULT  3.0
+#define DISTANCIA_PAGO_PIZZA 2.2
 
-#define DIALOG_ARMARIO       3
 #define MAX_WEAPON_ID_GM     47
 
 #define CASA_INT_X           2496.0499
@@ -27,10 +27,14 @@
 #define POS_TRABAJO_Y       -1671.19
 #define POS_TRABAJO_Z       13.33
 
-// Posicion nueva para el Checkpoint de carga 
-#define POS_CARGA_X         2480.00 
+// Posicion nueva para el Checkpoint de carga
+#define POS_CARGA_X         2480.00
 #define POS_CARGA_Y         -1685.00
 #define POS_CARGA_Z         13.33
+
+#define POS_PIZZERIA_X      2105.17
+#define POS_PIZZERIA_Y      -1806.51
+#define POS_PIZZERIA_Z      13.55
 
 #define LIMITE_X_MAX        3000.0
 #define LIMITE_X_MIN        -500.0
@@ -41,8 +45,11 @@
 #define DIALOG_LOGIN        2
 #define PATH_USUARIOS       "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
+#define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
 #define PATH_CASAS          "casas.txt"
 #define MAX_CASAS           50
+
+#define DIALOG_GPS          10
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -51,17 +58,24 @@
 // ================= [ VARIABLES ] =================
 new bool:IsPlayerLoggedIn[MAX_PLAYERS];
 new PlayerPassword[MAX_PLAYERS][16];
-new PlayerAdmin[MAX_PLAYERS]; 
+new PlayerAdmin[MAX_PLAYERS];
 new PlayerHambre[MAX_PLAYERS];
 new PlayerText:BarraHambre[MAX_PLAYERS];
 new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
 
 // Variables Camionero
-new TrabajandoCamionero[MAX_PLAYERS]; 
+new TrabajandoCamionero[MAX_PLAYERS];
 new CamioneroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new CamioneroNivel[MAX_PLAYERS];
 new CamioneroViajes[MAX_PLAYERS];
+
+// Variables Pizzero
+new TrabajandoPizzero[MAX_PLAYERS];
+new PizzeroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
+new PizzeroNivel[MAX_PLAYERS];
+new PizzeroEntregas[MAX_PLAYERS];
+new Float:PizzeroDestino[MAX_PLAYERS][3];
 
 // Variables Casas
 enum eCasa {
@@ -76,11 +90,6 @@ new CasaData[MAX_CASAS][eCasa];
 new TotalCasas = 0;
 new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
-new CasaArmario[MAX_CASAS][MAX_WEAPON_ID_GM];
-new CasaArmarioPickup[MAX_CASAS];
-new Text3D:CasaArmarioLabel[MAX_CASAS];
-new ArmarioLista[MAX_PLAYERS][MAX_WEAPON_ID_GM];
-new ArmarioListaCount[MAX_PLAYERS];
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
@@ -92,15 +101,13 @@ forward GuardarCuenta(playerid);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
-forward OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
 stock EntrarCasa(playerid, casa);
-stock AbrirArmario(playerid, casa);
-stock GuardarArmaEnArmario(playerid, casa);
-stock GetAmmoByWeapon(playerid, WEAPON:weaponid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
+stock CanceladoTrabajo(playerid);
+stock CanceladoTrabajoPizzero(playerid);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -110,9 +117,11 @@ main() {
 public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
-    
-    CreatePickup(1210, 1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 0); 
+
+    CreatePickup(1210, 1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 0);
     Create3DTextLabel("Trabajo: {FFFF00}Camionero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z + 0.5, 10.0, 0);
+    CreatePickup(1581, 1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, 0);
+    Create3DTextLabel("Trabajo: {FF4500}Pizzero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}en la pizzeria", -1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z + 0.5, 12.0, 0);
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -126,9 +135,9 @@ public OnGameModeInit() {
             CasaData[TotalCasas][cPrecio] = strval(strtok(str, idx));
             strmid(CasaData[TotalCasas][cOwner], strtok(str, idx), 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
             strmid(CasaData[TotalCasas][cFriends], strtok(str, idx), 0, 128, 128);
-            
+
             CasaPickup[TotalCasas] = CreatePickup(1273, 2, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ], 0);
-            
+
             new labelstr[64];
             if(!strcmp(CasaData[TotalCasas][cOwner], "None")) {
                 format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d", CasaData[TotalCasas][cPrecio]);
@@ -136,16 +145,13 @@ public OnGameModeInit() {
                 format(labelstr, sizeof(labelstr), "Casa de %s", CasaData[TotalCasas][cOwner]);
             }
             CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ] + 0.5, 10.0, 0);
-            CasaArmarioPickup[TotalCasas] = CreatePickup(1274, 2, ARMARIO_X, ARMARIO_Y, ARMARIO_Z, TotalCasas + 1);
-            CasaArmarioLabel[TotalCasas] = Create3DTextLabel("Armario de armas\nPresiona {FFFF00}H", 0xFFD700FF, ARMARIO_X, ARMARIO_Y, ARMARIO_Z + 0.6, 8.0, TotalCasas + 1);
-            
             TotalCasas++;
         }
         fclose(h);
     }
 
     SetTimer("AutoGuardadoGlobal", 300000, true);
-    SetTimer("BajarHambre", 60000, true); 
+    SetTimer("BajarHambre", 60000, true);
     SetTimer("ChequearLimitesMapa", 1000, true);
     return 1;
 }
@@ -155,18 +161,6 @@ public OnGameModeInit() {
 public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 {
     if(!(newkeys & KEY_CTRL_BACK)) return 1; // Tecla H
-
-    // Armario dentro de casas
-    if(PlayerInCasa[playerid] != -1 && IsPlayerInRangeOfPoint(playerid, 2.0, ARMARIO_X, ARMARIO_Y, ARMARIO_Z)) {
-        new casaArmario = PlayerInCasa[playerid];
-        new WEAPON:weaponActual = GetPlayerWeapon(playerid);
-        if(_:weaponActual > 0) {
-            GuardarArmaEnArmario(playerid, casaArmario);
-        } else {
-            AbrirArmario(playerid, casaArmario);
-        }
-        return 1;
-    }
 
     // Entrada a casas desde el icono con H
     new casa = GetClosestCasa(playerid);
@@ -179,7 +173,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo camionero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z))
     {
-        if(TrabajandoCamionero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando.");
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
         CamioneroVehiculo[playerid] = CreateVehicle(498, POS_TRABAJO_X + 3.0, POS_TRABAJO_Y, POS_TRABAJO_Z + 1.0, 0.0, 1, 1, 0);
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
@@ -187,6 +181,20 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         TrabajandoCamionero[playerid] = 1;
         SetPlayerCheckpoint(playerid, POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, 5.0);
         SendClientMessage(playerid, -1, "{FFFF00}[TRABAJO]{FFFFFF} Sube al camion y ve al punto de CARGA (punto rojo).");
+        return 1;
+    }
+
+    // Inicio de trabajo pizzero
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z))
+    {
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+
+        PizzeroVehiculo[playerid] = CreateVehicle(468, POS_PIZZERIA_X + 2.5, POS_PIZZERIA_Y, POS_PIZZERIA_Z + 0.5, 0.0, 3, 3, 0);
+        PutPlayerInVehicle(playerid, PizzeroVehiculo[playerid], 0);
+        TrabajandoPizzero[playerid] = 1;
+        SetTimerEx("AsignarRutaPizzero", 200, false, "d", playerid);
+        SendClientMessage(playerid, -1, "{FF4500}[PIZZERO]{FFFFFF} Entrega pizzas y gana dinero. Sigue el checkpoint.");
+        return 1;
     }
     return 1;
 }
@@ -205,7 +213,7 @@ public OnPlayerEnterCheckpoint(playerid)
         TogglePlayerControllable(playerid, false);
         GameTextForPlayer(playerid, "~w~CARGANDO...~n~~y~Espere", 3000, 3);
         SetTimerEx("FinalizarCarga", 20000, false, "d", playerid);
-        TrabajandoCamionero[playerid] = 2; 
+        TrabajandoCamionero[playerid] = 2;
     }
     else if(TrabajandoCamionero[playerid] == 3) { // Llegando a entregar
         DisablePlayerCheckpoint(playerid);
@@ -217,6 +225,22 @@ public OnPlayerEnterCheckpoint(playerid)
     else if(TrabajandoCamionero[playerid] == 5) { // Volviendo a base
         DisablePlayerCheckpoint(playerid);
         FinalizarTrabajo(playerid);
+        return 1;
+    }
+
+    if(TrabajandoPizzero[playerid] == 1) {
+        if(GetPlayerVehicleID(playerid) != PizzeroVehiculo[playerid]) {
+            SendClientMessage(playerid, 0xFF0000FF, "PIZZERO CANCELADO: Debes usar la moto de la pizzeria.");
+            CanceladoTrabajoPizzero(playerid);
+            return 1;
+        }
+        DisablePlayerCheckpoint(playerid);
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+        GameTextForPlayer(playerid, "~r~ENTREGANDO PIZZA", 2500, 3);
+        SetTimerEx("FinalizarEntregaPizza", 10000, false, "d", playerid);
+        TrabajandoPizzero[playerid] = 2;
+        return 1;
     }
     return 1;
 }
@@ -226,17 +250,17 @@ public FinalizarCarga(playerid) {
     if(!IsPlayerConnected(playerid)) return 1;
     TogglePlayerControllable(playerid, true);
     TrabajandoCamionero[playerid] = 3;
-    
+
     new File:h = fopen(PATH_RUTAS, io_read);
     if(h) {
         new line[64], count = 0;
         while(fread(h, line)) count++;
-        
+
         if(count > 0) {
             fseek(h, 0, seek_start);
             new ruta_azar = random(count);
             for(new i = 0; i <= ruta_azar; i++) fread(h, line);
-            
+
             new Float:rx, Float:ry, Float:rz;
             sscanf_manual(line, rx, ry, rz);
             CamioneroDestino[playerid][0] = rx;
@@ -251,6 +275,8 @@ public FinalizarCarga(playerid) {
 }
 
 forward FinalizarDescarga(playerid);
+forward AsignarRutaPizzero(playerid);
+forward FinalizarEntregaPizza(playerid);
 public FinalizarDescarga(playerid) {
     TogglePlayerControllable(playerid, true);
     TrabajandoCamionero[playerid] = 5;
@@ -276,9 +302,12 @@ stock FinalizarTrabajo(playerid) {
     distancia += GetDistanceBetweenPoints(POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2]);
     distancia += GetDistanceBetweenPoints(CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2], POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z);
 
-    new pago = 350 + floatround(distancia * DISTANCIA_PAGO_MULT) + (CamioneroNivel[playerid] * 200);
+    new pagoBase = 700;
+    new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_MULT);
+    new pagoNivel = CamioneroNivel[playerid] * 120;
+    new pago = pagoBase + pagoDistancia + pagoNivel;
     GivePlayerMoney(playerid, pago);
-    
+
     CamioneroViajes[playerid]++;
     if(CamioneroViajes[playerid] >= 50) {
         CamioneroViajes[playerid] = 0;
@@ -287,14 +316,93 @@ stock FinalizarTrabajo(playerid) {
         format(levelmsg, sizeof(levelmsg), "{FFFF00}NIVEL SUBIDO!{FFFFFF} Ahora eres nivel %d.", CamioneroNivel[playerid]);
         SendClientMessage(playerid, 0xFFFF00FF, levelmsg);
     }
-    
-    new str[128];
-    format(str, 128, "Pago recibido: $%d. Progreso: %d/50", pago, CamioneroViajes[playerid]);
+
+    new str[160];
+    format(str, sizeof(str), "Pago por entrega: $%d + Distancia: $%d + Nivel: $%d = Total: $%d", pagoBase, pagoDistancia, pagoNivel, pago);
     SendClientMessage(playerid, 0x00FF00FF, str);
-    
+    format(str, sizeof(str), "Progreso camionero: %d/50", CamioneroViajes[playerid]);
+    SendClientMessage(playerid, 0x00FF00FF, str);
+
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     TrabajandoCamionero[playerid] = 0;
+    return 1;
+}
+
+public AsignarRutaPizzero(playerid) {
+    if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
+
+    new File:h = fopen(PATH_RUTAS_PIZZA, io_read);
+    if(!h) {
+        SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de pizzero guardadas. Contacta un admin.");
+        CanceladoTrabajoPizzero(playerid);
+        return 1;
+    }
+
+    new line[64], count = 0;
+    while(fread(h, line)) count++;
+    if(count <= 0) {
+        fclose(h);
+        SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de pizzero guardadas.");
+        CanceladoTrabajoPizzero(playerid);
+        return 1;
+    }
+
+    fseek(h, 0, seek_start);
+    new ruta_azar = random(count);
+    for(new i = 0; i <= ruta_azar; i++) fread(h, line);
+    fclose(h);
+
+    new Float:rx, Float:ry, Float:rz;
+    sscanf_manual(line, rx, ry, rz);
+    PizzeroDestino[playerid][0] = rx;
+    PizzeroDestino[playerid][1] = ry;
+    PizzeroDestino[playerid][2] = rz;
+    SetPlayerCheckpoint(playerid, rx, ry, rz, 4.0);
+    TrabajandoPizzero[playerid] = 1;
+    SendClientMessage(playerid, 0xFF8C00FF, "Nueva entrega asignada. Ve al checkpoint y entrega la pizza.");
+    return 1;
+}
+
+public FinalizarEntregaPizza(playerid) {
+    if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+
+    new Float:distancia = GetDistanceBetweenPoints(POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
+    new pagoBase = 450;
+    new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_PIZZA);
+    new pagoNivel = PizzeroNivel[playerid] * 80;
+    new pago = pagoBase + pagoDistancia + pagoNivel;
+    GivePlayerMoney(playerid, pago);
+
+    PizzeroEntregas[playerid]++;
+    if(PizzeroEntregas[playerid] >= 40) {
+        PizzeroEntregas[playerid] = 0;
+        PizzeroNivel[playerid]++;
+        SendClientMessage(playerid, 0xFFFF00FF, "Subiste de nivel en el trabajo de pizzero.");
+    }
+
+    new info[160];
+    format(info, sizeof(info), "Pago pizza: $%d + Distancia: $%d + Nivel: $%d = Total: $%d", pagoBase, pagoDistancia, pagoNivel, pago);
+    SendClientMessage(playerid, 0x00FF00FF, info);
+    format(info, sizeof(info), "Progreso pizzero: %d/40", PizzeroEntregas[playerid]);
+    SendClientMessage(playerid, 0x00FF00FF, info);
+
+    SetTimerEx("AsignarRutaPizzero", 300, false, "d", playerid);
+    return 1;
+}
+
+stock CanceladoTrabajoPizzero(playerid) {
+    DisablePlayerCheckpoint(playerid);
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
+    PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    TrabajandoPizzero[playerid] = 0;
+    PizzeroDestino[playerid][0] = 0.0;
+    PizzeroDestino[playerid][1] = 0.0;
+    PizzeroDestino[playerid][2] = 0.0;
     return 1;
 }
 
@@ -315,16 +423,18 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/skills", true)) {
-        new str[128];
-        format(str, 128, "{FFFFFF}Nivel de Camionero: {FFFF00}%d\n{FFFFFF}Viajes Realizados: {FFFF00}%d/50", CamioneroNivel[playerid], CamioneroViajes[playerid]);
+        new str[196];
+        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d\n{FFFFFF}Viajes: {FFFF00}%d/50\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d\n{FFFFFF}Entregas: {FF8C00}%d/40", CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
 
     if(!strcmp(cmd, "/comer", true)) {
+        if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes usar /comer dentro de tu casa.");
         if(PlayerHambre[playerid] >= 100) return SendClientMessage(playerid, -1, "Ya tienes el hambre al maximo.");
         if(GetPlayerMoney(playerid) < PRECIO_COMIDA) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para comprar comida.");
 
+        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         GivePlayerMoney(playerid, -PRECIO_COMIDA);
         PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
         if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
@@ -337,10 +447,53 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
-        CanceladoTrabajo(playerid);
-        SendClientMessage(playerid, 0xFF0000FF, "Has cancelado tu trabajo de camionero.");
+    if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
+        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        if(TrabajandoCamionero[playerid] > 0) {
+            CanceladoTrabajo(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
+        }
+        if(TrabajandoPizzero[playerid] > 0) {
+            CanceladoTrabajoPizzero(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de pizzero.");
+        }
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/gps", true)) {
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nDeposito de Carga", "Ir", "Cerrar");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/pagar", true)) {
+        new tmp[32], target, monto;
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /pagar [id] [cantidad]");
+        target = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /pagar [id] [cantidad]");
+        monto = strval(tmp);
+
+        if(target == playerid) return SendClientMessage(playerid, -1, "No puedes pagarte a ti mismo.");
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "Jugador no conectado.");
+        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        new Float:p1[3], Float:p2[3];
+        GetPlayerPos(playerid, p1[0], p1[1], p1[2]);
+        GetPlayerPos(target, p2[0], p2[1], p2[2]);
+        if(GetDistanceBetweenPoints(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]) > 5.0) return SendClientMessage(playerid, -1, "Debes estar cerca del jugador.");
+        if(GetPlayerMoney(playerid) < monto) return SendClientMessage(playerid, -1, "No tienes ese dinero.");
+
+        GivePlayerMoney(playerid, -monto);
+        GivePlayerMoney(target, monto);
+
+        new n1[MAX_PLAYER_NAME], n2[MAX_PLAYER_NAME], msg[144];
+        GetPlayerName(playerid, n1, sizeof(n1));
+        GetPlayerName(target, n2, sizeof(n2));
+        format(msg, sizeof(msg), "Le pagaste $%d a %s.", monto, n2);
+        SendClientMessage(playerid, 0x00FF00FF, msg);
+        format(msg, sizeof(msg), "%s te pago $%d.", n1, monto);
+        SendClientMessage(target, 0x00FF00FF, msg);
         return 1;
     }
 
@@ -352,9 +505,22 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GetPlayerPos(playerid, p[0], p[1], p[2]);
         format(line, 64, "%f %f %f\n", p[0], p[1], p[2]);
         if(h) {
-            fwrite(h, line); 
+            fwrite(h, line);
             fclose(h);
             SendClientMessage(playerid, 0x00FF00FF, "Punto de entrega guardado exitosamente.");
+        }
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/crearparadapizza", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        new Float:p[3], File:h = fopen(PATH_RUTAS_PIZZA, io_append), line[64];
+        GetPlayerPos(playerid, p[0], p[1], p[2]);
+        format(line, sizeof(line), "%f %f %f\n", p[0], p[1], p[2]);
+        if(h) {
+            fwrite(h, line);
+            fclose(h);
+            SendClientMessage(playerid, 0x00FF00FF, "Punto de entrega de pizzero guardado.");
         }
         return 1;
     }
@@ -422,7 +588,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/tp", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new tmp[32], id; 
+        new tmp[32], id;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /tp [id]");
         id = strval(tmp);
@@ -438,7 +604,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         SetPlayerPos(playerid, AdminMapPos[playerid][0], AdminMapPos[playerid][1], AdminMapPos[playerid][2]);
         return 1;
     }
-    
+
     // Comandos de casas (solo admin para crear)
     if(!strcmp(cmd, "/crearcasa", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
@@ -460,8 +626,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new labelstr[64];
         format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d", precio);
         CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, p[0], p[1], p[2] + 0.5, 10.0, 0);
-        CasaArmarioPickup[TotalCasas] = CreatePickup(1274, 2, ARMARIO_X, ARMARIO_Y, ARMARIO_Z, TotalCasas + 1);
-        CasaArmarioLabel[TotalCasas] = Create3DTextLabel("Armario de armas\nPresiona {FFFF00}H", 0xFFD700FF, ARMARIO_X, ARMARIO_Y, ARMARIO_Z + 0.6, 8.0, TotalCasas + 1);
         // Guardar en archivo
         new File:fh = fopen(PATH_CASAS, io_append);
         if(fh) {
@@ -541,8 +705,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         for(new i = 0; i < TotalCasas; i++) {
             if(CasaPickup[i]) DestroyPickup(CasaPickup[i]);
             Delete3DTextLabel(CasaLabel[i]);
-            if(CasaArmarioPickup[i]) DestroyPickup(CasaArmarioPickup[i]);
-            Delete3DTextLabel(CasaArmarioLabel[i]);
         }
 
         // Compactar arrays
@@ -553,7 +715,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
             CasaData[i][cPrecio] = CasaData[i + 1][cPrecio];
             strmid(CasaData[i][cOwner], CasaData[i + 1][cOwner], 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
             strmid(CasaData[i][cFriends], CasaData[i + 1][cFriends], 0, 128, 128);
-            for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CasaArmario[i][w] = CasaArmario[i + 1][w];
         }
 
         TotalCasas--;
@@ -581,8 +742,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
             else format(labelstr, sizeof(labelstr), "Casa de %s", CasaData[i][cOwner]);
             CasaLabel[i] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ] + 0.5, 10.0, 0);
 
-            CasaArmarioPickup[i] = CreatePickup(1274, 2, ARMARIO_X, ARMARIO_Y, ARMARIO_Z, i + 1);
-            CasaArmarioLabel[i] = Create3DTextLabel("Armario de armas\nPresiona {FFFF00}H", 0xFFD700FF, ARMARIO_X, ARMARIO_Y, ARMARIO_Z + 0.6, 8.0, i + 1);
         }
 
         GuardarCasas();
@@ -615,51 +774,7 @@ stock EntrarCasa(playerid, casa) {
     SetPlayerInterior(playerid, 3);
     SetPlayerVirtualWorld(playerid, casa + 1);
     SetCameraBehindPlayer(playerid);
-    SendClientMessage(playerid, -1, "Has entrado a la casa. Usa H en el armario para guardar/sacar armas.");
-    return 1;
-}
-
-stock GetAmmoByWeapon(playerid, WEAPON:weaponid) {
-    new WEAPON:weapon, ammo;
-    for(new slot = 0; slot < 13; slot++) {
-        GetPlayerWeaponData(playerid, t_WEAPON_SLOT:slot, weapon, ammo);
-        if(weapon == weaponid) return ammo;
-    }
-    return 0;
-}
-
-stock GuardarArmaEnArmario(playerid, casa) {
-    new WEAPON:weapon = GetPlayerWeapon(playerid);
-    if(_:weapon <= 0 || _:weapon >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "No tienes un arma valida en mano.");
-
-    new ammo = GetAmmoByWeapon(playerid, weapon);
-    if(ammo <= 0) return SendClientMessage(playerid, -1, "No tienes municion para guardar.");
-
-    CasaArmario[casa][_:weapon] += ammo;
-    ResetPlayerWeapons(playerid);
-
-    new str[128];
-    format(str, sizeof(str), "Guardaste arma ID %d con %d balas. Total en armario: %d.", _:weapon, ammo, CasaArmario[casa][_:weapon]);
-    SendClientMessage(playerid, 0x00FF00FF, str);
-    return 1;
-}
-
-stock AbrirArmario(playerid, casa) {
-    new list[1024], line[64], total = 0;
-    ArmarioListaCount[playerid] = 0;
-    list[0] = EOS;
-
-    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-        if(CasaArmario[casa][w] > 0) {
-            format(line, sizeof(line), "Arma %d - %d balas\n", w, CasaArmario[casa][w]);
-            strcat(list, line);
-            ArmarioLista[playerid][ArmarioListaCount[playerid]++] = w;
-            total++;
-        }
-    }
-
-    if(total == 0) return SendClientMessage(playerid, -1, "Armario vacio.");
-    ShowPlayerDialog(playerid, DIALOG_ARMARIO, DIALOG_STYLE_LIST, "Armario de armas", list, "Sacar", "Cerrar");
+    SendClientMessage(playerid, -1, "Has entrado a la casa. Aqui puedes usar /comer y descansar.");
     return 1;
 }
 
@@ -720,7 +835,11 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetShadow(playerid, BarraHambre[playerid], 1);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
     PlayerInCasa[playerid] = -1;
-    
+    TrabajandoCamionero[playerid] = 0;
+    TrabajandoPizzero[playerid] = 0;
+    CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+
     new name[MAX_PLAYER_NAME], path[64];
     GetPlayerName(playerid, name, sizeof(name));
     format(path, sizeof(path), PATH_USUARIOS, name);
@@ -744,22 +863,12 @@ public OnPlayerSpawn(playerid) {
 }
 
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
-    if(dialogid == DIALOG_ARMARIO) {
+    if(dialogid == DIALOG_GPS) {
         if(!response) return 1;
-        if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "No estas en una casa.");
-        if(listitem < 0 || listitem >= ArmarioListaCount[playerid]) return 1;
-
-        new casa = PlayerInCasa[playerid];
-        new weapon = ArmarioLista[playerid][listitem];
-        new ammo = CasaArmario[casa][weapon];
-        if(ammo <= 0) return SendClientMessage(playerid, -1, "Ese arma ya no esta disponible.");
-
-        CasaArmario[casa][weapon] = 0;
-        GivePlayerWeapon(playerid, WEAPON:weapon, ammo);
-
-        new str[128];
-        format(str, sizeof(str), "Retiraste arma ID %d con %d balas.", weapon, ammo);
-        SendClientMessage(playerid, 0x00FF00FF, str);
+        if(listitem == 0) SetPlayerCheckpoint(playerid, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 6.0);
+        else if(listitem == 1) SetPlayerCheckpoint(playerid, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, 6.0);
+        else if(listitem == 2) SetPlayerCheckpoint(playerid, POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, 6.0);
+        SendClientMessage(playerid, 0x00FFFFFF, "GPS actualizado en tu mapa.");
         return 1;
     }
 
@@ -770,7 +879,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 128, "%s\n%d\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
+            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
             fwrite(h, line); fclose(h);
             IsPlayerLoggedIn[playerid] = true;
             GivePlayerMoney(playerid, DINERO_INICIAL);
@@ -789,9 +898,23 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 fread(h, line); PlayerAdmin[playerid] = strval(line);
                 fread(h, line); CamioneroNivel[playerid] = strval(line);
                 fread(h, line); CamioneroViajes[playerid] = strval(line);
-                new Float:v[3]; fread(h, line); v[0] = floatstr(line);
-                fread(h, line); v[1] = floatstr(line);
-                fread(h, line); v[2] = floatstr(line);
+
+                new Float:v[3];
+                fread(h, line);
+                if(strfind(line, ".") != -1) {
+                    // Compatibilidad con cuentas antiguas (sin datos de pizzero)
+                    PizzeroNivel[playerid] = 0;
+                    PizzeroEntregas[playerid] = 0;
+                    v[0] = floatstr(line);
+                    fread(h, line); v[1] = floatstr(line);
+                    fread(h, line); v[2] = floatstr(line);
+                } else {
+                    PizzeroNivel[playerid] = strval(line);
+                    fread(h, line); PizzeroEntregas[playerid] = strval(line);
+                    fread(h, line); v[0] = floatstr(line);
+                    fread(h, line); v[1] = floatstr(line);
+                    fread(h, line); v[2] = floatstr(line);
+                }
                 SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
                 fclose(h); SpawnPlayer(playerid);
             } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
@@ -807,9 +930,9 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%f\n%f\n%f", 
-                PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid], 
-                CamioneroNivel[playerid], CamioneroViajes[playerid], p[0], p[1], p[2]);
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+                PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
+                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], p[0], p[1], p[2]);
             fwrite(h, line); fclose(h);
         }
     }
@@ -821,8 +944,8 @@ public GuardarCasas() {
     if(h) {
         new line[256];
         for(new i = 0; i < TotalCasas; i++) {
-            format(line, sizeof(line), "%f %f %f %d %s %s\n", 
-                CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ], 
+            format(line, sizeof(line), "%f %f %f %d %s %s\n",
+                CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ],
                 CasaData[i][cPrecio], CasaData[i][cOwner], CasaData[i][cFriends]);
             fwrite(h, line);
         }
@@ -853,13 +976,14 @@ public ChequearLimitesMapa() {
     return 1;
 }
 
-public AutoGuardadoGlobal() { 
-    for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i)) GuardarCuenta(i); 
+public AutoGuardadoGlobal() {
+    for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i)) GuardarCuenta(i);
     GuardarCasas();
-    return 1; 
+    return 1;
 }
 
-public OnPlayerDisconnect(playerid, reason) { 
+public OnPlayerDisconnect(playerid, reason) {
+    #pragma unused reason
     if(PlayerInCasa[playerid] != -1) {
         new casa = PlayerInCasa[playerid];
         SetPlayerPos(playerid, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ]);
@@ -867,17 +991,22 @@ public OnPlayerDisconnect(playerid, reason) {
         SetPlayerVirtualWorld(playerid, 0);
         PlayerInCasa[playerid] = -1;
     }
-    GuardarCuenta(playerid); 
+    GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
-    return 1; 
+    if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
+    TrabajandoCamionero[playerid] = 0;
+    TrabajandoPizzero[playerid] = 0;
+    CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    return 1;
 }
 
-public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
+public OnPlayerInteriorChange(playerid, INTERIOR:newinterior, INTERIOR:oldinterior) {
     #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
-    if(PlayerInCasa[playerid] == -1 && _:newinterior != 0) {
-        SetPlayerInterior(playerid, INTERIOR:0);
+    if(PlayerInCasa[playerid] == -1 && newinterior != INTERIOR:0) {
+        SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
         SetPlayerPos(playerid, 2494.24, -1671.19, 13.33);
         SetCameraBehindPlayer(playerid);
@@ -885,8 +1014,8 @@ public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
         return 1;
     }
 
-    if(PlayerInCasa[playerid] != -1 && _:newinterior != 3) {
-        SetPlayerInterior(playerid, INTERIOR:3);
+    if(PlayerInCasa[playerid] != -1 && newinterior != INTERIOR:3) {
+        SetPlayerInterior(playerid, 3);
         SetPlayerVirtualWorld(playerid, PlayerInCasa[playerid] + 1);
         SetPlayerPos(playerid, CASA_INT_X, CASA_INT_Y, CASA_INT_Z);
         SetCameraBehindPlayer(playerid);
