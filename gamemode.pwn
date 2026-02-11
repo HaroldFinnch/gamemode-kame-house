@@ -92,6 +92,7 @@ forward GuardarCuenta(playerid);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
+forward OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -871,7 +872,7 @@ public OnPlayerDisconnect(playerid, reason) {
     return 1; 
 }
 
-public OnPlayerInteriorChange(playerid, INTERIOR:newinterior, INTERIOR:oldinterior) {
+public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
     #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
