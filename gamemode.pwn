@@ -101,6 +101,17 @@ stock GuardarArmaEnArmario(playerid, casa);
 stock GetAmmoByWeapon(playerid, weaponid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 
+// Adelantos de funciones usadas antes de su implementacion
+forward strtok(const string[], &index);
+forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
+forward GuardarCasas();
+forward GuardarCuenta(playerid);
+forward BajarHambre();
+forward ChequearLimitesMapa();
+forward AutoGuardadoGlobal();
+stock GetClosestCasa(playerid);
+stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
+
 // ================= [ MAIN & INIT ] =================
 main() {
     printf("Server KameHouse");
@@ -342,6 +353,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(PlayerAdmin[playerid] < 1) return 0;
+
     if(!strcmp(cmd, "/crearparada", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         new Float:p[3], File:h = fopen(PATH_RUTAS, io_append), line[64];
@@ -398,6 +411,15 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], id, arma, muni;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        id = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        arma = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
         id = strval(tmp);
 
