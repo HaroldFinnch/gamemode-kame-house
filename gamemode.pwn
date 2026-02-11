@@ -872,8 +872,8 @@ public OnPlayerDisconnect(playerid, reason) {
     return 1; 
 }
 
-public OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid) {
-    #pragma unused oldinteriorid
+public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
+    #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
     if(PlayerInCasa[playerid] == -1 && newinteriorid != 0) {
