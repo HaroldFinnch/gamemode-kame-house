@@ -621,7 +621,7 @@ stock EntrarCasa(playerid, casa) {
 stock GetAmmoByWeapon(playerid, WEAPON:weaponid) {
     new WEAPON:weapon, ammo;
     for(new slot = 0; slot < 13; slot++) {
-        GetPlayerWeaponData(playerid, slot, weapon, ammo);
+        GetPlayerWeaponData(playerid, t_WEAPON_SLOT:slot, weapon, ammo);
         if(weapon == weaponid) return ammo;
     }
     return 0;
@@ -871,7 +871,7 @@ public OnPlayerDisconnect(playerid, reason) {
     return 1; 
 }
 
-public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
+public OnPlayerInteriorChange(playerid, INTERIOR:newinterior, INTERIOR:oldinterior) {
     #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
