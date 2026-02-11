@@ -92,6 +92,7 @@ forward GuardarCuenta(playerid);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
+forward OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -871,11 +872,11 @@ public OnPlayerDisconnect(playerid, reason) {
     return 1; 
 }
 
-public OnPlayerInteriorChange(playerid, INTERIOR:newinterior, INTERIOR:oldinterior) {
-    #pragma unused oldinterior
+public OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid) {
+    #pragma unused oldinteriorid
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
-    if(PlayerInCasa[playerid] == -1 && newinterior != 0) {
+    if(PlayerInCasa[playerid] == -1 && newinteriorid != 0) {
         SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
         SetPlayerPos(playerid, 2494.24, -1671.19, 13.33);
@@ -884,7 +885,7 @@ public OnPlayerInteriorChange(playerid, INTERIOR:newinterior, INTERIOR:oldinteri
         return 1;
     }
 
-    if(PlayerInCasa[playerid] != -1 && newinterior != 3) {
+    if(PlayerInCasa[playerid] != -1 && newinteriorid != 3) {
         SetPlayerInterior(playerid, 3);
         SetPlayerVirtualWorld(playerid, PlayerInCasa[playerid] + 1);
         SetPlayerPos(playerid, CASA_INT_X, CASA_INT_Y, CASA_INT_Z);
