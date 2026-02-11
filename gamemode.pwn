@@ -11,6 +11,17 @@
 #define RADIO_CHAT_LOCAL    20.0
 #define PRECIO_COMIDA       25
 #define HAMBRE_POR_COMIDA   20
+#define DISTANCIA_PAGO_MULT  3.0
+
+#define DIALOG_ARMARIO       3
+#define MAX_WEAPON_ID_GM     47
+
+#define CASA_INT_X           2496.0499
+#define CASA_INT_Y           -1707.84
+#define CASA_INT_Z           1014.74
+#define ARMARIO_X            2493.20
+#define ARMARIO_Y            -1702.10
+#define ARMARIO_Z            1014.74
 
 #define POS_TRABAJO_X       2494.24 // Posicion del maletin de camionero
 #define POS_TRABAJO_Y       -1671.19
@@ -400,6 +411,15 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], id, arma, muni;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        id = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        arma = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
         id = strval(tmp);
 
