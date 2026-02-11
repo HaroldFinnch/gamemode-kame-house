@@ -876,8 +876,8 @@ public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
     #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
-    if(PlayerInCasa[playerid] == -1 && newinteriorid != 0) {
-        SetPlayerInterior(playerid, 0);
+    if(PlayerInCasa[playerid] == -1 && _:newinterior != 0) {
+        SetPlayerInterior(playerid, INTERIOR:0);
         SetPlayerVirtualWorld(playerid, 0);
         SetPlayerPos(playerid, 2494.24, -1671.19, 13.33);
         SetCameraBehindPlayer(playerid);
@@ -885,8 +885,8 @@ public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
         return 1;
     }
 
-    if(PlayerInCasa[playerid] != -1 && newinteriorid != 3) {
-        SetPlayerInterior(playerid, 3);
+    if(PlayerInCasa[playerid] != -1 && _:newinterior != 3) {
+        SetPlayerInterior(playerid, INTERIOR:3);
         SetPlayerVirtualWorld(playerid, PlayerInCasa[playerid] + 1);
         SetPlayerPos(playerid, CASA_INT_X, CASA_INT_Y, CASA_INT_Z);
         SetCameraBehindPlayer(playerid);
