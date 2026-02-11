@@ -13,6 +13,7 @@
 #define HAMBRE_POR_COMIDA   20
 #define DISTANCIA_PAGO_MULT  3.0
 #define DISTANCIA_PAGO_PIZZA 2.2
+#define HORAS_POR_NIVEL_PJ   2
 
 #define PAGO_MAX_PIZZERO     2600
 #define PAGO_MAX_CAMIONERO   6800
@@ -124,6 +125,7 @@ new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
 new PlayerBankMoney[MAX_PLAYERS];
 new BankTransferTarget[MAX_PLAYERS] = {-1, ...};
+new PlayerTiempoJugadoMin[MAX_PLAYERS];
 
 // Variables Camionero
 new TrabajandoCamionero[MAX_PLAYERS];
@@ -242,6 +244,7 @@ forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
 forward FinalizarRecolectaBasura(playerid);
+forward SubirTiempoJugado();
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -309,6 +312,8 @@ stock IsNearVentaAutos(playerid);
 stock ActualizarLabelVentaAutos();
 stock ShowVentaAutosBuyMenu(playerid);
 stock GetVentaAutoByListIndex(listindex);
+stock GetNivelPJ(playerid);
+stock ActualizarNivelPJ(playerid);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -385,6 +390,7 @@ public OnGameModeInit() {
     SetTimer("AutoGuardadoGlobal", 300000, true);
     SetTimer("BajarHambre", 60000, true);
     SetTimer("ChequearLimitesMapa", 1000, true);
+    SetTimer("SubirTiempoJugado", 60000, true);
     return 1;
 }
 
@@ -771,6 +777,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new str[256];
         format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d\n\n{FFFFFF}Basurero Nivel: {66FF66}%d/%d\n{FFFFFF}Recorridos: {66FF66}%d/%d", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/lvl", true) || !strcmp(cmd, "/nivel", true)) {
+        new nivel = GetNivelPJ(playerid);
+        new progreso = PlayerTiempoJugadoMin[playerid] % (HORAS_POR_NIVEL_PJ * 60);
+        new faltanMin = (HORAS_POR_NIVEL_PJ * 60) - progreso;
+        if(progreso == 0 && PlayerTiempoJugadoMin[playerid] > 0) faltanMin = HORAS_POR_NIVEL_PJ * 60;
+        new horas = faltanMin / 60;
+        new mins = faltanMin % 60;
+
+        new msg[144];
+        format(msg, sizeof(msg), "Nivel PJ: %d | Tiempo jugado: %d horas | Falta para proximo nivel: %dh %dm", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins);
+        SendClientMessage(playerid, 0x33CCFFFF, msg);
         return 1;
     }
 
@@ -1332,6 +1352,7 @@ public OnPlayerConnect(playerid) {
     ArmeriaAdminArmaPendiente[playerid] = 0;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
+    PlayerTiempoJugadoMin[playerid] = 0;
     InvSemillaHierba[playerid] = 0;
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
@@ -1350,6 +1371,7 @@ public OnPlayerConnect(playerid) {
     format(path, sizeof(path), PATH_USUARIOS, name);
     if(fexist(path)) ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Login", "Clave:", "Entrar", "Salir");
     else ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "Registro", "Crea clave:", "Registrar", "Salir");
+    ActualizarNivelPJ(playerid);
     return 1;
 }
 
@@ -1626,13 +1648,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(tmp1, sizeof(tmp1), "%s", strtok(inputtext, ix));
             format(tmp2, sizeof(tmp2), "%s", strtok(inputtext, ix));
             format(tmp3, sizeof(tmp3), "%s", strtok(inputtext, ix));
-            new modelo = strval(tmp1), precio = strval(tmp2), stock = strval(tmp3);
+            new modelo = strval(tmp1), precio = strval(tmp2), stockVehiculos = strval(tmp3);
             if(modelo < 400 || modelo > 611) return SendClientMessage(playerid, -1, "Modelo invalido.");
-            if(precio <= 0 || stock <= 0) return SendClientMessage(playerid, -1, "Precio/stock invalidos.");
+            if(precio <= 0 || stockVehiculos <= 0) return SendClientMessage(playerid, -1, "Precio/stock invalidos.");
             for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
                 if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo) {
                     VentaAutosData[i][vaPrecio] = precio;
-                    VentaAutosData[i][vaStock] += stock;
+                    VentaAutosData[i][vaStock] += stockVehiculos;
                     SendClientMessage(playerid, 0x00FF00FF, "Stock de auto actualizado.");
                     ActualizarLabelVentaAutos();
                     return 1;
@@ -1643,7 +1665,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     VentaAutosData[i][vaActiva] = true;
                     VentaAutosData[i][vaModelo] = modelo;
                     VentaAutosData[i][vaPrecio] = precio;
-                    VentaAutosData[i][vaStock] = stock;
+                    VentaAutosData[i][vaStock] = stockVehiculos;
                     SendClientMessage(playerid, 0x00FF00FF, "Auto agregado a la venta.");
                     ActualizarLabelVentaAutos();
                     return 1;
@@ -1764,10 +1786,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
+            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
             fwrite(h, line); fclose(h);
             IsPlayerLoggedIn[playerid] = true;
             GivePlayerMoney(playerid, DINERO_INICIAL);
+            ActualizarNivelPJ(playerid);
             SpawnPlayer(playerid);
         }
     }
@@ -1795,6 +1818,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     InvSemillaFlor[playerid] = 0;
                     InvHierba[playerid] = 0;
                     InvFlor[playerid] = 0;
+                    PlayerTiempoJugadoMin[playerid] = 0;
                     v[0] = floatstr(line);
                     fread(h, line); v[1] = floatstr(line);
                     fread(h, line); v[2] = floatstr(line);
@@ -1808,6 +1832,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         InvSemillaFlor[playerid] = 0;
                         InvHierba[playerid] = 0;
                         InvFlor[playerid] = 0;
+                        PlayerTiempoJugadoMin[playerid] = 0;
                         v[0] = floatstr(line);
                         fread(h, line); v[1] = floatstr(line);
                         fread(h, line); v[2] = floatstr(line);
@@ -1819,6 +1844,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             InvSemillaFlor[playerid] = 0;
                             InvHierba[playerid] = 0;
                             InvFlor[playerid] = 0;
+                            PlayerTiempoJugadoMin[playerid] = 0;
                             v[0] = floatstr(line);
                             fread(h, line); v[1] = floatstr(line);
                             fread(h, line); v[2] = floatstr(line);
@@ -1827,13 +1853,23 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             fread(h, line); InvSemillaFlor[playerid] = strval(line);
                             fread(h, line); InvHierba[playerid] = strval(line);
                             fread(h, line); InvFlor[playerid] = strval(line);
-                            fread(h, line); v[0] = floatstr(line);
-                            fread(h, line); v[1] = floatstr(line);
-                            fread(h, line); v[2] = floatstr(line);
+                            fread(h, line);
+                            if(strfind(line, ".") != -1) {
+                                PlayerTiempoJugadoMin[playerid] = 0;
+                                v[0] = floatstr(line);
+                                fread(h, line); v[1] = floatstr(line);
+                                fread(h, line); v[2] = floatstr(line);
+                            } else {
+                                PlayerTiempoJugadoMin[playerid] = strval(line);
+                                fread(h, line); v[0] = floatstr(line);
+                                fread(h, line); v[1] = floatstr(line);
+                                fread(h, line); v[2] = floatstr(line);
+                            }
                         }
                     }
                 }
                 SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
+                ActualizarNivelPJ(playerid);
                 fclose(h); SpawnPlayer(playerid);
             } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
         }
@@ -1848,9 +1884,9 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
-                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], p[0], p[1], p[2]);
+                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], p[0], p[1], p[2]);
             fwrite(h, line); fclose(h);
         }
     }
@@ -1879,6 +1915,25 @@ public BajarHambre() {
             PlayerTextDrawSetString(i, BarraHambre[i], s);
         } else { new Float:h; GetPlayerHealth(i, h); SetPlayerHealth(i, h-2.0); }
     }
+    return 1;
+}
+
+public SubirTiempoJugado() {
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
+            PlayerTiempoJugadoMin[i]++;
+            ActualizarNivelPJ(i);
+        }
+    }
+    return 1;
+}
+
+stock GetNivelPJ(playerid) {
+    return (PlayerTiempoJugadoMin[playerid] / (HORAS_POR_NIVEL_PJ * 60)) + 1;
+}
+
+stock ActualizarNivelPJ(playerid) {
+    SetPlayerScore(playerid, GetNivelPJ(playerid));
     return 1;
 }
 
@@ -2355,9 +2410,9 @@ stock CrearPuntosFijos() {
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /pagar /saldo /salir /comprar /abrircasa /comprarauto /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa /crearventadeautos /agregarauto /comprarauto");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /pagar /saldo /salir /comprar /abrircasa /comprarauto /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa /crearventadeautos /agregarauto /comprarauto");
     } else {
-        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /pagar /saldo /salir /comprar /abrircasa /comprarauto /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
+        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /pagar /saldo /salir /comprar /abrircasa /comprarauto /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
     }
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
