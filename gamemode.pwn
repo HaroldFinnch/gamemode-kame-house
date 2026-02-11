@@ -35,6 +35,14 @@
 #define POS_PIZZERIA_X      2105.17
 #define POS_PIZZERIA_Y      -1806.51
 #define POS_PIZZERIA_Z      13.55
+#define POS_PIZZA_SPAWN_X   2099.40
+#define POS_PIZZA_SPAWN_Y   -1788.30
+#define POS_PIZZA_SPAWN_Z   13.25
+#define POS_PIZZA_SPAWN_A   90.0
+
+#define POS_BANCO_X         2488.50
+#define POS_BANCO_Y         -1660.20
+#define POS_BANCO_Z         13.35
 
 #define LIMITE_X_MAX        3000.0
 #define LIMITE_X_MIN        -500.0
@@ -50,6 +58,12 @@
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
+#define DIALOG_AYUDA        11
+#define DIALOG_BANK_MENU    12
+#define DIALOG_BANK_DEPOSIT 13
+#define DIALOG_BANK_WITHDRAW 14
+#define DIALOG_BANK_TR_ID   15
+#define DIALOG_BANK_TR_AMT  16
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -63,6 +77,8 @@ new PlayerHambre[MAX_PLAYERS];
 new PlayerText:BarraHambre[MAX_PLAYERS];
 new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
+new PlayerBankMoney[MAX_PLAYERS];
+new BankTransferTarget[MAX_PLAYERS] = {-1, ...};
 
 // Variables Camionero
 new TrabajandoCamionero[MAX_PLAYERS];
@@ -108,6 +124,10 @@ stock EntrarCasa(playerid, casa);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
 stock CanceladoTrabajoPizzero(playerid);
+stock ShowAyudaDialog(playerid);
+stock IsNearBank(playerid);
+stock ShowBankMenu(playerid);
+stock IsNearBusinessInterior(playerid);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -122,6 +142,8 @@ public OnGameModeInit() {
     Create3DTextLabel("Trabajo: {FFFF00}Camionero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z + 0.5, 10.0, 0);
     CreatePickup(1581, 1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, 0);
     Create3DTextLabel("Trabajo: {FF4500}Pizzero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}en la pizzeria", -1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z + 0.5, 12.0, 0);
+    CreatePickup(1274, 1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z, 0);
+    Create3DTextLabel("Banco KameHouse\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z + 0.5, 12.0, 0);
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -170,6 +192,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
+    // Sistema de banco
+    if(IsNearBank(playerid)) {
+        ShowBankMenu(playerid);
+        return 1;
+    }
+
     // Inicio de trabajo camionero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z))
     {
@@ -189,7 +217,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
-        PizzeroVehiculo[playerid] = CreateVehicle(468, POS_PIZZERIA_X + 2.5, POS_PIZZERIA_Y, POS_PIZZERIA_Z + 0.5, 0.0, 3, 3, 0);
+        PizzeroVehiculo[playerid] = CreateVehicle(468, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, 0);
         PutPlayerInVehicle(playerid, PizzeroVehiculo[playerid], 0);
         TrabajandoPizzero[playerid] = 1;
         SetTimerEx("AsignarRutaPizzero", 200, false, "d", playerid);
@@ -236,7 +264,7 @@ public OnPlayerEnterCheckpoint(playerid)
         }
         DisablePlayerCheckpoint(playerid);
         TogglePlayerControllable(playerid, false);
-        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         GameTextForPlayer(playerid, "~r~ENTREGANDO PIZZA", 2500, 3);
         SetTimerEx("FinalizarEntregaPizza", 10000, false, "d", playerid);
         TrabajandoPizzero[playerid] = 2;
@@ -302,9 +330,9 @@ stock FinalizarTrabajo(playerid) {
     distancia += GetDistanceBetweenPoints(POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2]);
     distancia += GetDistanceBetweenPoints(CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2], POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z);
 
-    new pagoBase = 700;
+    new pagoBase = 560;
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_MULT);
-    new pagoNivel = CamioneroNivel[playerid] * 120;
+    new pagoNivel = CamioneroNivel[playerid] * 90;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     GivePlayerMoney(playerid, pago);
 
@@ -367,12 +395,10 @@ public AsignarRutaPizzero(playerid) {
 public FinalizarEntregaPizza(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
-    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-
     new Float:distancia = GetDistanceBetweenPoints(POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
-    new pagoBase = 450;
+    new pagoBase = 320;
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_PIZZA);
-    new pagoNivel = PizzeroNivel[playerid] * 80;
+    new pagoNivel = PizzeroNivel[playerid] * 55;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     GivePlayerMoney(playerid, pago);
 
@@ -462,6 +488,18 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/gps", true)) {
         ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nDeposito de Carga", "Ir", "Cerrar");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/ayuda", true)) {
+        ShowAyudaDialog(playerid);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/saldo", true)) {
+        new str[96];
+        format(str, sizeof(str), "Saldo banco: $%d", PlayerBankMoney[playerid]);
+        SendClientMessage(playerid, 0x00FFFFFF, str);
         return 1;
     }
 
@@ -661,10 +699,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "No estas en una casa.");
         new casa = PlayerInCasa[playerid];
         PlayerInCasa[playerid] = -1;
-    TrabajandoCamionero[playerid] = 0;
-    TrabajandoPizzero[playerid] = 0;
-    CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
-    PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
         SetPlayerPos(playerid, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ] + 1.0);
         SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
@@ -843,6 +877,8 @@ public OnPlayerConnect(playerid) {
     TrabajandoPizzero[playerid] = 0;
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    PlayerBankMoney[playerid] = 0;
+    BankTransferTarget[playerid] = -1;
 
     new name[MAX_PLAYER_NAME], path[64];
     GetPlayerName(playerid, name, sizeof(name));
@@ -876,6 +912,69 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return 1;
     }
 
+    if(dialogid == DIALOG_BANK_MENU) {
+        if(!response) return 1;
+        if(listitem == 0) {
+            ShowPlayerDialog(playerid, DIALOG_BANK_DEPOSIT, DIALOG_STYLE_INPUT, "Banco - Depositar", "Ingresa la cantidad a depositar:", "Depositar", "Atras");
+        } else if(listitem == 1) {
+            ShowPlayerDialog(playerid, DIALOG_BANK_WITHDRAW, DIALOG_STYLE_INPUT, "Banco - Retirar", "Ingresa la cantidad a retirar:", "Retirar", "Atras");
+        } else if(listitem == 2) {
+            ShowPlayerDialog(playerid, DIALOG_BANK_TR_ID, DIALOG_STYLE_INPUT, "Banco - Transferir", "Ingresa el ID del jugador:", "Siguiente", "Atras");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_BANK_DEPOSIT) {
+        if(!response) return ShowBankMenu(playerid);
+        new monto = strval(inputtext);
+        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(GetPlayerMoney(playerid) < monto) return SendClientMessage(playerid, -1, "No tienes ese dinero en mano.");
+        GivePlayerMoney(playerid, -monto);
+        PlayerBankMoney[playerid] += monto;
+        SendClientMessage(playerid, 0x00FF00FF, "Deposito realizado correctamente.");
+        return ShowBankMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_BANK_WITHDRAW) {
+        if(!response) return ShowBankMenu(playerid);
+        new monto = strval(inputtext);
+        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(PlayerBankMoney[playerid] < monto) return SendClientMessage(playerid, -1, "No tienes saldo suficiente en el banco.");
+        PlayerBankMoney[playerid] -= monto;
+        GivePlayerMoney(playerid, monto);
+        SendClientMessage(playerid, 0x00FF00FF, "Retiro realizado correctamente.");
+        return ShowBankMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_BANK_TR_ID) {
+        if(!response) return ShowBankMenu(playerid);
+        new id = strval(inputtext);
+        if(id == playerid) return SendClientMessage(playerid, -1, "No puedes transferirte a ti mismo.");
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador no conectado.");
+        BankTransferTarget[playerid] = id;
+        ShowPlayerDialog(playerid, DIALOG_BANK_TR_AMT, DIALOG_STYLE_INPUT, "Banco - Transferir", "Ingresa el monto a transferir:", "Transferir", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_BANK_TR_AMT) {
+        if(!response) return ShowBankMenu(playerid);
+        if(BankTransferTarget[playerid] == -1 || !IsPlayerConnected(BankTransferTarget[playerid])) return SendClientMessage(playerid, -1, "Jugador destino invalido.");
+        new monto = strval(inputtext);
+        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(PlayerBankMoney[playerid] < monto) return SendClientMessage(playerid, -1, "No tienes saldo suficiente en el banco.");
+        PlayerBankMoney[playerid] -= monto;
+        PlayerBankMoney[BankTransferTarget[playerid]] += monto;
+        new n1[MAX_PLAYER_NAME], n2[MAX_PLAYER_NAME], msg[144];
+        GetPlayerName(playerid, n1, sizeof(n1));
+        GetPlayerName(BankTransferTarget[playerid], n2, sizeof(n2));
+        format(msg, sizeof(msg), "Transferiste $%d a %s desde tu banco.", monto, n2);
+        SendClientMessage(playerid, 0x00FF00FF, msg);
+        format(msg, sizeof(msg), "%s te transfirio $%d a tu banco.", n1, monto);
+        SendClientMessage(BankTransferTarget[playerid], 0x00FF00FF, msg);
+        BankTransferTarget[playerid] = -1;
+        return ShowBankMenu(playerid);
+    }
+
     new name[MAX_PLAYER_NAME], path[64], line[128];
     GetPlayerName(playerid, name, sizeof(name));
     format(path, sizeof(path), PATH_USUARIOS, name);
@@ -883,7 +982,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
+            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
             fwrite(h, line); fclose(h);
             IsPlayerLoggedIn[playerid] = true;
             GivePlayerMoney(playerid, DINERO_INICIAL);
@@ -906,18 +1005,28 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 new Float:v[3];
                 fread(h, line);
                 if(strfind(line, ".") != -1) {
-                    // Compatibilidad con cuentas antiguas (sin datos de pizzero)
+                    // Compatibilidad con cuentas antiguas (sin datos de pizzero/banco)
                     PizzeroNivel[playerid] = 0;
                     PizzeroEntregas[playerid] = 0;
+                    PlayerBankMoney[playerid] = 0;
                     v[0] = floatstr(line);
                     fread(h, line); v[1] = floatstr(line);
                     fread(h, line); v[2] = floatstr(line);
                 } else {
                     PizzeroNivel[playerid] = strval(line);
                     fread(h, line); PizzeroEntregas[playerid] = strval(line);
-                    fread(h, line); v[0] = floatstr(line);
-                    fread(h, line); v[1] = floatstr(line);
-                    fread(h, line); v[2] = floatstr(line);
+                    fread(h, line);
+                    if(strfind(line, ".") != -1) {
+                        PlayerBankMoney[playerid] = 0;
+                        v[0] = floatstr(line);
+                        fread(h, line); v[1] = floatstr(line);
+                        fread(h, line); v[2] = floatstr(line);
+                    } else {
+                        PlayerBankMoney[playerid] = strval(line);
+                        fread(h, line); v[0] = floatstr(line);
+                        fread(h, line); v[1] = floatstr(line);
+                        fread(h, line); v[2] = floatstr(line);
+                    }
                 }
                 SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
                 fclose(h); SpawnPlayer(playerid);
@@ -934,9 +1043,9 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
-                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], p[0], p[1], p[2]);
+                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], p[0], p[1], p[2]);
             fwrite(h, line); fclose(h);
         }
     }
@@ -1002,6 +1111,8 @@ public OnPlayerDisconnect(playerid, reason) {
     TrabajandoPizzero[playerid] = 0;
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    PlayerBankMoney[playerid] = 0;
+    BankTransferTarget[playerid] = -1;
     return 1;
 }
 
@@ -1009,7 +1120,7 @@ public OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid) {
     #pragma unused oldinteriorid
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
-    if(PlayerInCasa[playerid] == -1 && newinteriorid != 0) {
+    if(IsNearBusinessInterior(playerid) || (PlayerInCasa[playerid] == -1 && newinteriorid != 0)) {
         SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
         SetPlayerPos(playerid, 2494.24, -1671.19, 13.33);
@@ -1032,6 +1143,39 @@ public OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid) {
 public OnPlayerRequestClass(playerid, classid) {
     #pragma unused classid
     SetPlayerPos(playerid, 2494.24, -1680.0, 15.0);
+    return 1;
+}
+
+
+stock ShowAyudaDialog(playerid) {
+    new texto[1024];
+    if(PlayerAdmin[playerid] >= 1) {
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /tp /gotomap /crearcasa /eliminarcasa");
+    } else {
+        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
+    }
+    ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
+    return 1;
+}
+
+stock IsNearBank(playerid) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z)) return 1;
+    return 0;
+}
+
+stock ShowBankMenu(playerid) {
+    new msg[144];
+    format(msg, sizeof(msg), "Dinero en mano: $%d\nSaldo banco: $%d", GetPlayerMoney(playerid), PlayerBankMoney[playerid]);
+    ShowPlayerDialog(playerid, DIALOG_BANK_MENU, DIALOG_STYLE_LIST, "Banco KameHouse", "Depositar\nRetirar\nTransferir", "Seleccionar", "Cerrar");
+    SendClientMessage(playerid, 0x00FFFFFF, msg);
+    return 1;
+}
+
+stock IsNearBusinessInterior(playerid) {
+    if(PlayerInCasa[playerid] != -1) return 0;
+    new interior = GetPlayerInterior(playerid);
+    if(interior == 0) return 0;
+    if(interior == 3) return 0;
     return 1;
 }
 
