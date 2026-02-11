@@ -98,7 +98,7 @@ stock bool:PlayerTieneAccesoCasa(playerid, casa);
 stock EntrarCasa(playerid, casa);
 stock AbrirArmario(playerid, casa);
 stock GuardarArmaEnArmario(playerid, casa);
-stock GetAmmoByWeapon(playerid, weaponid);
+stock GetAmmoByWeapon(playerid, WEAPON:weaponid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 
 // Adelantos de funciones usadas antes de su implementacion
@@ -180,7 +180,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Entrada a casas desde el icono con H
     new casa = GetClosestCasa(playerid);
     if(casa != -1 && PlayerInCasa[playerid] == -1) {
-        if(!PlayerTieneAccesoCasa(playerid, casa)) return SendClientMessage(playerid, -1, "No tienes acceso a esta casa.");
+        if(PlayerTieneAccesoCasa(playerid, casa) == false) return SendClientMessage(playerid, -1, "No tienes acceso a esta casa.");
         EntrarCasa(playerid, casa);
         return 1;
     }
@@ -512,7 +512,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/entrar", true)) {
         new casa = GetClosestCasa(playerid);
         if(casa == -1) return SendClientMessage(playerid, -1, "No estas cerca de una casa.");
-        if(!PlayerTieneAccesoCasa(playerid, casa)) return SendClientMessage(playerid, -1, "No tienes acceso a esta casa.");
+        if(PlayerTieneAccesoCasa(playerid, casa) == false) return SendClientMessage(playerid, -1, "No tienes acceso a esta casa.");
         EntrarCasa(playerid, casa);
         return 1;
     }
@@ -643,8 +643,8 @@ stock EntrarCasa(playerid, casa) {
     return 1;
 }
 
-stock GetAmmoByWeapon(playerid, weaponid) {
-    new weapon, ammo;
+stock GetAmmoByWeapon(playerid, WEAPON:weaponid) {
+    new WEAPON:weapon, ammo;
     for(new i = 0; i < 13; i++) {
         GetPlayerWeaponData(playerid, i, weapon, ammo);
         if(weapon == weaponid) return ammo;
@@ -653,7 +653,7 @@ stock GetAmmoByWeapon(playerid, weaponid) {
 }
 
 stock GuardarArmaEnArmario(playerid, casa) {
-    new weapon = GetPlayerWeapon(playerid);
+    new WEAPON:weapon = GetPlayerWeapon(playerid);
     if(weapon <= 0 || weapon >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "No tienes un arma valida en mano.");
 
     new ammo = GetAmmoByWeapon(playerid, weapon);
@@ -919,7 +919,11 @@ public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
     return 1;
 }
 
-public OnPlayerRequestClass(playerid, classid) { SetPlayerPos(playerid, 2494.24, -1680.0, 15.0); return 1; }
+public OnPlayerRequestClass(playerid, CLASS:classid) {
+    #pragma unused classid
+    SetPlayerPos(playerid, 2494.24, -1680.0, 15.0);
+    return 1;
+}
 
 stock GetClosestCasa(playerid) {
     new Float:minDist = 5.0;
