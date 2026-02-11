@@ -9,6 +9,8 @@
 #define DINERO_INICIAL      500
 #define COLOR_HAMBRE        0xFFA500FF 
 #define RADIO_CHAT_LOCAL    20.0
+#define PRECIO_COMIDA       25
+#define HAMBRE_POR_COMIDA   20
 
 #define POS_TRABAJO_X       2494.24 // Posicion del maletin de camionero
 #define POS_TRABAJO_Y       -1671.19
@@ -63,6 +65,17 @@ new CasaData[MAX_CASAS][eCasa];
 new TotalCasas = 0;
 new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
+
+// Adelantos de funciones usadas antes de su implementacion
+forward strtok(const string[], &index);
+forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
+forward GuardarCasas();
+forward GuardarCuenta(playerid);
+forward BajarHambre();
+forward ChequearLimitesMapa();
+forward AutoGuardadoGlobal();
+stock GetClosestCasa(playerid);
+stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -212,7 +225,9 @@ stock FinalizarTrabajo(playerid) {
     if(CamioneroViajes[playerid] >= 50) {
         CamioneroViajes[playerid] = 0;
         CamioneroNivel[playerid]++;
-        SendClientMessage(playerid, 0xFFFF00FF, "?NIVEL SUBIDO! Ahora eres nivel %d.", CamioneroNivel[playerid]);
+        new levelmsg[96];
+        format(levelmsg, sizeof(levelmsg), "{FFFF00}NIVEL SUBIDO!{FFFFFF} Ahora eres nivel %d.", CamioneroNivel[playerid]);
+        SendClientMessage(playerid, 0xFFFF00FF, levelmsg);
     }
     
     new str[128];
@@ -248,6 +263,29 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/comer", true)) {
+        if(PlayerHambre[playerid] >= 100) return SendClientMessage(playerid, -1, "Ya tienes el hambre al maximo.");
+        if(GetPlayerMoney(playerid) < PRECIO_COMIDA) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para comprar comida.");
+
+        GivePlayerMoney(playerid, -PRECIO_COMIDA);
+        PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
+        if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
+
+        new msg[96], hud[16];
+        format(msg, sizeof(msg), "Compraste comida por $%d. Hambre actual: %d/100", PRECIO_COMIDA, PlayerHambre[playerid]);
+        SendClientMessage(playerid, 0x00FF00FF, msg);
+        format(hud, sizeof(hud), "H: %d", PlayerHambre[playerid]);
+        PlayerTextDrawSetString(playerid, BarraHambre[playerid], hud);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/cancelartrabajo", true)) {
+        if(TrabajandoCamionero[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        CanceladoTrabajo(playerid);
+        SendClientMessage(playerid, 0xFF0000FF, "Has cancelado tu trabajo de camionero.");
+        return 1;
+    }
+
     if(PlayerAdmin[playerid] < 1) return 0;
 
     if(!strcmp(cmd, "/crearparada", true)) {
@@ -279,19 +317,29 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/dararma", true)) {
         new tmp[32], id, arma, muni;
-        format(tmp, 32, "%s", strtok(cmdtext, idx)); id = strval(tmp);
-        format(tmp, 32, "%s", strtok(cmdtext, idx)); arma = strval(tmp);
-        format(tmp, 32, "%s", strtok(cmdtext, idx)); muni = strval(tmp);
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        id = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        arma = strval(tmp);
+
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
+        muni = strval(tmp);
+
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
         GivePlayerWeapon(id, WEAPON:arma, muni);
         return 1;
     }
 
     if(!strcmp(cmd, "/tp", true)) {
         new tmp[32], id; 
-        format(tmp, 32, "%s", strtok(cmdtext, idx));
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /tp [id]");
         id = strval(tmp);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
         new Float:p[3]; GetPlayerPos(id, p[0], p[1], p[2]);
         SetPlayerPos(playerid, p[0], p[1], p[2]+1.5);
         return 1;
@@ -307,7 +355,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/crearcasa", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32];
-        tmp = strtok(cmdtext, idx);
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!strlen(tmp)) return SendClientMessage(playerid, -1, "Uso: /crearcasa [precio]");
         new precio = strval(tmp);
         if(precio <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
@@ -391,7 +439,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/abrircasa", true)) {
         new tmp[32];
-        tmp = strtok(cmdtext, idx);
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!strlen(tmp)) return SendClientMessage(playerid, -1, "Uso: /abrircasa [id]");
         new target = strval(tmp);
         if(!IsPlayerConnected(target) || target == INVALID_PLAYER_ID) return SendClientMessage(playerid, -1, "Jugador no conectado.");
@@ -527,7 +575,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     return 1;
 }
 
-forward GuardarCuenta(playerid);
 public GuardarCuenta(playerid) {
     if(IsPlayerLoggedIn[playerid]) {
         new name[MAX_PLAYER_NAME], path[64], line[256], Float:p[3];
@@ -544,7 +591,6 @@ public GuardarCuenta(playerid) {
     return 1;
 }
 
-forward GuardarCasas();
 public GuardarCasas() {
     new File:h = fopen(PATH_CASAS, io_write);
     if(h) {
@@ -560,7 +606,6 @@ public GuardarCasas() {
     return 1;
 }
 
-forward BajarHambre();
 public BajarHambre() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
         if(PlayerHambre[i] > 0) {
@@ -571,7 +616,6 @@ public BajarHambre() {
     return 1;
 }
 
-forward ChequearLimitesMapa();
 public ChequearLimitesMapa() {
     new Float:p[3], Float:h;
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
@@ -584,7 +628,6 @@ public ChequearLimitesMapa() {
     return 1;
 }
 
-forward AutoGuardadoGlobal();
 public AutoGuardadoGlobal() { 
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i)) GuardarCuenta(i); 
     GuardarCasas();
