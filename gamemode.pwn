@@ -93,6 +93,7 @@
 #define DIALOG_ADMIN_ARMAS_REMOVE 22
 #define DIALOG_ARMERIA_MENU   23
 #define DIALOG_ARMERIA_COMPRA 24
+#define DIALOG_MOVER_MENU     25
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -164,6 +165,20 @@ enum eArmeriaItem {
 }
 new ArmeriaItems[MAX_ARMAS_TIENDA][eArmeriaItem];
 new ArmeriaSeleccionJugador[MAX_PLAYERS] = {-1, ...};
+new bool:PlayerArmaComprada[MAX_PLAYERS][MAX_WEAPON_ID_GM];
+
+enum ePuntoMovible {
+    puntoCamionero,
+    puntoPizzeria,
+    puntoCarga,
+    puntoBanco,
+    puntoSemilleria,
+    puntoArmeria,
+    totalPuntosMovibles
+}
+new Float:PuntoPos[totalPuntosMovibles][3];
+new PuntoPickup[totalPuntosMovibles] = {0, ...};
+new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
 
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
@@ -193,6 +208,9 @@ stock GetWeaponNameGM(weaponid, dest[], len);
 stock GetArmeriaItemByListIndex(listindex);
 stock ActualizarLabelCultivo(playerid);
 stock FinalizarCultivoVisual(playerid);
+stock CrearPuntosFijos();
+stock RecrearPuntoFijo(ePuntoMovible:punto);
+stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -204,16 +222,31 @@ public OnGameModeInit() {
     DisableInteriorEnterExits();
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
-    CreatePickup(1210, 1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 0);
-    Create3DTextLabel("Trabajo: {FFFF00}Camionero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z + 0.5, 10.0, 0);
-    CreatePickup(1581, 1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, 0);
-    Create3DTextLabel("Trabajo: {FF4500}Pizzero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}en la pizzeria", -1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z + 0.5, 12.0, 0);
-    CreatePickup(1274, 1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z, 0);
-    Create3DTextLabel("Banco KameHouse\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z + 0.5, 12.0, 0);
-    CreatePickup(1275, 1, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z, 0);
-    Create3DTextLabel("Semilleria\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z + 0.5, 12.0, 0);
-    CreatePickup(1242, 1, POS_ARMERIA_X, POS_ARMERIA_Y, POS_ARMERIA_Z, 0);
-    Create3DTextLabel("{AA0000}Mercado de armas\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, POS_ARMERIA_X, POS_ARMERIA_Y, POS_ARMERIA_Z + 0.5, 12.0, 0);
+    PuntoPos[puntoCamionero][0] = POS_TRABAJO_X;
+    PuntoPos[puntoCamionero][1] = POS_TRABAJO_Y;
+    PuntoPos[puntoCamionero][2] = POS_TRABAJO_Z;
+
+    PuntoPos[puntoPizzeria][0] = POS_PIZZERIA_X;
+    PuntoPos[puntoPizzeria][1] = POS_PIZZERIA_Y;
+    PuntoPos[puntoPizzeria][2] = POS_PIZZERIA_Z;
+
+    PuntoPos[puntoCarga][0] = POS_CARGA_X;
+    PuntoPos[puntoCarga][1] = POS_CARGA_Y;
+    PuntoPos[puntoCarga][2] = POS_CARGA_Z;
+
+    PuntoPos[puntoBanco][0] = POS_BANCO_X;
+    PuntoPos[puntoBanco][1] = POS_BANCO_Y;
+    PuntoPos[puntoBanco][2] = POS_BANCO_Z;
+
+    PuntoPos[puntoSemilleria][0] = POS_SEMILLERIA_X;
+    PuntoPos[puntoSemilleria][1] = POS_SEMILLERIA_Y;
+    PuntoPos[puntoSemilleria][2] = POS_SEMILLERIA_Z;
+
+    PuntoPos[puntoArmeria][0] = POS_ARMERIA_X;
+    PuntoPos[puntoArmeria][1] = POS_ARMERIA_Y;
+    PuntoPos[puntoArmeria][2] = POS_ARMERIA_Z;
+
+    CrearPuntosFijos();
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -281,21 +314,21 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     // Inicio de trabajo camionero
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z))
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2]))
     {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
-        CamioneroVehiculo[playerid] = CreateVehicle(498, POS_TRABAJO_X + 3.0, POS_TRABAJO_Y, POS_TRABAJO_Z + 1.0, 0.0, 1, 1, 0);
+        CamioneroVehiculo[playerid] = CreateVehicle(498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 1, 1, 0);
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
 
         TrabajandoCamionero[playerid] = 1;
-        SetPlayerCheckpoint(playerid, POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, 5.0);
+        SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 5.0);
         SendClientMessage(playerid, -1, "{FFFF00}[TRABAJO]{FFFFFF} Sube al camion y ve al punto de CARGA (punto rojo).");
         return 1;
     }
 
     // Inicio de trabajo pizzero
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z))
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2]))
     {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
@@ -391,7 +424,7 @@ forward ActualizarCultivo(playerid);
 public FinalizarDescarga(playerid) {
     TogglePlayerControllable(playerid, true);
     TrabajandoCamionero[playerid] = 5;
-    SetPlayerCheckpoint(playerid, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 5.0);
+    SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 5.0);
     SendClientMessage(playerid, -1, "{FFFF00}[TRABAJO]{FFFFFF} Descarga completa. Regresa al deposito por tu pago.");
     return 1;
 }
@@ -409,9 +442,9 @@ stock CanceladoTrabajo(playerid) {
 
 stock FinalizarTrabajo(playerid) {
     new Float:distancia = 0.0;
-    distancia += GetDistanceBetweenPoints(POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z);
-    distancia += GetDistanceBetweenPoints(POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2]);
-    distancia += GetDistanceBetweenPoints(CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2], POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z);
+    distancia += GetDistanceBetweenPoints(PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2]);
+    distancia += GetDistanceBetweenPoints(PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2]);
+    distancia += GetDistanceBetweenPoints(CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2], PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2]);
 
     new nivelCamionero = CamioneroNivel[playerid];
     if(nivelCamionero > NIVEL_MAX_TRABAJO) nivelCamionero = NIVEL_MAX_TRABAJO;
@@ -437,6 +470,7 @@ stock FinalizarTrabajo(playerid) {
     SendClientMessage(playerid, 0x00FF00FF, str);
     format(str, sizeof(str), "{FFD700}Progreso camionero:{FFFFFF} %d/%d | Nivel actual: %d/%d", CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, CamioneroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, str);
+    GameTextForPlayer(playerid, "~g~Pago recibido", 2500, 3);
 
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
@@ -482,7 +516,7 @@ public AsignarRutaPizzero(playerid) {
 public FinalizarEntregaPizza(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
-    new Float:distancia = GetDistanceBetweenPoints(POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
+    new Float:distancia = GetDistanceBetweenPoints(PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2], PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
     new nivelPizzero = PizzeroNivel[playerid];
     if(nivelPizzero > NIVEL_MAX_TRABAJO) nivelPizzero = NIVEL_MAX_TRABAJO;
 
@@ -505,6 +539,7 @@ public FinalizarEntregaPizza(playerid) {
     SendClientMessage(playerid, 0x00FF00FF, info);
     format(info, sizeof(info), "{FF4500}Progreso pizzero:{FFFFFF} %d/%d | Nivel actual: %d/%d", PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, info);
+    GameTextForPlayer(playerid, "~g~Pago recibido", 2000, 3);
 
     SetTimerEx("AsignarRutaPizzero", 300, false, "d", playerid);
     return 1;
@@ -587,6 +622,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             return SendClientMessage(playerid, -1, ms);
         }
 
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         new extra = random(3);
         new total = CultivoCantidadBase[playerid] + extra;
         if(CultivoTipo[playerid] == 1) {
@@ -626,7 +662,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nDeposito de Carga", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nDeposito de Carga\nBanco KameHouse\nSemilleria\nArmeria", "Ir", "Cerrar");
         return 1;
     }
 
@@ -766,6 +802,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/adminarmas", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         ShowAdminArmasMenu(playerid);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/mover", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nDeposito de Carga\nBanco\nSemilleria\nArmeria", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -1035,6 +1077,7 @@ public OnPlayerConnect(playerid) {
     CultivoObj[playerid] = -1;
     CultivoLabel[playerid] = Text3D:-1;
     CultivoTimer[playerid] = -1;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaComprada[playerid][w] = false;
 
     new name[MAX_PLAYER_NAME], path[64];
     GetPlayerName(playerid, name, sizeof(name));
@@ -1061,10 +1104,30 @@ public OnPlayerSpawn(playerid) {
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_GPS) {
         if(!response) return 1;
-        if(listitem == 0) SetPlayerCheckpoint(playerid, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 6.0);
-        else if(listitem == 1) SetPlayerCheckpoint(playerid, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, 6.0);
-        else if(listitem == 2) SetPlayerCheckpoint(playerid, POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, 6.0);
+        if(listitem == 0) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 6.0);
+        else if(listitem == 1) SetPlayerCheckpoint(playerid, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2], 6.0);
+        else if(listitem == 2) SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 6.0);
+        else if(listitem == 3) SetPlayerCheckpoint(playerid, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2], 6.0);
+        else if(listitem == 4) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
+        else if(listitem == 5) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
         SendClientMessage(playerid, 0x00FFFFFF, "GPS actualizado en tu mapa.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_MOVER_MENU) {
+        if(!response) return 1;
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(listitem < 0 || listitem >= _:totalPuntosMovibles) return SendClientMessage(playerid, -1, "Punto invalido.");
+
+        new Float:px, Float:py, Float:pz, nombre[48], msg[144];
+        GetPlayerPos(playerid, px, py, pz);
+        PuntoPos[ePuntoMovible:listitem][0] = px;
+        PuntoPos[ePuntoMovible:listitem][1] = py;
+        PuntoPos[ePuntoMovible:listitem][2] = pz;
+        RecrearPuntoFijo(ePuntoMovible:listitem);
+        GetPuntoMovibleNombre(ePuntoMovible:listitem, nombre, sizeof(nombre));
+        format(msg, sizeof(msg), "Moviste %s a tu posicion. El GPS ya usa la nueva ubicacion.", nombre);
+        SendClientMessage(playerid, 0x00FF00FF, msg);
         return 1;
     }
 
@@ -1118,6 +1181,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(CultivoTimer[playerid] != -1) KillTimer(CultivoTimer[playerid]);
         CultivoTimer[playerid] = SetTimerEx("ActualizarCultivo", 1000, true, "d", playerid);
 
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         SendClientMessage(playerid, 0x00FF00FF, "Semilla plantada. Usa /cosehar cuando el contador llegue a 0.");
         return 1;
     }
@@ -1127,6 +1191,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) {
             if(InvHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes hierva verde para consumir.");
             InvHierba[playerid]--;
+            ApplyAnimation(playerid, "SMOKING", "M_smk_in", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
             new Float:armour;
             GetPlayerArmour(playerid, armour);
             armour += 3.0;
@@ -1136,6 +1201,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         } else if(listitem == 1) {
             if(InvFlor[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes flores para consumir.");
             InvFlor[playerid]--;
+            ApplyAnimation(playerid, "FOOD", "EAT_Pizza", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
             new Float:vida;
             GetPlayerHealth(playerid, vida);
             vida += 6.0;
@@ -1230,9 +1296,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) {
             if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioArma]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar esta arma.");
             GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioArma]);
-            GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 1);
-            SendClientMessage(playerid, 0x00FF00FF, "Arma comprada. Compra municion para usarla mejor.");
+            GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 0);
+            PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]] = true;
+            ArmeriaItems[item][aiActiva] = false;
+            SendClientMessage(playerid, 0x00FF00FF, "Arma comprada y retirada de la tienda. Ahora puedes comprar su municion.");
+            ShowArmeriaMenu(playerid);
         } else if(listitem == 1) {
+            if(!PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]]) return SendClientMessage(playerid, -1, "Primero debes comprar esta arma para poder comprar municion.");
             if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioMunicion]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar municion.");
             GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioMunicion]);
             GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], ArmeriaItems[item][aiMunicionPack]);
@@ -1467,6 +1537,7 @@ public OnPlayerDisconnect(playerid, reason) {
     BankTransferTarget[playerid] = -1;
     FinalizarCultivoVisual(playerid);
     CultivoActivo[playerid] = 0;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaComprada[playerid][w] = false;
     return 1;
 }
 
@@ -1508,12 +1579,12 @@ public ActualizarCultivo(playerid) {
 }
 
 stock IsNearSemilleria(playerid) {
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z)) return 1;
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2])) return 1;
     return 0;
 }
 
 stock IsNearArmeria(playerid) {
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_ARMERIA_X, POS_ARMERIA_Y, POS_ARMERIA_Z)) return 1;
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2])) return 1;
     return 0;
 }
 
@@ -1609,10 +1680,69 @@ stock FinalizarCultivoVisual(playerid) {
     return 1;
 }
 
+stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
+    switch(punto) {
+        case puntoCamionero: format(dest, len, "Trabajo camionero");
+        case puntoPizzeria: format(dest, len, "Pizzeria");
+        case puntoCarga: format(dest, len, "Deposito de carga");
+        case puntoBanco: format(dest, len, "Banco");
+        case puntoSemilleria: format(dest, len, "Semilleria");
+        case puntoArmeria: format(dest, len, "Armeria");
+        default: format(dest, len, "Punto");
+    }
+    return 1;
+}
+
+stock RecrearPuntoFijo(ePuntoMovible:punto) {
+    if(PuntoPickup[punto] != 0) {
+        DestroyPickup(PuntoPickup[punto]);
+        PuntoPickup[punto] = 0;
+    }
+    if(PuntoLabel[punto] != Text3D:-1) {
+        Delete3DTextLabel(PuntoLabel[punto]);
+        PuntoLabel[punto] = Text3D:-1;
+    }
+
+    switch(punto) {
+        case puntoCamionero: {
+            PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Trabajo: {FFFF00}Camionero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 10.0, 0);
+        }
+        case puntoPizzeria: {
+            PuntoPickup[punto] = CreatePickup(1581, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Trabajo: {FF4500}Pizzero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}en la pizzeria", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoCarga: {
+            PuntoPickup[punto] = CreatePickup(1271, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Deposito de carga\n{FFFFFF}Punto de trabajo camionero", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoBanco: {
+            PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Banco KameHouse\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoSemilleria: {
+            PuntoPickup[punto] = CreatePickup(1275, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Semilleria\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoArmeria: {
+            PuntoPickup[punto] = CreatePickup(1242, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("{AA0000}Mercado de armas\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+    }
+    return 1;
+}
+
+stock CrearPuntosFijos() {
+    for(new i = 0; i < _:totalPuntosMovibles; i++) {
+        RecrearPuntoFijo(ePuntoMovible:i);
+    }
+    return 1;
+}
+
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /adminarmas /tp /gotomap /crearcasa /eliminarcasa");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa");
     } else {
         format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
     }
@@ -1621,7 +1751,7 @@ stock ShowAyudaDialog(playerid) {
 }
 
 stock IsNearBank(playerid) {
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z)) return 1;
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2])) return 1;
     return 0;
 }
 
