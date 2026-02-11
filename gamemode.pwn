@@ -1651,7 +1651,7 @@ public AutoGuardadoGlobal() {
     return 1;
 }
 
-public OnPlayerWeaponShot(playerid, WEAPON:weaponid, hittype, hitid, Float:fX, Float:fY, Float:fZ) {
+public OnPlayerWeaponShot(playerid, weaponid, hittype, hitid, Float:fX, Float:fY, Float:fZ) {
     #pragma unused hittype
     #pragma unused hitid
     #pragma unused fX
