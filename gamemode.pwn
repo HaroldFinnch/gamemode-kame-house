@@ -16,10 +16,12 @@
 
 #define PAGO_MAX_PIZZERO     2600
 #define PAGO_MAX_CAMIONERO   6800
+#define PAGO_MAX_BASURERO    4500
 
 #define NIVEL_MAX_TRABAJO    10
 #define PROGRESO_CAMIONERO_POR_NIVEL 30
 #define PROGRESO_PIZZERO_POR_NIVEL   25
+#define PROGRESO_BASURERO_POR_NIVEL  28
 
 #define TIEMPO_CULTIVO_MIN   240
 #define TIEMPO_CULTIVO_MAX   300
@@ -75,6 +77,7 @@
 #define PATH_USUARIOS       "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
 #define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
+#define PATH_RUTAS_BASURA   "rutas_basurero.txt"
 #define PATH_CASAS          "casas.txt"
 #define MAX_CASAS           50
 
@@ -94,6 +97,10 @@
 #define DIALOG_ARMERIA_MENU   23
 #define DIALOG_ARMERIA_COMPRA 24
 #define DIALOG_MOVER_MENU     25
+#define DIALOG_ARMERIA_CATEGORIA 26
+#define DIALOG_ARMERIA_ARMAS     27
+#define DIALOG_ARMERIA_MUNICION  28
+#define DIALOG_ARMERIA_MUNI_CANT 29
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -122,6 +129,15 @@ new PizzeroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new PizzeroNivel[MAX_PLAYERS];
 new PizzeroEntregas[MAX_PLAYERS];
 new Float:PizzeroDestino[MAX_PLAYERS][3];
+
+// Variables Basurero
+new TrabajandoBasurero[MAX_PLAYERS];
+new BasureroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
+new BasureroNivel[MAX_PLAYERS];
+new BasureroRecorridos[MAX_PLAYERS];
+new Float:BasureroDestino[MAX_PLAYERS][3];
+new bool:BasureroRecolectando[MAX_PLAYERS];
+new BasureroRecolectado[MAX_PLAYERS];
 
 // Variables Inventario/Cultivo
 new InvSemillaHierba[MAX_PLAYERS];
@@ -161,15 +177,24 @@ enum eArmeriaItem {
     aiSlot,
     aiPrecioArma,
     aiPrecioMunicion,
-    aiMunicionPack
+    aiMunicionPack,
+    aiStockArma,
+    aiStockMunicion
 }
 new ArmeriaItems[MAX_ARMAS_TIENDA][eArmeriaItem];
 new ArmeriaSeleccionJugador[MAX_PLAYERS] = {-1, ...};
+new ArmeriaMuniItemJugador[MAX_PLAYERS] = {-1, ...};
 new bool:PlayerArmaComprada[MAX_PLAYERS][MAX_WEAPON_ID_GM];
+new PlayerAmmoInventario[MAX_PLAYERS][MAX_WEAPON_ID_GM];
+
+#define MAX_RUTAS_BASURA 128
+new Float:BasuraRuta[MAX_RUTAS_BASURA][3];
+new TotalRutasBasura;
 
 enum ePuntoMovible {
     puntoCamionero,
     puntoPizzeria,
+    puntoBasurero,
     puntoCarga,
     puntoBanco,
     puntoSemilleria,
@@ -188,12 +213,28 @@ forward GuardarCuenta(playerid);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
+forward FinalizarRecolectaBasura(playerid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
 stock EntrarCasa(playerid, casa);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
+public FinalizarRecolectaBasura(playerid) {
+    if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    BasureroRecolectado[playerid]++;
+
+    if(BasureroRecolectado[playerid] >= TotalRutasBasura) {
+        FinalizarTrabajoBasurero(playerid);
+        return 1;
+    }
+
+    IniciarRutaBasurero(playerid);
+    return 1;
+}
+
 stock CanceladoTrabajoPizzero(playerid);
 stock ShowAyudaDialog(playerid);
 stock IsNearBank(playerid);
@@ -203,11 +244,19 @@ stock IsNearSemilleria(playerid);
 stock ShowSemilleriaMenu(playerid);
 stock IsNearArmeria(playerid);
 stock ShowArmeriaMenu(playerid);
+stock ShowArmeriaArmasDisponibles(playerid);
+stock ShowArmeriaMunicionDisponible(playerid);
 stock ShowAdminArmasMenu(playerid);
 stock GetWeaponNameGM(weaponid, dest[], len);
 stock GetArmeriaItemByListIndex(listindex);
+stock GetArmeriaItemByStockMuniIndex(listindex);
+stock CrearVehiculoTrabajoUnico(playerid, modelid, Float:x, Float:y, Float:z, Float:a, c1, c2, &vehvar);
+stock CargarRutasBasura();
+stock IniciarRutaBasurero(playerid);
+stock FinalizarTrabajoBasurero(playerid);
 stock ActualizarLabelCultivo(playerid);
 stock FinalizarCultivoVisual(playerid);
+stock CrearPuntosFijos();
 stock CrearPuntosFijos();
 stock RecrearPuntoFijo(ePuntoMovible:punto);
 stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len);
@@ -230,6 +279,10 @@ public OnGameModeInit() {
     PuntoPos[puntoPizzeria][1] = POS_PIZZERIA_Y;
     PuntoPos[puntoPizzeria][2] = POS_PIZZERIA_Z;
 
+    PuntoPos[puntoBasurero][0] = POS_PIZZERIA_X + 8.0;
+    PuntoPos[puntoBasurero][1] = POS_PIZZERIA_Y + 6.0;
+    PuntoPos[puntoBasurero][2] = POS_PIZZERIA_Z;
+
     PuntoPos[puntoCarga][0] = POS_CARGA_X;
     PuntoPos[puntoCarga][1] = POS_CARGA_Y;
     PuntoPos[puntoCarga][2] = POS_CARGA_Z;
@@ -247,6 +300,7 @@ public OnGameModeInit() {
     PuntoPos[puntoArmeria][2] = POS_ARMERIA_Z;
 
     CrearPuntosFijos();
+    CargarRutasBasura();
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -287,6 +341,15 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 {
     if(!(newkeys & KEY_CTRL_BACK)) return 1; // Tecla H
 
+    if(TrabajandoBasurero[playerid] == 2 && !IsPlayerInAnyVehicle(playerid) && BasureroRecolectando[playerid]) {
+        BasureroRecolectando[playerid] = false;
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+        SetTimerEx("FinalizarRecolectaBasura", 10000, false, "d", playerid);
+        GameTextForPlayer(playerid, "~w~RECOLECTANDO BASURA", 2000, 3);
+        return 1;
+    }
+
     // Entrada a casas desde el icono con H
     new casa = GetClosestCasa(playerid);
     if(casa != -1 && PlayerInCasa[playerid] == -1) {
@@ -316,9 +379,9 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo camionero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2]))
     {
-        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
-        CamioneroVehiculo[playerid] = CreateVehicle(498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 1, 1, 0);
+        CrearVehiculoTrabajoUnico(playerid, 498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 1, 1, CamioneroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
 
         TrabajandoCamionero[playerid] = 1;
@@ -330,15 +393,30 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo pizzero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2]))
     {
-        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
-        PizzeroVehiculo[playerid] = CreateVehicle(448, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, 0);
+        CrearVehiculoTrabajoUnico(playerid, 448, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, PizzeroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, PizzeroVehiculo[playerid], 0);
         TrabajandoPizzero[playerid] = 1;
         SetTimerEx("AsignarRutaPizzero", 200, false, "d", playerid);
         SendClientMessage(playerid, -1, "{FF4500}[PIZZERO]{FFFFFF} Entrega pizzas y gana dinero. Sigue el checkpoint.");
         return 1;
     }
+    // Inicio de trabajo basurero
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2]))
+    {
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        if(TotalRutasBasura <= 0) return SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de basura cargadas.");
+
+        CrearVehiculoTrabajoUnico(playerid, 408, PuntoPos[puntoBasurero][0] + 4.0, PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2] + 1.0, 0.0, 6, 6, BasureroVehiculo[playerid]);
+        PutPlayerInVehicle(playerid, BasureroVehiculo[playerid], 0);
+        BasureroRecolectado[playerid] = 0;
+        TrabajandoBasurero[playerid] = 1;
+        IniciarRutaBasurero(playerid);
+        SendClientMessage(playerid, 0x66FF66FF, "[BASURERO] Usa la Rumpo, baja en checkpoint y presiona H para recolectar.");
+        return 1;
+    }
+
     return 1;
 }
 
@@ -371,6 +449,19 @@ public OnPlayerEnterCheckpoint(playerid)
         return 1;
     }
 
+
+    if(TrabajandoBasurero[playerid] >= 1) {
+        if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
+            SendClientMessage(playerid, 0xFF0000FF, "BASURERO CANCELADO: Debes usar la Rumpo del trabajo.");
+            FinalizarTrabajoBasurero(playerid);
+            return 1;
+        }
+        DisablePlayerCheckpoint(playerid);
+        TrabajandoBasurero[playerid] = 2;
+        BasureroRecolectando[playerid] = true;
+        SendClientMessage(playerid, 0x66FF66FF, "Baja del vehiculo y presiona H para recolectar (10s).");
+        return 1;
+    }
     if(TrabajandoPizzero[playerid] == 1) {
         if(GetPlayerVehicleID(playerid) != PizzeroVehiculo[playerid]) {
             SendClientMessage(playerid, 0xFF0000FF, "PIZZERO CANCELADO: Debes usar la moto de la pizzeria.");
@@ -575,8 +666,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/skills", true)) {
-        new str[196];
-        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL);
+        new str[256];
+        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d\n\n{FFFFFF}Basurero Nivel: {66FF66}%d/%d\n{FFFFFF}Recorridos: {66FF66}%d/%d", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
@@ -649,7 +740,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
         if(TrabajandoCamionero[playerid] > 0) {
             CanceladoTrabajo(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
@@ -658,11 +749,15 @@ public OnPlayerCommandText(playerid, cmdtext[])
             CanceladoTrabajoPizzero(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de pizzero.");
         }
+        if(TrabajandoBasurero[playerid] > 0) {
+            FinalizarTrabajoBasurero(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de basurero.");
+        }
         return 1;
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nDeposito de Carga\nBanco KameHouse\nSemilleria\nArmeria", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nTrabajo Basurero\nDeposito de Carga\nBanco KameHouse\nSemilleria\nArmeria", "Ir", "Cerrar");
         return 1;
     }
 
@@ -738,6 +833,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/crearparadabasura", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        new Float:p[3], File:h = fopen(PATH_RUTAS_BASURA, io_append), line[64];
+        GetPlayerPos(playerid, p[0], p[1], p[2]);
+        format(line, sizeof(line), "%f %f %f\n", p[0], p[1], p[2]);
+        if(h) {
+            fwrite(h, line);
+            fclose(h);
+            CargarRutasBasura();
+            SendClientMessage(playerid, 0x00FF00FF, "Punto de basura guardado.");
+        }
+        return 1;
+    }
+
     if(!strcmp(cmd, "/kick", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], id, razon[64];
@@ -807,7 +916,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nDeposito de Carga\nBanco\nSemilleria\nArmeria", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nSemilleria\nArmeria", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -1062,8 +1171,12 @@ public OnPlayerConnect(playerid) {
     PlayerInCasa[playerid] = -1;
     TrabajandoCamionero[playerid] = 0;
     TrabajandoPizzero[playerid] = 0;
+    TrabajandoBasurero[playerid] = 0;
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    BasureroRecolectado[playerid] = 0;
+    BasureroRecolectando[playerid] = false;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
     InvSemillaHierba[playerid] = 0;
@@ -1077,7 +1190,7 @@ public OnPlayerConnect(playerid) {
     CultivoObj[playerid] = -1;
     CultivoLabel[playerid] = Text3D:-1;
     CultivoTimer[playerid] = -1;
-    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaComprada[playerid][w] = false;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
 
     new name[MAX_PLAYER_NAME], path[64];
     GetPlayerName(playerid, name, sizeof(name));
@@ -1106,10 +1219,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 6.0);
         else if(listitem == 1) SetPlayerCheckpoint(playerid, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2], 6.0);
-        else if(listitem == 2) SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 6.0);
-        else if(listitem == 3) SetPlayerCheckpoint(playerid, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2], 6.0);
-        else if(listitem == 4) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
-        else if(listitem == 5) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
+        else if(listitem == 2) SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
+        else if(listitem == 3) SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 6.0);
+        else if(listitem == 4) SetPlayerCheckpoint(playerid, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2], 6.0);
+        else if(listitem == 5) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
+        else if(listitem == 6) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
         SendClientMessage(playerid, 0x00FFFFFF, "GPS actualizado en tu mapa.");
         return 1;
     }
@@ -1215,7 +1329,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_ADMIN_ARMAS_MENU) {
         if(!response) return 1;
         if(listitem == 0) {
-            ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD, DIALOG_STYLE_INPUT, "Admin Armas - Agregar", "Formato: arma_id slot precio_arma precio_municion municion_pack\nEjemplo: 24 1 3500 800 35", "Guardar", "Atras");
+            ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD, DIALOG_STYLE_INPUT, "Admin Armas - Agregar", "Formato: arma_id slot precio_arma precio_municion pack stock_armas stock_municion\nEjemplo: 24 1 3500 40 12 5 500", "Guardar", "Atras");
         } else if(listitem == 1) {
             new lista[768], line[96], nombreArma[32], count;
             lista[0] = EOS;
@@ -1234,25 +1348,29 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_ARMAS_ADD) {
         if(!response) return ShowAdminArmasMenu(playerid);
-        new armaId, slotVenta, precioArma, precioMuni, packMuni;
-        new data[128], s0[16], s1[16], s2[16], s3[16], s4[16], pidx;
+        new armaId, slotVenta, precioArma, precioMuni, packMuni, stockArma, stockMuni;
+        new data[160], s0[16], s1[16], s2[16], s3[16], s4[16], s5[16], s6[16], pidx;
         format(data, sizeof(data), "%s", inputtext);
         format(s0, sizeof(s0), "%s", strtok(data, pidx));
         format(s1, sizeof(s1), "%s", strtok(data, pidx));
         format(s2, sizeof(s2), "%s", strtok(data, pidx));
         format(s3, sizeof(s3), "%s", strtok(data, pidx));
         format(s4, sizeof(s4), "%s", strtok(data, pidx));
-        if(!s0[0] || !s1[0] || !s2[0] || !s3[0] || !s4[0]) {
-            return SendClientMessage(playerid, -1, "Formato invalido. Usa: arma_id slot precio_arma precio_municion municion_pack");
+        format(s5, sizeof(s5), "%s", strtok(data, pidx));
+        format(s6, sizeof(s6), "%s", strtok(data, pidx));
+        if(!s0[0] || !s1[0] || !s2[0] || !s3[0] || !s4[0] || !s5[0] || !s6[0]) {
+            return SendClientMessage(playerid, -1, "Formato invalido. Usa: arma_id slot precio_arma precio_municion pack stock_armas stock_municion");
         }
         armaId = strval(s0);
         slotVenta = strval(s1);
         precioArma = strval(s2);
         precioMuni = strval(s3);
         packMuni = strval(s4);
+        stockArma = strval(s5);
+        stockMuni = strval(s6);
         if(armaId <= 0 || armaId >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "ID de arma invalida.");
         if(slotVenta < 0 || slotVenta > 12) return SendClientMessage(playerid, -1, "Slot de venta invalido (0-12).");
-        if(precioArma <= 0 || precioMuni <= 0 || packMuni <= 0) return SendClientMessage(playerid, -1, "Precios y municion deben ser mayores a 0.");
+        if(precioArma <= 0 || precioMuni <= 0 || packMuni <= 0 || stockArma < 0 || stockMuni < 0) return SendClientMessage(playerid, -1, "Valores invalidos.");
 
         for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
             if(!ArmeriaItems[i][aiActiva]) {
@@ -1262,6 +1380,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 ArmeriaItems[i][aiPrecioArma] = precioArma;
                 ArmeriaItems[i][aiPrecioMunicion] = precioMuni;
                 ArmeriaItems[i][aiMunicionPack] = packMuni;
+                ArmeriaItems[i][aiStockArma] = stockArma;
+                ArmeriaItems[i][aiStockMunicion] = stockMuni;
                 SendClientMessage(playerid, 0x00FF00FF, "Arma agregada a la tienda correctamente.");
                 return ShowAdminArmasMenu(playerid);
             }
@@ -1279,36 +1399,50 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return ShowAdminArmasMenu(playerid);
     }
 
-    if(dialogid == DIALOG_ARMERIA_MENU) {
+    if(dialogid == DIALOG_ARMERIA_CATEGORIA) {
         if(!response) return 1;
-        new item = GetArmeriaItemByListIndex(listitem);
-        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
-        ArmeriaSeleccionJugador[playerid] = item;
-        ShowPlayerDialog(playerid, DIALOG_ARMERIA_COMPRA, DIALOG_STYLE_LIST, "Armeria", "Comprar arma\nComprar municion", "Comprar", "Cancelar");
+        if(listitem == 0) return ShowArmeriaArmasDisponibles(playerid);
+        if(listitem == 1) return ShowArmeriaMunicionDisponible(playerid);
         return 1;
     }
 
-    if(dialogid == DIALOG_ARMERIA_COMPRA) {
-        if(!response) return 1;
-        new item = ArmeriaSeleccionJugador[playerid];
-        if(item < 0 || item >= MAX_ARMAS_TIENDA || !ArmeriaItems[item][aiActiva]) return SendClientMessage(playerid, -1, "Item ya no disponible.");
+    if(dialogid == DIALOG_ARMERIA_ARMAS) {
+        if(!response) return ShowArmeriaMenu(playerid);
+        new item = GetArmeriaItemByListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(ArmeriaItems[item][aiStockArma] <= 0) return SendClientMessage(playerid, -1, "No hay stock de arma.");
+        if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioArma]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar esta arma.");
+        GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioArma]);
+        GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 0);
+        PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]] = true;
+        ArmeriaItems[item][aiStockArma]--;
+        return ShowArmeriaArmasDisponibles(playerid);
+    }
 
-        if(listitem == 0) {
-            if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioArma]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar esta arma.");
-            GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioArma]);
-            GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 0);
-            PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]] = true;
-            ArmeriaItems[item][aiActiva] = false;
-            SendClientMessage(playerid, 0x00FF00FF, "Arma comprada y retirada de la tienda. Ahora puedes comprar su municion.");
-            ShowArmeriaMenu(playerid);
-        } else if(listitem == 1) {
-            if(!PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]]) return SendClientMessage(playerid, -1, "Primero debes comprar esta arma para poder comprar municion.");
-            if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioMunicion]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar municion.");
-            GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioMunicion]);
-            GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], ArmeriaItems[item][aiMunicionPack]);
-            SendClientMessage(playerid, 0x00FF00FF, "Municion comprada correctamente.");
-        }
+    if(dialogid == DIALOG_ARMERIA_MUNICION) {
+        if(!response) return ShowArmeriaMenu(playerid);
+        new item = GetArmeriaItemByStockMuniIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        ArmeriaMuniItemJugador[playerid] = item;
+        ShowPlayerDialog(playerid, DIALOG_ARMERIA_MUNI_CANT, DIALOG_STYLE_INPUT, "Comprar municion", "Cantidad de packs a comprar:", "Comprar", "Atras");
         return 1;
+    }
+
+    if(dialogid == DIALOG_ARMERIA_MUNI_CANT) {
+        if(!response) return ShowArmeriaMunicionDisponible(playerid);
+        new item = ArmeriaMuniItemJugador[playerid];
+        new packs = strval(inputtext);
+        if(item < 0 || item >= MAX_ARMAS_TIENDA || !ArmeriaItems[item][aiActiva]) return SendClientMessage(playerid, -1, "Item invalido.");
+        if(packs <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(packs > ArmeriaItems[item][aiStockMunicion]) return SendClientMessage(playerid, -1, "No hay tanta municion disponible.");
+        new costo = packs * ArmeriaItems[item][aiPrecioMunicion];
+        new balas = packs * ArmeriaItems[item][aiMunicionPack];
+        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+        GivePlayerMoney(playerid, -costo);
+        PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]] += balas;
+        ArmeriaItems[item][aiStockMunicion] -= packs;
+        GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], balas);
+        return ShowArmeriaMunicionDisponible(playerid);
     }
 
     if(dialogid == DIALOG_BANK_MENU) {
@@ -1517,6 +1651,23 @@ public AutoGuardadoGlobal() {
     return 1;
 }
 
+public OnPlayerWeaponShot(playerid, WEAPON:weaponid, hittype, hitid, Float:fX, Float:fY, Float:fZ) {
+    #pragma unused hittype
+    #pragma unused hitid
+    #pragma unused fX
+    #pragma unused fY
+    #pragma unused fZ
+    new wid = _:weaponid;
+    if(wid <= 0 || wid >= MAX_WEAPON_ID_GM) return 1;
+    if(PlayerAmmoInventario[playerid][wid] <= 0) {
+        SendClientMessage(playerid, 0xFF0000FF, "Sin municion: compra en armeria.");
+        GivePlayerWeapon(playerid, WEAPON:wid, 0);
+        return 0;
+    }
+    PlayerAmmoInventario[playerid][wid]--;
+    return 1;
+}
+
 public OnPlayerDisconnect(playerid, reason) {
     #pragma unused reason
     if(PlayerInCasa[playerid] != -1) {
@@ -1529,15 +1680,20 @@ public OnPlayerDisconnect(playerid, reason) {
     GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
+    if(BasureroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(BasureroVehiculo[playerid]);
     TrabajandoCamionero[playerid] = 0;
     TrabajandoPizzero[playerid] = 0;
+    TrabajandoBasurero[playerid] = 0;
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    BasureroRecolectado[playerid] = 0;
+    BasureroRecolectando[playerid] = false;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
     FinalizarCultivoVisual(playerid);
     CultivoActivo[playerid] = 0;
-    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaComprada[playerid][w] = false;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
     return 1;
 }
 
@@ -1589,21 +1745,38 @@ stock IsNearArmeria(playerid) {
 }
 
 stock ShowArmeriaMenu(playerid) {
-    new body[1024], line[96], nombreArma[32], count;
+    ShowPlayerDialog(playerid, DIALOG_ARMERIA_CATEGORIA, DIALOG_STYLE_LIST, "Armeria KameHouse", "Armas disponibles\nComprar municion", "Abrir", "Cerrar");
+    return 1;
+}
+
+stock ShowArmeriaArmasDisponibles(playerid) {
+    new body[1024], line[128], nombreArma[32], count;
     body[0] = EOS;
     for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
         if(!ArmeriaItems[i][aiActiva]) continue;
         GetWeaponNameGM(ArmeriaItems[i][aiArma], nombreArma, sizeof(nombreArma));
-        format(line, sizeof(line), "Slot venta %d | %s | Arma $%d | Muni x%d $%d\n", ArmeriaItems[i][aiSlot], nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiMunicionPack], ArmeriaItems[i][aiPrecioMunicion]);
+        format(line, sizeof(line), "%s | Arma $%d | Stock:%d\n", nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiStockArma]);
         strcat(body, line);
         count++;
     }
+    if(count == 0) return SendClientMessage(playerid, -1, "No hay armas disponibles por ahora.");
+    ShowPlayerDialog(playerid, DIALOG_ARMERIA_ARMAS, DIALOG_STYLE_LIST, "Armas disponibles", body, "Comprar", "Atras");
+    return 1;
+}
 
-    if(count == 0) {
-        SendClientMessage(playerid, -1, "La armeria no tiene armas disponibles por ahora.");
-        return 1;
+stock ShowArmeriaMunicionDisponible(playerid) {
+    new body[1024], line[128], nombreArma[32], count;
+    body[0] = EOS;
+    for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+        if(!ArmeriaItems[i][aiActiva]) continue;
+        if(ArmeriaItems[i][aiStockMunicion] <= 0) continue;
+        GetWeaponNameGM(ArmeriaItems[i][aiArma], nombreArma, sizeof(nombreArma));
+        format(line, sizeof(line), "%s | Pack %d | $%d | Disp:%d\n", nombreArma, ArmeriaItems[i][aiMunicionPack], ArmeriaItems[i][aiPrecioMunicion], ArmeriaItems[i][aiStockMunicion]);
+        strcat(body, line);
+        count++;
     }
-    ShowPlayerDialog(playerid, DIALOG_ARMERIA_MENU, DIALOG_STYLE_LIST, "Armeria KameHouse", body, "Seleccionar", "Cerrar");
+    if(count == 0) return SendClientMessage(playerid, -1, "No hay municion disponible por ahora.");
+    ShowPlayerDialog(playerid, DIALOG_ARMERIA_MUNICION, DIALOG_STYLE_LIST, "Municion disponible", body, "Comprar", "Atras");
     return 1;
 }
 
@@ -1620,6 +1793,79 @@ stock GetArmeriaItemByListIndex(listindex) {
         current++;
     }
     return -1;
+}
+
+stock GetArmeriaItemByStockMuniIndex(listindex) {
+    new current;
+    for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+        if(!ArmeriaItems[i][aiActiva]) continue;
+        if(ArmeriaItems[i][aiStockMunicion] <= 0) continue;
+        if(current == listindex) return i;
+        current++;
+    }
+    return -1;
+}
+
+stock CrearVehiculoTrabajoUnico(playerid, modelid, Float:x, Float:y, Float:z, Float:a, c1, c2, &vehvar) {
+    #pragma unused playerid
+    if(vehvar != INVALID_VEHICLE_ID) DestroyVehicle(vehvar);
+    vehvar = CreateVehicle(modelid, x, y, z, a, c1, c2, 0);
+    return 1;
+}
+
+stock CargarRutasBasura() {
+    TotalRutasBasura = 0;
+    new File:h = fopen(PATH_RUTAS_BASURA, io_read);
+    if(!h) return 1;
+    new line[64];
+    while(fread(h, line) && TotalRutasBasura < MAX_RUTAS_BASURA) {
+        sscanf_manual(line, BasuraRuta[TotalRutasBasura][0], BasuraRuta[TotalRutasBasura][1], BasuraRuta[TotalRutasBasura][2]);
+        TotalRutasBasura++;
+    }
+    fclose(h);
+    return 1;
+}
+
+stock IniciarRutaBasurero(playerid) {
+    if(TotalRutasBasura <= 0) return 0;
+    new punto = random(TotalRutasBasura);
+    BasureroDestino[playerid][0] = BasuraRuta[punto][0];
+    BasureroDestino[playerid][1] = BasuraRuta[punto][1];
+    BasureroDestino[playerid][2] = BasuraRuta[punto][2];
+    SetPlayerCheckpoint(playerid, BasureroDestino[playerid][0], BasureroDestino[playerid][1], BasureroDestino[playerid][2], 4.0);
+    TrabajandoBasurero[playerid] = 1;
+    return 1;
+}
+
+stock FinalizarTrabajoBasurero(playerid) {
+    DisablePlayerCheckpoint(playerid);
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+
+    if(BasureroRecolectado[playerid] > 0) {
+        new nivel = BasureroNivel[playerid];
+        if(nivel > NIVEL_MAX_TRABAJO) nivel = NIVEL_MAX_TRABAJO;
+        new pago = 400 + (BasureroRecolectado[playerid] * 220) + (nivel * 190);
+        if(pago > PAGO_MAX_BASURERO) pago = PAGO_MAX_BASURERO;
+        GivePlayerMoney(playerid, pago);
+
+        BasureroRecorridos[playerid]++;
+        if(BasureroRecorridos[playerid] >= PROGRESO_BASURERO_POR_NIVEL) {
+            BasureroRecorridos[playerid] = 0;
+            if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) BasureroNivel[playerid]++;
+        }
+
+        new msg[160];
+        format(msg, sizeof(msg), "{66FF66}[BASURERO]{FFFFFF} Pago: $%d | Progreso %d/%d | Nivel %d/%d", pago, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+    }
+
+    if(BasureroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(BasureroVehiculo[playerid]);
+    BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    TrabajandoBasurero[playerid] = 0;
+    BasureroRecolectado[playerid] = 0;
+    BasureroRecolectando[playerid] = false;
+    return 1;
 }
 
 stock GetWeaponNameGM(weaponid, dest[], len) {
@@ -1684,6 +1930,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
     switch(punto) {
         case puntoCamionero: format(dest, len, "Trabajo camionero");
         case puntoPizzeria: format(dest, len, "Pizzeria");
+        case puntoBasurero: format(dest, len, "Trabajo basurero");
         case puntoCarga: format(dest, len, "Deposito de carga");
         case puntoBanco: format(dest, len, "Banco");
         case puntoSemilleria: format(dest, len, "Semilleria");
@@ -1742,7 +1989,7 @@ stock CrearPuntosFijos() {
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa");
     } else {
         format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
     }
