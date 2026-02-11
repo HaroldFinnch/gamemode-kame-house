@@ -14,6 +14,15 @@
 #define DISTANCIA_PAGO_MULT  3.0
 #define DISTANCIA_PAGO_PIZZA 2.2
 
+#define PAGO_MAX_PIZZERO     300
+#define PAGO_MAX_CAMIONERO   6800
+
+#define TIEMPO_CULTIVO_MIN   240
+#define TIEMPO_CULTIVO_MAX   300
+
+#define SEMILLA_HIERBA_PRECIO 45
+#define SEMILLA_FLOR_PRECIO   65
+
 #define MAX_WEAPON_ID_GM     47
 
 #define CASA_INT_X           2496.0499
@@ -44,6 +53,10 @@
 #define POS_BANCO_Y         -1660.20
 #define POS_BANCO_Z         13.35
 
+#define POS_SEMILLERIA_X    2499.80
+#define POS_SEMILLERIA_Y    -1660.50
+#define POS_SEMILLERIA_Z    13.35
+
 #define LIMITE_X_MAX        3000.0
 #define LIMITE_X_MIN        -500.0
 #define LIMITE_Y_MAX        -500.0
@@ -64,6 +77,9 @@
 #define DIALOG_BANK_WITHDRAW 14
 #define DIALOG_BANK_TR_ID   15
 #define DIALOG_BANK_TR_AMT  16
+#define DIALOG_PLANTAR      17
+#define DIALOG_CONSUMIR     18
+#define DIALOG_SEMILLERIA   19
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -92,6 +108,20 @@ new PizzeroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new PizzeroNivel[MAX_PLAYERS];
 new PizzeroEntregas[MAX_PLAYERS];
 new Float:PizzeroDestino[MAX_PLAYERS][3];
+
+// Variables Inventario/Cultivo
+new InvSemillaHierba[MAX_PLAYERS];
+new InvSemillaFlor[MAX_PLAYERS];
+new InvHierba[MAX_PLAYERS];
+new InvFlor[MAX_PLAYERS];
+new CultivoActivo[MAX_PLAYERS];
+new CultivoTipo[MAX_PLAYERS];
+new CultivoCantidadBase[MAX_PLAYERS];
+new CultivoReadyTick[MAX_PLAYERS];
+new CultivoObj[MAX_PLAYERS] = {-1, ...};
+new Text3D:CultivoLabel[MAX_PLAYERS] = {Text3D:-1, ...};
+new CultivoTimer[MAX_PLAYERS] = {-1, ...};
+new Float:CultivoPos[MAX_PLAYERS][3];
 
 // Variables Casas
 enum eCasa {
@@ -128,6 +158,10 @@ stock ShowAyudaDialog(playerid);
 stock IsNearBank(playerid);
 stock ShowBankMenu(playerid);
 stock IsNearBusinessInterior(playerid);
+stock IsNearSemilleria(playerid);
+stock ShowSemilleriaMenu(playerid);
+stock ActualizarLabelCultivo(playerid);
+stock FinalizarCultivoVisual(playerid);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -144,6 +178,8 @@ public OnGameModeInit() {
     Create3DTextLabel("Trabajo: {FF4500}Pizzero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}en la pizzeria", -1, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z + 0.5, 12.0, 0);
     CreatePickup(1274, 1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z, 0);
     Create3DTextLabel("Banco KameHouse\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z + 0.5, 12.0, 0);
+    CreatePickup(1275, 1, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z, 0);
+    Create3DTextLabel("Semilleria\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z + 0.5, 12.0, 0);
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -198,6 +234,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
+    // Sistema de semilleria
+    if(IsNearSemilleria(playerid)) {
+        ShowSemilleriaMenu(playerid);
+        return 1;
+    }
+
     // Inicio de trabajo camionero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z))
     {
@@ -217,7 +259,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
-        PizzeroVehiculo[playerid] = CreateVehicle(468, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, 0);
+        PizzeroVehiculo[playerid] = CreateVehicle(448, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, 0);
         PutPlayerInVehicle(playerid, PizzeroVehiculo[playerid], 0);
         TrabajandoPizzero[playerid] = 1;
         SetTimerEx("AsignarRutaPizzero", 200, false, "d", playerid);
@@ -305,6 +347,7 @@ public FinalizarCarga(playerid) {
 forward FinalizarDescarga(playerid);
 forward AsignarRutaPizzero(playerid);
 forward FinalizarEntregaPizza(playerid);
+forward ActualizarCultivo(playerid);
 public FinalizarDescarga(playerid) {
     TogglePlayerControllable(playerid, true);
     TrabajandoCamionero[playerid] = 5;
@@ -334,6 +377,7 @@ stock FinalizarTrabajo(playerid) {
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_MULT);
     new pagoNivel = CamioneroNivel[playerid] * 90;
     new pago = pagoBase + pagoDistancia + pagoNivel;
+    if(pago > PAGO_MAX_CAMIONERO) pago = PAGO_MAX_CAMIONERO;
     GivePlayerMoney(playerid, pago);
 
     CamioneroViajes[playerid]++;
@@ -396,10 +440,11 @@ public FinalizarEntregaPizza(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
     new Float:distancia = GetDistanceBetweenPoints(POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
-    new pagoBase = 320;
+    new pagoBase = 100;
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_PIZZA);
     new pagoNivel = PizzeroNivel[playerid] * 55;
     new pago = pagoBase + pagoDistancia + pagoNivel;
+    if(pago > PAGO_MAX_PIZZERO) pago = PAGO_MAX_PIZZERO;
     GivePlayerMoney(playerid, pago);
 
     PizzeroEntregas[playerid]++;
@@ -470,6 +515,53 @@ public OnPlayerCommandText(playerid, cmdtext[])
         SendClientMessage(playerid, 0x00FF00FF, msg);
         format(hud, sizeof(hud), "H: %d", PlayerHambre[playerid]);
         PlayerTextDrawSetString(playerid, BarraHambre[playerid], hud);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/inventario", true)) {
+        new inv[256];
+        format(inv, sizeof(inv), "Semillas: Hierba %d | Flores %d\nConsumo: Hierba %d | Flores %d", InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid]);
+        ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/plantar", true)) {
+        if(CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un cultivo en progreso. Usa /cosehar cuando este listo.");
+        ShowPlayerDialog(playerid, DIALOG_PLANTAR, DIALOG_STYLE_LIST, "Plantar", "Hierva verde\nFlores", "Plantar", "Cerrar");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/cosehar", true) || !strcmp(cmd, "/cosechar", true)) {
+        if(!CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "No tienes ningun cultivo activo.");
+        new restante = CultivoReadyTick[playerid] - GetTickCount();
+        if(restante > 0) {
+            new ms[96];
+            format(ms, sizeof(ms), "Tu cultivo aun no esta listo. Falta: %d segundos.", restante / 1000);
+            return SendClientMessage(playerid, -1, ms);
+        }
+
+        new extra = random(3);
+        new total = CultivoCantidadBase[playerid] + extra;
+        if(CultivoTipo[playerid] == 1) {
+            InvHierba[playerid] += total;
+        } else {
+            InvFlor[playerid] += total;
+        }
+
+        FinalizarCultivoVisual(playerid);
+        CultivoActivo[playerid] = 0;
+        CultivoTipo[playerid] = 0;
+        CultivoCantidadBase[playerid] = 0;
+        CultivoReadyTick[playerid] = 0;
+
+        new ok[96];
+        format(ok, sizeof(ok), "Cosecha completada. Obtuviste %d unidades.", total);
+        SendClientMessage(playerid, 0x00FF00FF, ok);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/consumir", true)) {
+        ShowPlayerDialog(playerid, DIALOG_CONSUMIR, DIALOG_STYLE_LIST, "Consumir", "Hierva verde (chaleco)\nFlores (vida)", "Usar", "Cerrar");
         return 1;
     }
 
@@ -879,6 +971,17 @@ public OnPlayerConnect(playerid) {
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
+    InvSemillaHierba[playerid] = 0;
+    InvSemillaFlor[playerid] = 0;
+    InvHierba[playerid] = 0;
+    InvFlor[playerid] = 0;
+    CultivoActivo[playerid] = 0;
+    CultivoTipo[playerid] = 0;
+    CultivoCantidadBase[playerid] = 0;
+    CultivoReadyTick[playerid] = 0;
+    CultivoObj[playerid] = -1;
+    CultivoLabel[playerid] = Text3D:-1;
+    CultivoTimer[playerid] = -1;
 
     new name[MAX_PLAYER_NAME], path[64];
     GetPlayerName(playerid, name, sizeof(name));
@@ -909,6 +1012,82 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         else if(listitem == 1) SetPlayerCheckpoint(playerid, POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, 6.0);
         else if(listitem == 2) SetPlayerCheckpoint(playerid, POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, 6.0);
         SendClientMessage(playerid, 0x00FFFFFF, "GPS actualizado en tu mapa.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_SEMILLERIA) {
+        if(!response) return 1;
+        if(listitem == 0) {
+            if(GetPlayerMoney(playerid) < SEMILLA_HIERBA_PRECIO) return SendClientMessage(playerid, -1, "No tienes dinero para esa semilla.");
+            GivePlayerMoney(playerid, -SEMILLA_HIERBA_PRECIO);
+            InvSemillaHierba[playerid]++;
+            SendClientMessage(playerid, 0x00FF00FF, "Compraste 1 semilla de hierva verde.");
+        } else if(listitem == 1) {
+            if(GetPlayerMoney(playerid) < SEMILLA_FLOR_PRECIO) return SendClientMessage(playerid, -1, "No tienes dinero para esa semilla.");
+            GivePlayerMoney(playerid, -SEMILLA_FLOR_PRECIO);
+            InvSemillaFlor[playerid]++;
+            SendClientMessage(playerid, 0x00FF00FF, "Compraste 1 semilla de flores.");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_PLANTAR) {
+        if(!response) return 1;
+        if(CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un cultivo activo.");
+
+        if(listitem == 0) {
+            if(InvSemillaHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes semillas de hierva verde.");
+            InvSemillaHierba[playerid]--;
+            CultivoTipo[playerid] = 1;
+        } else if(listitem == 1) {
+            if(InvSemillaFlor[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes semillas de flores.");
+            InvSemillaFlor[playerid]--;
+            CultivoTipo[playerid] = 2;
+        }
+
+        new Float:px, Float:py, Float:pz;
+        GetPlayerPos(playerid, px, py, pz);
+        CultivoPos[playerid][0] = px + 1.0;
+        CultivoPos[playerid][1] = py + 1.0;
+        CultivoPos[playerid][2] = pz - 1.0;
+
+        CultivoActivo[playerid] = 1;
+        new duracion = TIEMPO_CULTIVO_MIN + random(TIEMPO_CULTIVO_MAX - TIEMPO_CULTIVO_MIN + 1);
+        CultivoReadyTick[playerid] = GetTickCount() + (duracion * 1000);
+        CultivoCantidadBase[playerid] = 2;
+
+        CultivoObj[playerid] = CreateObject(3409, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2], 0.0, 0.0, 0.0, 200.0);
+        CultivoLabel[playerid] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2] + 1.0, 15.0, 0);
+        ActualizarLabelCultivo(playerid);
+
+        if(CultivoTimer[playerid] != -1) KillTimer(CultivoTimer[playerid]);
+        CultivoTimer[playerid] = SetTimerEx("ActualizarCultivo", 1000, true, "d", playerid);
+
+        SendClientMessage(playerid, 0x00FF00FF, "Semilla plantada. Usa /cosehar cuando el contador llegue a 0.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_CONSUMIR) {
+        if(!response) return 1;
+        if(listitem == 0) {
+            if(InvHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes hierva verde para consumir.");
+            InvHierba[playerid]--;
+            new Float:armour;
+            GetPlayerArmour(playerid, armour);
+            armour += 20.0;
+            if(armour > 100.0) armour = 100.0;
+            SetPlayerArmour(playerid, armour);
+            SendClientMessage(playerid, 0x00FF00FF, "Consumiste hierva verde y recuperaste chaleco.");
+        } else if(listitem == 1) {
+            if(InvFlor[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes flores para consumir.");
+            InvFlor[playerid]--;
+            new Float:vida;
+            GetPlayerHealth(playerid, vida);
+            vida += 20.0;
+            if(vida > 100.0) vida = 100.0;
+            SetPlayerHealth(playerid, vida);
+            SendClientMessage(playerid, 0x00FF00FF, "Consumiste flores y recuperaste vida.");
+        }
         return 1;
     }
 
@@ -982,7 +1161,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
+            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", inputtext, DINERO_INICIAL);
             fwrite(h, line); fclose(h);
             IsPlayerLoggedIn[playerid] = true;
             GivePlayerMoney(playerid, DINERO_INICIAL);
@@ -1005,10 +1184,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 new Float:v[3];
                 fread(h, line);
                 if(strfind(line, ".") != -1) {
-                    // Compatibilidad con cuentas antiguas (sin datos de pizzero/banco)
+                    // Compatibilidad: cuenta vieja sin pizzero/banco/inventario
                     PizzeroNivel[playerid] = 0;
                     PizzeroEntregas[playerid] = 0;
                     PlayerBankMoney[playerid] = 0;
+                    InvSemillaHierba[playerid] = 0;
+                    InvSemillaFlor[playerid] = 0;
+                    InvHierba[playerid] = 0;
+                    InvFlor[playerid] = 0;
                     v[0] = floatstr(line);
                     fread(h, line); v[1] = floatstr(line);
                     fread(h, line); v[2] = floatstr(line);
@@ -1018,14 +1201,33 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     fread(h, line);
                     if(strfind(line, ".") != -1) {
                         PlayerBankMoney[playerid] = 0;
+                        InvSemillaHierba[playerid] = 0;
+                        InvSemillaFlor[playerid] = 0;
+                        InvHierba[playerid] = 0;
+                        InvFlor[playerid] = 0;
                         v[0] = floatstr(line);
                         fread(h, line); v[1] = floatstr(line);
                         fread(h, line); v[2] = floatstr(line);
                     } else {
                         PlayerBankMoney[playerid] = strval(line);
-                        fread(h, line); v[0] = floatstr(line);
-                        fread(h, line); v[1] = floatstr(line);
-                        fread(h, line); v[2] = floatstr(line);
+                        fread(h, line);
+                        if(strfind(line, ".") != -1) {
+                            InvSemillaHierba[playerid] = 0;
+                            InvSemillaFlor[playerid] = 0;
+                            InvHierba[playerid] = 0;
+                            InvFlor[playerid] = 0;
+                            v[0] = floatstr(line);
+                            fread(h, line); v[1] = floatstr(line);
+                            fread(h, line); v[2] = floatstr(line);
+                        } else {
+                            InvSemillaHierba[playerid] = strval(line);
+                            fread(h, line); InvSemillaFlor[playerid] = strval(line);
+                            fread(h, line); InvHierba[playerid] = strval(line);
+                            fread(h, line); InvFlor[playerid] = strval(line);
+                            fread(h, line); v[0] = floatstr(line);
+                            fread(h, line); v[1] = floatstr(line);
+                            fread(h, line); v[2] = floatstr(line);
+                        }
                     }
                 }
                 SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
@@ -1043,9 +1245,9 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
-                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], p[0], p[1], p[2]);
+                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], p[0], p[1], p[2]);
             fwrite(h, line); fclose(h);
         }
     }
@@ -1113,6 +1315,8 @@ public OnPlayerDisconnect(playerid, reason) {
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
+    FinalizarCultivoVisual(playerid);
+    CultivoActivo[playerid] = 0;
     return 1;
 }
 
@@ -1147,12 +1351,61 @@ public OnPlayerRequestClass(playerid, classid) {
 }
 
 
+public ActualizarCultivo(playerid) {
+    if(!IsPlayerConnected(playerid) || !CultivoActivo[playerid]) return 0;
+    ActualizarLabelCultivo(playerid);
+    return 1;
+}
+
+stock IsNearSemilleria(playerid) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z)) return 1;
+    return 0;
+}
+
+stock ShowSemilleriaMenu(playerid) {
+    new body[192];
+    format(body, sizeof(body), "Semilla hierva verde - $%d\nSemilla flores - $%d", SEMILLA_HIERBA_PRECIO, SEMILLA_FLOR_PRECIO);
+    ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Semilleria", body, "Comprar", "Cerrar");
+    return 1;
+}
+
+stock ActualizarLabelCultivo(playerid) {
+    if(!CultivoActivo[playerid]) return 0;
+    new restante = CultivoReadyTick[playerid] - GetTickCount();
+    new label[96];
+    if(restante <= 0) {
+        format(label, sizeof(label), "Cultivo listo\nUsa /cosehar");
+    } else {
+        format(label, sizeof(label), "Cultivo en progreso\nListo en: %d seg", restante / 1000);
+    }
+    if(CultivoLabel[playerid] != Text3D:-1) {
+        Update3DTextLabelText(CultivoLabel[playerid], 0x00FF00FF, label);
+    }
+    return 1;
+}
+
+stock FinalizarCultivoVisual(playerid) {
+    if(CultivoTimer[playerid] != -1) {
+        KillTimer(CultivoTimer[playerid]);
+        CultivoTimer[playerid] = -1;
+    }
+    if(CultivoObj[playerid] != -1) {
+        DestroyObject(CultivoObj[playerid]);
+        CultivoObj[playerid] = -1;
+    }
+    if(CultivoLabel[playerid] != Text3D:-1) {
+        Delete3DTextLabel(CultivoLabel[playerid]);
+        CultivoLabel[playerid] = Text3D:-1;
+    }
+    return 1;
+}
+
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /tp /gotomap /crearcasa /eliminarcasa");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /tp /gotomap /crearcasa /eliminarcasa");
     } else {
-        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
+        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
     }
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
