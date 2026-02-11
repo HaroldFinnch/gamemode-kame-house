@@ -101,7 +101,6 @@ forward GuardarCuenta(playerid);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
-forward OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -237,7 +236,7 @@ public OnPlayerEnterCheckpoint(playerid)
         }
         DisablePlayerCheckpoint(playerid);
         TogglePlayerControllable(playerid, false);
-        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, 1, 0, 0, 0, 0, SYNC_ALL);
+        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         GameTextForPlayer(playerid, "~r~ENTREGANDO PIZZA", 2500, 3);
         SetTimerEx("FinalizarEntregaPizza", 10000, false, "d", playerid);
         TrabajandoPizzero[playerid] = 2;
@@ -368,7 +367,7 @@ public AsignarRutaPizzero(playerid) {
 public FinalizarEntregaPizza(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
-    ClearAnimations(playerid, 1);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
 
     new Float:distancia = GetDistanceBetweenPoints(POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
     new pagoBase = 450;
@@ -397,7 +396,7 @@ public FinalizarEntregaPizza(playerid) {
 stock CanceladoTrabajoPizzero(playerid) {
     DisablePlayerCheckpoint(playerid);
     TogglePlayerControllable(playerid, true);
-    ClearAnimations(playerid, 1);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
     TrabajandoPizzero[playerid] = 0;
@@ -435,7 +434,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerHambre[playerid] >= 100) return SendClientMessage(playerid, -1, "Ya tienes el hambre al maximo.");
         if(GetPlayerMoney(playerid) < PRECIO_COMIDA) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para comprar comida.");
 
-        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, 0, 0, 0, 0, 0, SYNC_ALL);
+        ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         GivePlayerMoney(playerid, -PRECIO_COMIDA);
         PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
         if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
@@ -903,11 +902,23 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 fread(h, line); PlayerAdmin[playerid] = strval(line);
                 fread(h, line); CamioneroNivel[playerid] = strval(line);
                 fread(h, line); CamioneroViajes[playerid] = strval(line);
-                fread(h, line); PizzeroNivel[playerid] = strval(line);
-                fread(h, line); PizzeroEntregas[playerid] = strval(line);
-                new Float:v[3]; fread(h, line); v[0] = floatstr(line);
-                fread(h, line); v[1] = floatstr(line);
-                fread(h, line); v[2] = floatstr(line);
+
+                new Float:v[3];
+                fread(h, line);
+                if(strfind(line, ".") != -1) {
+                    // Compatibilidad con cuentas antiguas (sin datos de pizzero)
+                    PizzeroNivel[playerid] = 0;
+                    PizzeroEntregas[playerid] = 0;
+                    v[0] = floatstr(line);
+                    fread(h, line); v[1] = floatstr(line);
+                    fread(h, line); v[2] = floatstr(line);
+                } else {
+                    PizzeroNivel[playerid] = strval(line);
+                    fread(h, line); PizzeroEntregas[playerid] = strval(line);
+                    fread(h, line); v[0] = floatstr(line);
+                    fread(h, line); v[1] = floatstr(line);
+                    fread(h, line); v[2] = floatstr(line);
+                }
                 SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
                 fclose(h); SpawnPlayer(playerid);
             } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
@@ -994,12 +1005,12 @@ public OnPlayerDisconnect(playerid, reason) {
     return 1;
 }
 
-public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
+public OnPlayerInteriorChange(playerid, INTERIOR:newinterior, INTERIOR:oldinterior) {
     #pragma unused oldinterior
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
 
-    if(PlayerInCasa[playerid] == -1 && _:newinterior != 0) {
-        SetPlayerInterior(playerid, INTERIOR:0);
+    if(PlayerInCasa[playerid] == -1 && newinterior != INTERIOR:0) {
+        SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
         SetPlayerPos(playerid, 2494.24, -1671.19, 13.33);
         SetCameraBehindPlayer(playerid);
@@ -1007,8 +1018,8 @@ public OnPlayerInteriorChange(playerid, newinterior, oldinterior) {
         return 1;
     }
 
-    if(PlayerInCasa[playerid] != -1 && _:newinterior != 3) {
-        SetPlayerInterior(playerid, INTERIOR:3);
+    if(PlayerInCasa[playerid] != -1 && newinterior != INTERIOR:3) {
+        SetPlayerInterior(playerid, 3);
         SetPlayerVirtualWorld(playerid, PlayerInCasa[playerid] + 1);
         SetPlayerPos(playerid, CASA_INT_X, CASA_INT_Y, CASA_INT_Z);
         SetCameraBehindPlayer(playerid);
