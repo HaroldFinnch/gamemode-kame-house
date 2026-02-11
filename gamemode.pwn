@@ -11,17 +11,6 @@
 #define RADIO_CHAT_LOCAL    20.0
 #define PRECIO_COMIDA       25
 #define HAMBRE_POR_COMIDA   20
-#define DISTANCIA_PAGO_MULT  3.0
-
-#define DIALOG_ARMARIO       3
-#define MAX_WEAPON_ID_GM     47
-
-#define CASA_INT_X           2496.0499
-#define CASA_INT_Y           -1707.84
-#define CASA_INT_Z           1014.74
-#define ARMARIO_X            2493.20
-#define ARMARIO_Y            -1702.10
-#define ARMARIO_Z            1014.74
 
 #define POS_TRABAJO_X       2494.24 // Posicion del maletin de camionero
 #define POS_TRABAJO_Y       -1671.19
@@ -99,6 +88,17 @@ stock EntrarCasa(playerid, casa);
 stock AbrirArmario(playerid, casa);
 stock GuardarArmaEnArmario(playerid, casa);
 stock GetAmmoByWeapon(playerid, WEAPON:weaponid);
+stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
+
+// Adelantos de funciones usadas antes de su implementacion
+forward strtok(const string[], &index);
+forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
+forward GuardarCasas();
+forward GuardarCuenta(playerid);
+forward BajarHambre();
+forward ChequearLimitesMapa();
+forward AutoGuardadoGlobal();
+stock GetClosestCasa(playerid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 
 // ================= [ MAIN & INIT ] =================
@@ -341,6 +341,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         SendClientMessage(playerid, 0xFF0000FF, "Has cancelado tu trabajo de camionero.");
         return 1;
     }
+
+    if(PlayerAdmin[playerid] < 1) return 0;
 
     if(!strcmp(cmd, "/crearparada", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
