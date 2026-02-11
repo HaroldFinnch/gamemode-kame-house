@@ -14,8 +14,12 @@
 #define DISTANCIA_PAGO_MULT  3.0
 #define DISTANCIA_PAGO_PIZZA 2.2
 
-#define PAGO_MAX_PIZZERO     300
+#define PAGO_MAX_PIZZERO     2600
 #define PAGO_MAX_CAMIONERO   6800
+
+#define NIVEL_MAX_TRABAJO    10
+#define PROGRESO_CAMIONERO_POR_NIVEL 30
+#define PROGRESO_PIZZERO_POR_NIVEL   25
 
 #define TIEMPO_CULTIVO_MIN   240
 #define TIEMPO_CULTIVO_MAX   300
@@ -57,6 +61,10 @@
 #define POS_SEMILLERIA_Y    -1660.50
 #define POS_SEMILLERIA_Z    13.35
 
+#define POS_ARMERIA_X       2483.60
+#define POS_ARMERIA_Y       -1659.90
+#define POS_ARMERIA_Z       13.35
+
 #define LIMITE_X_MAX        3000.0
 #define LIMITE_X_MIN        -500.0
 #define LIMITE_Y_MAX        -500.0
@@ -80,6 +88,11 @@
 #define DIALOG_PLANTAR      17
 #define DIALOG_CONSUMIR     18
 #define DIALOG_SEMILLERIA   19
+#define DIALOG_ADMIN_ARMAS_MENU 20
+#define DIALOG_ADMIN_ARMAS_ADD  21
+#define DIALOG_ADMIN_ARMAS_REMOVE 22
+#define DIALOG_ARMERIA_MENU   23
+#define DIALOG_ARMERIA_COMPRA 24
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -139,6 +152,19 @@ new Text3D:CasaLabel[MAX_CASAS];
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
+// Sistema de armeria
+#define MAX_ARMAS_TIENDA 20
+enum eArmeriaItem {
+    bool:aiActiva,
+    aiArma,
+    aiSlot,
+    aiPrecioArma,
+    aiPrecioMunicion,
+    aiMunicionPack
+}
+new ArmeriaItems[MAX_ARMAS_TIENDA][eArmeriaItem];
+new ArmeriaSeleccionJugador[MAX_PLAYERS] = {-1, ...};
+
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
@@ -160,6 +186,11 @@ stock ShowBankMenu(playerid);
 stock IsNearBusinessInterior(playerid);
 stock IsNearSemilleria(playerid);
 stock ShowSemilleriaMenu(playerid);
+stock IsNearArmeria(playerid);
+stock ShowArmeriaMenu(playerid);
+stock ShowAdminArmasMenu(playerid);
+stock GetWeaponNameGM(weaponid, dest[], len);
+stock GetArmeriaItemByListIndex(listindex);
 stock ActualizarLabelCultivo(playerid);
 stock FinalizarCultivoVisual(playerid);
 
@@ -170,6 +201,7 @@ main() {
 
 public OnGameModeInit() {
     SetGameModeText("KH 1.0");
+    DisableInteriorEnterExits();
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
     CreatePickup(1210, 1, POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z, 0);
@@ -180,6 +212,8 @@ public OnGameModeInit() {
     Create3DTextLabel("Banco KameHouse\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, POS_BANCO_X, POS_BANCO_Y, POS_BANCO_Z + 0.5, 12.0, 0);
     CreatePickup(1275, 1, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z, 0);
     Create3DTextLabel("Semilleria\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, POS_SEMILLERIA_X, POS_SEMILLERIA_Y, POS_SEMILLERIA_Z + 0.5, 12.0, 0);
+    CreatePickup(1242, 1, POS_ARMERIA_X, POS_ARMERIA_Y, POS_ARMERIA_Z, 0);
+    Create3DTextLabel("{AA0000}Mercado de armas\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, POS_ARMERIA_X, POS_ARMERIA_Y, POS_ARMERIA_Z + 0.5, 12.0, 0);
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -237,6 +271,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Sistema de semilleria
     if(IsNearSemilleria(playerid)) {
         ShowSemilleriaMenu(playerid);
+        return 1;
+    }
+
+    // Sistema de armeria
+    if(IsNearArmeria(playerid)) {
+        ShowArmeriaMenu(playerid);
         return 1;
     }
 
@@ -373,26 +413,29 @@ stock FinalizarTrabajo(playerid) {
     distancia += GetDistanceBetweenPoints(POS_CARGA_X, POS_CARGA_Y, POS_CARGA_Z, CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2]);
     distancia += GetDistanceBetweenPoints(CamioneroDestino[playerid][0], CamioneroDestino[playerid][1], CamioneroDestino[playerid][2], POS_TRABAJO_X, POS_TRABAJO_Y, POS_TRABAJO_Z);
 
-    new pagoBase = 560;
+    new nivelCamionero = CamioneroNivel[playerid];
+    if(nivelCamionero > NIVEL_MAX_TRABAJO) nivelCamionero = NIVEL_MAX_TRABAJO;
+
+    new pagoBase = 850;
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_MULT);
-    new pagoNivel = CamioneroNivel[playerid] * 90;
+    new pagoNivel = nivelCamionero * 165;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     if(pago > PAGO_MAX_CAMIONERO) pago = PAGO_MAX_CAMIONERO;
     GivePlayerMoney(playerid, pago);
 
     CamioneroViajes[playerid]++;
-    if(CamioneroViajes[playerid] >= 50) {
+    if(CamioneroViajes[playerid] >= PROGRESO_CAMIONERO_POR_NIVEL) {
         CamioneroViajes[playerid] = 0;
-        CamioneroNivel[playerid]++;
+        if(CamioneroNivel[playerid] < NIVEL_MAX_TRABAJO) CamioneroNivel[playerid]++;
         new levelmsg[96];
         format(levelmsg, sizeof(levelmsg), "{FFFF00}NIVEL SUBIDO!{FFFFFF} Ahora eres nivel %d.", CamioneroNivel[playerid]);
         SendClientMessage(playerid, 0xFFFF00FF, levelmsg);
     }
 
     new str[160];
-    format(str, sizeof(str), "Pago por entrega: $%d + Distancia: $%d + Nivel: $%d = Total: $%d", pagoBase, pagoDistancia, pagoNivel, pago);
+    format(str, sizeof(str), "{FFD700}[CAMIONERO]{FFFFFF} {66CCFF}Pago fijo:{FFFFFF} $%d {FF66CC}| Nivel:{FFFFFF} $%d {99FF66}| Distancia:{FFFFFF} $%d {00FF00}| Total:{FFFFFF} $%d", pagoBase, pagoNivel, pagoDistancia, pago);
     SendClientMessage(playerid, 0x00FF00FF, str);
-    format(str, sizeof(str), "Progreso camionero: %d/50", CamioneroViajes[playerid]);
+    format(str, sizeof(str), "{FFD700}Progreso camionero:{FFFFFF} %d/%d | Nivel actual: %d/%d", CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, CamioneroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, str);
 
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
@@ -440,24 +483,27 @@ public FinalizarEntregaPizza(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
     new Float:distancia = GetDistanceBetweenPoints(POS_PIZZERIA_X, POS_PIZZERIA_Y, POS_PIZZERIA_Z, PizzeroDestino[playerid][0], PizzeroDestino[playerid][1], PizzeroDestino[playerid][2]);
-    new pagoBase = 100;
+    new nivelPizzero = PizzeroNivel[playerid];
+    if(nivelPizzero > NIVEL_MAX_TRABAJO) nivelPizzero = NIVEL_MAX_TRABAJO;
+
+    new pagoBase = 230;
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_PIZZA);
-    new pagoNivel = PizzeroNivel[playerid] * 55;
+    new pagoNivel = nivelPizzero * 120;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     if(pago > PAGO_MAX_PIZZERO) pago = PAGO_MAX_PIZZERO;
     GivePlayerMoney(playerid, pago);
 
     PizzeroEntregas[playerid]++;
-    if(PizzeroEntregas[playerid] >= 40) {
+    if(PizzeroEntregas[playerid] >= PROGRESO_PIZZERO_POR_NIVEL) {
         PizzeroEntregas[playerid] = 0;
-        PizzeroNivel[playerid]++;
+        if(PizzeroNivel[playerid] < NIVEL_MAX_TRABAJO) PizzeroNivel[playerid]++;
         SendClientMessage(playerid, 0xFFFF00FF, "Subiste de nivel en el trabajo de pizzero.");
     }
 
     new info[160];
-    format(info, sizeof(info), "Pago pizza: $%d + Distancia: $%d + Nivel: $%d = Total: $%d", pagoBase, pagoDistancia, pagoNivel, pago);
+    format(info, sizeof(info), "{FF4500}[PIZZERO]{FFFFFF} {66CCFF}Pago fijo:{FFFFFF} $%d {FF66CC}| Nivel:{FFFFFF} $%d {99FF66}| Distancia:{FFFFFF} $%d {00FF00}| Total:{FFFFFF} $%d", pagoBase, pagoNivel, pagoDistancia, pago);
     SendClientMessage(playerid, 0x00FF00FF, info);
-    format(info, sizeof(info), "Progreso pizzero: %d/40", PizzeroEntregas[playerid]);
+    format(info, sizeof(info), "{FF4500}Progreso pizzero:{FFFFFF} %d/%d | Nivel actual: %d/%d", PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, info);
 
     SetTimerEx("AsignarRutaPizzero", 300, false, "d", playerid);
@@ -495,7 +541,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/skills", true)) {
         new str[196];
-        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d\n{FFFFFF}Viajes: {FFFF00}%d/50\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d\n{FFFFFF}Entregas: {FF8C00}%d/40", CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid]);
+        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
@@ -526,6 +572,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/plantar", true)) {
+        if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
         if(CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un cultivo en progreso. Usa /cosehar cuando este listo.");
         ShowPlayerDialog(playerid, DIALOG_PLANTAR, DIALOG_STYLE_LIST, "Plantar", "Hierva verde\nFlores", "Plantar", "Cerrar");
         return 1;
@@ -713,6 +760,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(arma <= 0 || arma >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "ID de arma invalida.");
         if(muni <= 0) return SendClientMessage(playerid, -1, "Municion invalida.");
         GivePlayerWeapon(id, WEAPON:arma, muni);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/adminarmas", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        ShowAdminArmasMenu(playerid);
         return 1;
     }
 
@@ -1033,6 +1086,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_PLANTAR) {
         if(!response) return 1;
+        if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
         if(CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un cultivo activo.");
 
         if(listitem == 0) {
@@ -1056,7 +1110,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         CultivoReadyTick[playerid] = GetTickCount() + (duracion * 1000);
         CultivoCantidadBase[playerid] = 2;
 
-        CultivoObj[playerid] = CreateObject(3409, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2], 0.0, 0.0, 0.0, 200.0);
+        new modeloCultivo = (CultivoTipo[playerid] == 2) ? 3408 : 3409;
+        CultivoObj[playerid] = CreateObject(modeloCultivo, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2], 0.0, 0.0, 0.0, 200.0);
         CultivoLabel[playerid] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2] + 1.0, 15.0, 0);
         ActualizarLabelCultivo(playerid);
 
@@ -1074,19 +1129,114 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             InvHierba[playerid]--;
             new Float:armour;
             GetPlayerArmour(playerid, armour);
-            armour += 20.0;
+            armour += 3.0;
             if(armour > 100.0) armour = 100.0;
             SetPlayerArmour(playerid, armour);
-            SendClientMessage(playerid, 0x00FF00FF, "Consumiste hierva verde y recuperaste chaleco.");
+            SendClientMessage(playerid, 0x00FF00FF, "Consumiste hierva verde y recuperaste 3% de chaleco.");
         } else if(listitem == 1) {
             if(InvFlor[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes flores para consumir.");
             InvFlor[playerid]--;
             new Float:vida;
             GetPlayerHealth(playerid, vida);
-            vida += 20.0;
+            vida += 6.0;
             if(vida > 100.0) vida = 100.0;
             SetPlayerHealth(playerid, vida);
-            SendClientMessage(playerid, 0x00FF00FF, "Consumiste flores y recuperaste vida.");
+            SendClientMessage(playerid, 0x00FF00FF, "Consumiste flores y recuperaste 6% de vida.");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_ARMAS_MENU) {
+        if(!response) return 1;
+        if(listitem == 0) {
+            ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD, DIALOG_STYLE_INPUT, "Admin Armas - Agregar", "Formato: arma_id slot precio_arma precio_municion municion_pack\nEjemplo: 24 1 3500 800 35", "Guardar", "Atras");
+        } else if(listitem == 1) {
+            new lista[768], line[96], nombreArma[32], count;
+            lista[0] = EOS;
+            for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+                if(!ArmeriaItems[i][aiActiva]) continue;
+                GetWeaponNameGM(ArmeriaItems[i][aiArma], nombreArma, sizeof(nombreArma));
+                format(line, sizeof(line), "Slot venta %d | %s | Arma $%d | Muni x%d $%d\n", ArmeriaItems[i][aiSlot], nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiMunicionPack], ArmeriaItems[i][aiPrecioMunicion]);
+                strcat(lista, line);
+                count++;
+            }
+            if(count == 0) return SendClientMessage(playerid, -1, "No hay armas cargadas en la tienda.");
+            ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_REMOVE, DIALOG_STYLE_LIST, "Admin Armas - Quitar", lista, "Quitar", "Atras");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_ARMAS_ADD) {
+        if(!response) return ShowAdminArmasMenu(playerid);
+        new armaId, slotVenta, precioArma, precioMuni, packMuni;
+        new data[128], s0[16], s1[16], s2[16], s3[16], s4[16], pidx;
+        format(data, sizeof(data), "%s", inputtext);
+        format(s0, sizeof(s0), "%s", strtok(data, pidx));
+        format(s1, sizeof(s1), "%s", strtok(data, pidx));
+        format(s2, sizeof(s2), "%s", strtok(data, pidx));
+        format(s3, sizeof(s3), "%s", strtok(data, pidx));
+        format(s4, sizeof(s4), "%s", strtok(data, pidx));
+        if(!s0[0] || !s1[0] || !s2[0] || !s3[0] || !s4[0]) {
+            return SendClientMessage(playerid, -1, "Formato invalido. Usa: arma_id slot precio_arma precio_municion municion_pack");
+        }
+        armaId = strval(s0);
+        slotVenta = strval(s1);
+        precioArma = strval(s2);
+        precioMuni = strval(s3);
+        packMuni = strval(s4);
+        if(armaId <= 0 || armaId >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "ID de arma invalida.");
+        if(slotVenta < 0 || slotVenta > 12) return SendClientMessage(playerid, -1, "Slot de venta invalido (0-12).");
+        if(precioArma <= 0 || precioMuni <= 0 || packMuni <= 0) return SendClientMessage(playerid, -1, "Precios y municion deben ser mayores a 0.");
+
+        for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+            if(!ArmeriaItems[i][aiActiva]) {
+                ArmeriaItems[i][aiActiva] = true;
+                ArmeriaItems[i][aiArma] = armaId;
+                ArmeriaItems[i][aiSlot] = slotVenta;
+                ArmeriaItems[i][aiPrecioArma] = precioArma;
+                ArmeriaItems[i][aiPrecioMunicion] = precioMuni;
+                ArmeriaItems[i][aiMunicionPack] = packMuni;
+                SendClientMessage(playerid, 0x00FF00FF, "Arma agregada a la tienda correctamente.");
+                return ShowAdminArmasMenu(playerid);
+            }
+        }
+        SendClientMessage(playerid, -1, "No hay mas espacio en la tienda de armas.");
+        return ShowAdminArmasMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_ADMIN_ARMAS_REMOVE) {
+        if(!response) return ShowAdminArmasMenu(playerid);
+        new item = GetArmeriaItemByListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Item invalido.");
+        ArmeriaItems[item][aiActiva] = false;
+        SendClientMessage(playerid, 0x00FF00FF, "Arma eliminada de la tienda.");
+        return ShowAdminArmasMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_ARMERIA_MENU) {
+        if(!response) return 1;
+        new item = GetArmeriaItemByListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        ArmeriaSeleccionJugador[playerid] = item;
+        ShowPlayerDialog(playerid, DIALOG_ARMERIA_COMPRA, DIALOG_STYLE_LIST, "Armeria", "Comprar arma\nComprar municion", "Comprar", "Cancelar");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ARMERIA_COMPRA) {
+        if(!response) return 1;
+        new item = ArmeriaSeleccionJugador[playerid];
+        if(item < 0 || item >= MAX_ARMAS_TIENDA || !ArmeriaItems[item][aiActiva]) return SendClientMessage(playerid, -1, "Item ya no disponible.");
+
+        if(listitem == 0) {
+            if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioArma]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar esta arma.");
+            GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioArma]);
+            GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 1);
+            SendClientMessage(playerid, 0x00FF00FF, "Arma comprada. Compra municion para usarla mejor.");
+        } else if(listitem == 1) {
+            if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioMunicion]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar municion.");
+            GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioMunicion]);
+            GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], ArmeriaItems[item][aiMunicionPack]);
+            SendClientMessage(playerid, 0x00FF00FF, "Municion comprada correctamente.");
         }
         return 1;
     }
@@ -1362,6 +1512,65 @@ stock IsNearSemilleria(playerid) {
     return 0;
 }
 
+stock IsNearArmeria(playerid) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_ARMERIA_X, POS_ARMERIA_Y, POS_ARMERIA_Z)) return 1;
+    return 0;
+}
+
+stock ShowArmeriaMenu(playerid) {
+    new body[1024], line[96], nombreArma[32], count;
+    body[0] = EOS;
+    for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+        if(!ArmeriaItems[i][aiActiva]) continue;
+        GetWeaponNameGM(ArmeriaItems[i][aiArma], nombreArma, sizeof(nombreArma));
+        format(line, sizeof(line), "Slot venta %d | %s | Arma $%d | Muni x%d $%d\n", ArmeriaItems[i][aiSlot], nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiMunicionPack], ArmeriaItems[i][aiPrecioMunicion]);
+        strcat(body, line);
+        count++;
+    }
+
+    if(count == 0) {
+        SendClientMessage(playerid, -1, "La armeria no tiene armas disponibles por ahora.");
+        return 1;
+    }
+    ShowPlayerDialog(playerid, DIALOG_ARMERIA_MENU, DIALOG_STYLE_LIST, "Armeria KameHouse", body, "Seleccionar", "Cerrar");
+    return 1;
+}
+
+stock ShowAdminArmasMenu(playerid) {
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma\nQuitar arma", "Seleccionar", "Cerrar");
+    return 1;
+}
+
+stock GetArmeriaItemByListIndex(listindex) {
+    new current;
+    for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+        if(!ArmeriaItems[i][aiActiva]) continue;
+        if(current == listindex) return i;
+        current++;
+    }
+    return -1;
+}
+
+stock GetWeaponNameGM(weaponid, dest[], len) {
+    switch(weaponid) {
+        case 22: format(dest, len, "Colt 45");
+        case 23: format(dest, len, "Silenced 9mm");
+        case 24: format(dest, len, "Desert Eagle");
+        case 25: format(dest, len, "Shotgun");
+        case 26: format(dest, len, "Sawn-off");
+        case 27: format(dest, len, "Combat Shotgun");
+        case 28: format(dest, len, "UZI");
+        case 29: format(dest, len, "MP5");
+        case 30: format(dest, len, "AK-47");
+        case 31: format(dest, len, "M4");
+        case 32: format(dest, len, "TEC-9");
+        case 33: format(dest, len, "Rifle");
+        case 34: format(dest, len, "Sniper");
+        default: format(dest, len, "Arma %d", weaponid);
+    }
+    return 1;
+}
+
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
     format(body, sizeof(body), "Semilla hierva verde - $%d\nSemilla flores - $%d", SEMILLA_HIERBA_PRECIO, SEMILLA_FLOR_PRECIO);
@@ -1403,7 +1612,7 @@ stock FinalizarCultivoVisual(playerid) {
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /tp /gotomap /crearcasa /eliminarcasa");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /kick /dardinero /dararma /adminarmas /tp /gotomap /crearcasa /eliminarcasa");
     } else {
         format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
     }
