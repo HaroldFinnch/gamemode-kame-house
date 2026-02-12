@@ -108,7 +108,7 @@
 #define DIALOG_ADMIN_ARMAS_ADD_ID 30
 #define DIALOG_ADMIN_ARMAS_ADD_PRECIO 31
 #define DIALOG_ADMIN_ARMAS_ADD_STOCK 32
-#define DIALOG_VENTA_AUTOS 33
+#define DIALOG_VENTA_AUTOS_ADMIN_MENU 33
 #define DIALOG_VENTA_AUTOS_BUY 34
 #define DIALOG_AYUDA_CATEGORIA 35
 #define DIALOG_CAMPER_MENU 36
@@ -116,8 +116,13 @@
 #define DIALOG_CAMPER_ADMIN_EDIT 38
 #define DIALOG_MALETERO_MENU 39
 #define DIALOG_CAMPER_POINT 40
+#define DIALOG_VENTA_AUTOS_ADD_ID 41
+#define DIALOG_VENTA_AUTOS_ADD_PRECIO 42
+#define DIALOG_VENTA_AUTOS_ADD_STOCK 43
+#define DIALOG_VENTA_AUTOS_REMOVE_LIST 44
 
-#define MODELO_HIERBA_OBJ 626 // veg_palmkb3
+#define MODELO_HIERBA_OBJ 615 // grassplant01
+#define MODELO_FLOR_OBJ 948 // Plant_Pot_11
 #define MODELO_CAMPER 483
 #define MAX_CAMPER_TIPOS 3
 #define MAX_GAS_POINTS 64
@@ -126,6 +131,8 @@
 #define BOLSA_OBJ_MODEL 1264
 #define BASURERO_NPC_SKIN 16
 #define BASURERO_FLORES_CHANCE 30
+#define GAS_PRECIO_POR_PUNTO 4
+#define GAS_CONSUMO_POR_MINUTO 5
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -256,6 +263,8 @@ new Float:VentaAutosPos[3];
 new VentaAutosPickup;
 new Text3D:VentaAutosLabel = Text3D:-1;
 new VentaAutosData[MAX_AUTOS_VENTA][eVentaAuto];
+new VentaAutosAdminModeloPendiente[MAX_PLAYERS];
+new VentaAutosAdminPrecioPendiente[MAX_PLAYERS];
 
 enum eCamperTipo {
     bool:ctActiva,
@@ -387,6 +396,10 @@ stock IsNearVentaAutos(playerid);
 stock ActualizarLabelVentaAutos();
 stock ShowVentaAutosBuyMenu(playerid);
 stock GetVentaAutoByListIndex(listindex);
+stock ShowVentaAutosAdminMenu(playerid);
+stock ShowVentaAutosRemoveMenu(playerid);
+stock GetVentaAutoByAnyListIndex(listindex);
+stock ShowAdminEditHint(playerid, const nombreSistema[]);
 stock GetNivelPJ(playerid);
 stock ActualizarNivelPJ(playerid);
 
@@ -483,6 +496,14 @@ public OnGameModeInit() {
 
 public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 {
+    #pragma unused oldkeys
+
+    if((newkeys & KEY_YES) && PlayerAdmin[playerid] >= 1) { // Tecla Y (solo admin)
+        if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
+        if(IsNearCamperPoint(playerid)) return ShowCamperAdminMenu(playerid);
+        if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
+    }
+
     if(!(newkeys & KEY_CTRL_BACK)) return 1; // Tecla H
 
     if(TrabajandoBasurero[playerid] > 0 && !IsPlayerInAnyVehicle(playerid) && BasureroRecolectando[playerid]) {
@@ -527,18 +548,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     if(IsNearCamperPoint(playerid)) {
-        if(PlayerAdmin[playerid] >= 1) {
-            ShowPlayerDialog(playerid, DIALOG_CAMPER_POINT, DIALOG_STYLE_LIST, "Punto camper", "Comprar camper\nAdministrar campers", "Seleccionar", "Cerrar");
-            return 1;
-        }
+        ShowAdminEditHint(playerid, "campers");
         return ShowCamperBuyMenu(playerid);
     }
 
     if(IsNearVentaAutos(playerid)) {
-        if(PlayerAdmin[playerid] >= 1) {
-            ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS, DIALOG_STYLE_INPUT, "Admin Venta Autos", "1 [modelo] [precio] [stock] = agregar/actualizar auto\n2 [modelo] = eliminar auto\n\nEjemplo: 1 411 50000 3", "Aceptar", "Cerrar");
-            return 1;
-        }
+        ShowAdminEditHint(playerid, "venta de autos");
         return ShowVentaAutosBuyMenu(playerid);
     }
 
@@ -564,6 +579,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     // Sistema de armeria
     if(IsNearArmeria(playerid)) {
+        ShowAdminEditHint(playerid, "la armeria");
         ShowArmeriaMenu(playerid);
         return 1;
     }
@@ -1141,7 +1157,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 100; }
         if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
         new faltante = 100 - GasVehiculo[veh];
-        new costo = faltante * 3;
+        new costo = faltante * GAS_PRECIO_POR_PUNTO;
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para llenar el tanque.");
         GivePlayerMoney(playerid, -costo);
         GasVehiculo[veh] = 100;
@@ -1153,7 +1169,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/editarcamper", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        return ShowCamperAdminMenu(playerid);
+        return SendClientMessage(playerid, -1, "Acercate a venta de campers y usa la tecla Y para editar.");
     }
 
     if(!strcmp(cmd, "/comprar", true)) {
@@ -1226,7 +1242,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GetPlayerPos(playerid, gx, gy, gz);
         GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
         GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
-        GasLabel[GasTotalPuntos] = Create3DTextLabel("Gasolinera\n/repostar para llenar tanque", 0xFFCC00FF, gx, gy, gz + 0.6, 18.0, 0);
+        new gastxt[96];
+        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por punto\nUsa /repostar", GAS_PRECIO_POR_PUNTO);
+        GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
         SendClientMessage(playerid, 0x00FF00FF, "Punto de venta de gasolina creado.");
         return 1;
@@ -1238,9 +1256,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/agregarauto", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        if(!IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el checkpoint de venta de autos.");
-        ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS, DIALOG_STYLE_INPUT, "Admin Venta Autos", "1 [modelo] [precio] [stock] = agregar/actualizar auto\n2 [modelo] = eliminar auto\n\nEjemplo: 1 411 50000 3", "Aceptar", "Cerrar");
-        return 1;
+        return SendClientMessage(playerid, -1, "Acercate al concesionario y usa la tecla Y para editar el catalogo.");
     }
 
     if(!strcmp(cmd, "/kick", true)) {
@@ -1306,8 +1322,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/adminarmas", true) || !strcmp(cmd, "/adminarma", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowAdminArmasMenu(playerid);
-        return 1;
+        return SendClientMessage(playerid, -1, "Acercate a la armeria y usa la tecla Y para editar armas.");
     }
 
     if(!strcmp(cmd, "/mover", true)) {
@@ -1568,6 +1583,8 @@ public OnPlayerConnect(playerid) {
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
+    VentaAutosAdminModeloPendiente[playerid] = 0;
+    VentaAutosAdminPrecioPendiente[playerid] = 0;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
     PlayerTiempoJugadoMin[playerid] = 0;
@@ -1706,7 +1723,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         GetPlayerPos(playerid, px, py, pz);
         CultivoPos[playerid][slot][0] = px + (0.7 * (slot + 1));
         CultivoPos[playerid][slot][1] = py + (0.45 * ((slot % 2) + 1));
-        CultivoPos[playerid][slot][2] = pz - 1.0;
+        CultivoPos[playerid][slot][2] = pz - 0.75;
 
         CultivoActivo[playerid][slot] = 1;
         PlantasColocadas[playerid]++;
@@ -1714,9 +1731,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         CultivoReadyTick[playerid][slot] = GetTickCount() + (duracion * 1000);
         CultivoCantidadBase[playerid][slot] = 2;
 
-        new modeloCultivo = (CultivoTipo[playerid][slot] == 2) ? 325 : MODELO_HIERBA_OBJ;
+        new modeloCultivo = (CultivoTipo[playerid][slot] == 2) ? MODELO_FLOR_OBJ : MODELO_HIERBA_OBJ;
         CultivoObj[playerid][slot] = CreateObject(modeloCultivo, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2], 0.0, 0.0, 0.0, 200.0);
-        CultivoLabel[playerid][slot] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2] + 1.6, 20.0, 0);
+        CultivoLabel[playerid][slot] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2] + 1.2, 32.0, 0);
         ActualizarLabelCultivo(playerid, slot);
 
         if(CultivoTimer[playerid] == -1) CultivoTimer[playerid] = SetTimerEx("ActualizarCultivo", 1000, true, "d", playerid);
@@ -1863,60 +1880,87 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return ShowArmeriaMunicionDisponible(playerid);
     }
 
-    if(dialogid == DIALOG_VENTA_AUTOS) {
+    if(dialogid == DIALOG_VENTA_AUTOS_ADMIN_MENU) {
         if(!response) return 1;
-        if(PlayerAdmin[playerid] < 1 || !IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en la venta de autos para editarla.");
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        if(!IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el CP de venta de autos.");
+        if(!IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
 
-        new accion[8], tmp1[16], tmp2[16], tmp3[16], ix;
-        format(accion, sizeof(accion), "%s", strtok(inputtext, ix));
-        if(!accion[0]) return SendClientMessage(playerid, -1, "Formato invalido.");
+        if(listitem == 0) {
+            VentaAutosAdminModeloPendiente[playerid] = 0;
+            VentaAutosAdminPrecioPendiente[playerid] = 0;
+            ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADD_ID, DIALOG_STYLE_INPUT, "Concesionario Admin - Paso 1", "Ingresa el ID del vehiculo (400-611):", "Siguiente", "Cancelar");
+            return 1;
+        }
+        if(listitem == 1) return ShowVentaAutosRemoveMenu(playerid);
+        return 1;
+    }
 
-        new tipo = strval(accion);
-        if(tipo == 1) {
-            format(tmp1, sizeof(tmp1), "%s", strtok(inputtext, ix));
-            format(tmp2, sizeof(tmp2), "%s", strtok(inputtext, ix));
-            format(tmp3, sizeof(tmp3), "%s", strtok(inputtext, ix));
-            new modelo = strval(tmp1), precio = strval(tmp2), stockVehiculos = strval(tmp3);
-            if(modelo < 400 || modelo > 611) return SendClientMessage(playerid, -1, "Modelo invalido.");
-            if(precio <= 0 || stockVehiculos <= 0) return SendClientMessage(playerid, -1, "Precio/stock invalidos.");
-            for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
-                if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo) {
-                    VentaAutosData[i][vaPrecio] = precio;
-                    VentaAutosData[i][vaStock] += stockVehiculos;
-                    SendClientMessage(playerid, 0x00FF00FF, "Stock de auto actualizado.");
-                    ActualizarLabelVentaAutos();
-                    return 1;
-                }
+    if(dialogid == DIALOG_VENTA_AUTOS_ADD_ID) {
+        if(!response) return ShowVentaAutosAdminMenu(playerid);
+        if(PlayerAdmin[playerid] < 1 || !IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
+        new modelo = strval(inputtext);
+        if(modelo < 400 || modelo > 611) return SendClientMessage(playerid, -1, "ID de vehiculo invalido. Usa un modelo entre 400 y 611.");
+        VentaAutosAdminModeloPendiente[playerid] = modelo;
+        ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADD_PRECIO, DIALOG_STYLE_INPUT, "Concesionario Admin - Paso 2", "Ingresa el precio del vehiculo:", "Siguiente", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_VENTA_AUTOS_ADD_PRECIO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADD_ID, DIALOG_STYLE_INPUT, "Concesionario Admin - Paso 1", "Ingresa el ID del vehiculo (400-611):", "Siguiente", "Cancelar");
+        if(PlayerAdmin[playerid] < 1 || !IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
+        new precio = strval(inputtext);
+        if(precio <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        VentaAutosAdminPrecioPendiente[playerid] = precio;
+        ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADD_STOCK, DIALOG_STYLE_INPUT, "Concesionario Admin - Paso 3", "Ingresa el stock inicial a agregar:", "Guardar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_VENTA_AUTOS_ADD_STOCK) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADD_PRECIO, DIALOG_STYLE_INPUT, "Concesionario Admin - Paso 2", "Ingresa el precio del vehiculo:", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1 || !IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
+        new stockVehiculos = strval(inputtext);
+        if(stockVehiculos <= 0) return SendClientMessage(playerid, -1, "Stock invalido.");
+
+        new modelo = VentaAutosAdminModeloPendiente[playerid];
+        new precio = VentaAutosAdminPrecioPendiente[playerid];
+        if(modelo < 400 || modelo > 611 || precio <= 0) return SendClientMessage(playerid, -1, "No hay datos de edicion validos. Reinicia el proceso con Y.");
+
+        for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+            if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo) {
+                VentaAutosData[i][vaPrecio] = precio;
+                VentaAutosData[i][vaStock] += stockVehiculos;
+                SendClientMessage(playerid, 0x00FF00FF, "Auto actualizado correctamente en el concesionario.");
+                ActualizarLabelVentaAutos();
+                return ShowVentaAutosAdminMenu(playerid);
             }
-            for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
-                if(!VentaAutosData[i][vaActiva]) {
-                    VentaAutosData[i][vaActiva] = true;
-                    VentaAutosData[i][vaModelo] = modelo;
-                    VentaAutosData[i][vaPrecio] = precio;
-                    VentaAutosData[i][vaStock] = stockVehiculos;
-                    SendClientMessage(playerid, 0x00FF00FF, "Auto agregado a la venta.");
-                    ActualizarLabelVentaAutos();
-                    return 1;
-                }
-            }
-            return SendClientMessage(playerid, -1, "No hay espacio para mas modelos.");
         }
-        if(tipo == 2) {
-            format(tmp1, sizeof(tmp1), "%s", strtok(inputtext, ix));
-            new modelo = strval(tmp1);
-            for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
-                if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo) {
-                    VentaAutosData[i][vaActiva] = false;
-                    SendClientMessage(playerid, 0x00FF00FF, "Modelo eliminado de la venta.");
-                    ActualizarLabelVentaAutos();
-                    return 1;
-                }
+
+        for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+            if(!VentaAutosData[i][vaActiva]) {
+                VentaAutosData[i][vaActiva] = true;
+                VentaAutosData[i][vaModelo] = modelo;
+                VentaAutosData[i][vaPrecio] = precio;
+                VentaAutosData[i][vaStock] = stockVehiculos;
+                SendClientMessage(playerid, 0x00FF00FF, "Auto agregado correctamente al concesionario.");
+                ActualizarLabelVentaAutos();
+                return ShowVentaAutosAdminMenu(playerid);
             }
-            return SendClientMessage(playerid, -1, "Modelo no encontrado en la venta.");
         }
-        return SendClientMessage(playerid, -1, "Accion invalida. Usa 1 o 2.");
+        return SendClientMessage(playerid, -1, "No hay espacio para mas modelos.");
+    }
+
+    if(dialogid == DIALOG_VENTA_AUTOS_REMOVE_LIST) {
+        if(!response) return ShowVentaAutosAdminMenu(playerid);
+        if(PlayerAdmin[playerid] < 1 || !IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
+        new item = GetVentaAutoByAnyListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        VentaAutosData[item][vaActiva] = false;
+        VentaAutosData[item][vaModelo] = 0;
+        VentaAutosData[item][vaPrecio] = 0;
+        VentaAutosData[item][vaStock] = 0;
+        SendClientMessage(playerid, 0x00FF00FF, "Modelo eliminado de la venta.");
+        ActualizarLabelVentaAutos();
+        return ShowVentaAutosAdminMenu(playerid);
     }
 
     if(dialogid == DIALOG_VENTA_AUTOS_BUY) {
@@ -1936,7 +1980,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VehLocked[veh] = false;
         VentaAutosData[item][vaStock]--;
         ActualizarLabelVentaAutos();
-        SendClientMessage(playerid, 0x00FF00FF, "Compra realizada. Disfruta tu auto.");
+        SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. El concesionario te entrega las llaves de tu nuevo auto.");
         return 1;
     }
 
@@ -1974,7 +2018,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         GasInitVehiculo[veh] = true;
         GasVehiculo[veh] = 100;
         PutPlayerInVehicle(playerid, veh, 0);
-        SendClientMessage(playerid, 0x00FF00FF, "Camper comprado. Usa /maletero junto al vehiculo.");
+        SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. Tu camper quedo registrado y listo para viajar.");
         return 1;
     }
 
@@ -2245,7 +2289,7 @@ public SubirTiempoJugado() {
             if(IsPlayerInAnyVehicle(i) && GetPlayerState(i) == PLAYER_STATE_DRIVER) {
                 new vehid = GetPlayerVehicleID(i);
                 if(vehid != INVALID_VEHICLE_ID && GasInitVehiculo[vehid] && GasVehiculo[vehid] > 0) {
-                    GasVehiculo[vehid] -= 2;
+                    GasVehiculo[vehid] -= GAS_CONSUMO_POR_MINUTO;
                     if(GasVehiculo[vehid] < 0) GasVehiculo[vehid] = 0;
                     ActualizarGasTextoVehiculo(i);
                 }
@@ -2321,6 +2365,8 @@ public OnPlayerDisconnect(playerid, reason) {
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
+    VentaAutosAdminModeloPendiente[playerid] = 0;
+    VentaAutosAdminPrecioPendiente[playerid] = 0;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
     FinalizarTodosLosCultivos(playerid);
@@ -2386,7 +2432,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
                 new Float:vx, Float:vy, Float:vz;
                 GetVehicleVelocity(vehid, vx, vy, vz);
                 SetVehicleVelocity(vehid, vx * 0.2, vy * 0.2, vz);
-                SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a /ventagas y usa /repostar.");
+                SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Busca una gasolinera de admin y usa /repostar.");
             }
         }
     } else {
@@ -2437,8 +2483,8 @@ stock ActualizarLabelVentaAutos() {
     if(!VentaAutosActiva) return 1;
     new texto[256], disponibles;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaStock] > 0) disponibles++;
-    format(texto, sizeof(texto), "Venta de autos\nModelos disponibles: %d\nPresiona H para ver el catalogo", disponibles);
-    VentaAutosLabel = Create3DTextLabel(texto, 0x33CCFFFF, VentaAutosPos[0], VentaAutosPos[1], VentaAutosPos[2] + 0.6, 15.0, 0);
+    format(texto, sizeof(texto), "Concesionario Kame House\nModelos en venta: %d\nUsa H para comprar", disponibles);
+    VentaAutosLabel = Create3DTextLabel(texto, 0x33CCFFFF, VentaAutosPos[0], VentaAutosPos[1], VentaAutosPos[2] + 0.6, 18.0, 0);
     return 1;
 }
 
@@ -2463,6 +2509,45 @@ stock ShowVentaAutosBuyMenu(playerid) {
     }
     if(count == 0) return SendClientMessage(playerid, -1, "No hay autos disponibles en venta.");
     ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_BUY, DIALOG_STYLE_LIST, "Concesionario", body, "Comprar", "Cerrar");
+    return 1;
+}
+
+stock ShowVentaAutosAdminMenu(playerid) {
+    if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+    if(!IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
+    ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADMIN_MENU, DIALOG_STYLE_LIST, "Concesionario Admin", "Agregar/actualizar auto\nQuitar auto", "Seleccionar", "Cerrar");
+    return 1;
+}
+
+stock ShowVentaAutosRemoveMenu(playerid) {
+    new body[1024], line[96], count;
+    body[0] = EOS;
+    for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+        if(!VentaAutosData[i][vaActiva]) continue;
+        format(line, sizeof(line), "Modelo %d | Precio:$%d | Stock:%d\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock]);
+        strcat(body, line);
+        count++;
+    }
+    if(count == 0) return SendClientMessage(playerid, -1, "No hay modelos cargados para eliminar.");
+    ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_REMOVE_LIST, DIALOG_STYLE_LIST, "Quitar auto del concesionario", body, "Quitar", "Atras");
+    return 1;
+}
+
+stock GetVentaAutoByAnyListIndex(listindex) {
+    new current;
+    for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+        if(!VentaAutosData[i][vaActiva]) continue;
+        if(current == listindex) return i;
+        current++;
+    }
+    return -1;
+}
+
+stock ShowAdminEditHint(playerid, const nombreSistema[]) {
+    if(PlayerAdmin[playerid] < 1) return 0;
+    new msg[96];
+    format(msg, sizeof(msg), "Admin: usa la tecla Y aqui para editar %s.", nombreSistema);
+    SendClientMessage(playerid, 0xFFE082FF, msg);
     return 1;
 }
 
@@ -2790,7 +2875,6 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoVentaAutos: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{33CCFF}Venta de autos\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para ver autos", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoCamper: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -2813,7 +2897,8 @@ stock CrearPuntosFijos() {
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /repostar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa /agregarauto /editarcamper /ventagas");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /repostar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /mover /tp /gotomap /crearcasa /eliminarcasa /ventagas
+(Edicion de tiendas: tecla Y en el punto)");
     } else {
         format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /repostar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar o retirar dinero.");
     }
