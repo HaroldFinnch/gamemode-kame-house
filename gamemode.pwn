@@ -137,6 +137,9 @@
 #define DIALOG_ADMIN_DAR_DINERO_ID 54
 #define DIALOG_ADMIN_DAR_DINERO_MONTO 55
 #define DIALOG_ADMIN_CREAR_MENU 56
+#define DIALOG_ADMIN_DAR_MINERAL_TIPO 57
+#define DIALOG_ADMIN_DAR_MINERAL_MONTO 58
+#define DIALOG_ADMIN_DAR_MINERAL_ID 59
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -405,6 +408,7 @@ enum eCajaData {
 new CajaDataLoot[MAX_CAJAS][eCajaData];
 new TotalCajas;
 new CajaCooldownTick[MAX_PLAYERS][MAX_CAJAS];
+new MineroCooldownTick[MAX_PLAYERS][MAX_MINAS];
 
 enum ePrepiezaPoint {
     bool:ppActivo,
@@ -417,6 +421,8 @@ enum ePrepiezaPoint {
 new PrepiezaPoints[MAX_PREPIEZA_POINTS][ePrepiezaPoint];
 new TotalPrepiezaPoints;
 new PrepiezaCooldownTick[MAX_PLAYERS][MAX_PREPIEZA_POINTS];
+new AdminMineralTipoPendiente[MAX_PLAYERS] = {-1, ...};
+new AdminMineralCantidadPendiente[MAX_PLAYERS];
 
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
@@ -451,6 +457,7 @@ stock bool:PlayerTieneAccesoCasa(playerid, casa);
 stock EntrarCasa(playerid, casa);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
+stock FormatTiempoRestante(ms, dest[], len);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -556,6 +563,7 @@ main() {
 public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
+    EnableStuntBonusForAll(0);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
     PuntoPos[puntoCamionero][0] = POS_TRABAJO_X;
@@ -748,11 +756,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
         if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de minero primero.");
         if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en KameTienda.");
+        if(GetTickCount() < MineroCooldownTick[playerid][m]) { new left[24], msgcd[120]; FormatTiempoRestante(MineroCooldownTick[playerid][m] - GetTickCount(), left, sizeof(left)); format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %s", left); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
         if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
         new segs = 15 + random(6);
         MineroMinaIndex[playerid] = m;
         TogglePlayerControllable(playerid, false);
-        SetPlayerAttachedObject(playerid, 8, 2226, 6, 0.11, 0.03, 0.00, 0.0, 0.0, 0.0, 0.90, 0.90, 0.90);
+        SetPlayerAttachedObject(playerid, 8, 19631, 6, 0.11, 0.03, 0.00, 0.0, 0.0, 0.0, 0.90, 0.90, 0.90);
         ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, segs * 1000, t_FORCE_SYNC:SYNC_ALL);
         MineroTimer[playerid] = SetTimerEx("FinalizarMinado", segs * 1000, false, "d", playerid);
         new msgm[96]; format(msgm, sizeof(msgm), "[Minero] Minando... tiempo estimado: %d segundos.", segs);
@@ -772,7 +781,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     for(new c = 0; c < TotalCajas; c++) {
         if(!CajaDataLoot[c][cajaActiva]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.3, CajaDataLoot[c][cajaX], CajaDataLoot[c][cajaY], CajaDataLoot[c][cajaZ])) continue;
-        if(GetTickCount() < CajaCooldownTick[playerid][c]) return SendClientMessage(playerid, -1, "Esta caja esta en cooldown para ti.");
+        if(GetTickCount() < CajaCooldownTick[playerid][c]) { new leftCaja[24], msgCaja[120]; FormatTiempoRestante(CajaCooldownTick[playerid][c] - GetTickCount(), leftCaja, sizeof(leftCaja)); format(msgCaja, sizeof(msgCaja), "[Caja] Cooldown restante: %s", leftCaja); return SendClientMessage(playerid, 0xFFAA00FF, msgCaja); }
         TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
         SetTimerEx("FinalizarCajaBusqueda", 10000, false, "dd", playerid, c);
@@ -1248,7 +1257,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/inventario", true)) {
         new inv[256];
-        format(inv, sizeof(inv), "Semillas: Hierba %d | Flores %d\nConsumo: Hierba %d | Flores %d\nMadera:%d Piedra:%d Cobre:%d Hierro:%d\nPolvora:%d Prepieza:%d Carbon:%d\nMazo:%s Durabilidad:%d\nArmero Nivel:%d", InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid], ArmeroNivel[playerid]);
+        format(inv, sizeof(inv), "Dinero:$%d\nBanco:$%d\nPiedra:%d\nCobre:%d\nHierro:%d\nMadera:%d\nPolvora:%d\nPrepiezas:%d\nCarbon:%d\nMazo:%s\nDurabilidad:%d\nArmero:%d/10", GetPlayerMoney(playerid), PlayerBankMoney[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvMadera[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid], ArmeroNivel[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -1597,7 +1606,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(TotalHornos >= MAX_HORNOS) return SendClientMessage(playerid, -1, "Limite de hornos alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         HornoData[TotalHornos][hornoActivo] = true; HornoData[TotalHornos][hornoX] = x; HornoData[TotalHornos][hornoY] = y; HornoData[TotalHornos][hornoZ] = z;
-        HornoData[TotalHornos][hornoObj] = CreateObject(2417, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoObj] = CreateObject(19831, x, y, z - 1.0, 0.0, 0.0, 0.0);
         HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
         TotalHornos++; GuardarHornos();
         return SendClientMessage(playerid, 0x00FF00FF, "Horno creado.");
@@ -1620,7 +1629,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         PrepiezaPoints[TotalPrepiezaPoints][ppActivo] = true; PrepiezaPoints[TotalPrepiezaPoints][ppX] = x; PrepiezaPoints[TotalPrepiezaPoints][ppY] = y; PrepiezaPoints[TotalPrepiezaPoints][ppZ] = z;
         PrepiezaPoints[TotalPrepiezaPoints][ppObj] = CreateObject(1279, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        PrepiezaPoints[TotalPrepiezaPoints][ppLabel] = Create3DTextLabel("Punto de prepiezas\nUsa H", 0x99CCFFFF, x, y, z + 0.6, 10.0, 0);
+        PrepiezaPoints[TotalPrepiezaPoints][ppLabel] = Create3DTextLabel("Punto de prepiezas ($100/2)\nUsa H", 0x99CCFFFF, x, y, z + 0.6, 10.0, 0);
         TotalPrepiezaPoints++; GuardarPrepiezaPoints();
         return SendClientMessage(playerid, 0x00FF00FF, "Punto de prepiezas creado.");
     }
@@ -1968,6 +1977,7 @@ public OnPlayerConnect(playerid) {
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
     InvFlor[playerid] = 0;
+    ArmeroNivel[playerid] = 1;
     PlantasColocadas[playerid] = 0;
     if(CultivoTimer[playerid] != -1) { KillTimer(CultivoTimer[playerid]); CultivoTimer[playerid] = -1; }
     for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
@@ -2020,7 +2030,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "/dejartrabajo /cancelartrabajo\nCamionero: ir a checkpoint\nPizzero: entregar con moto\nBasurero: bajar, H para recoger, cargar bolsa al lado de la Rumpo con H", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "Camionero: checkpoints\nPizzero: entrega en moto\nBasurero: bolsas con H\nMinero: mina con cooldown 3 min\nArmero: armeria nivel 1 a 10", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /cosehar /inventario\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
         if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
@@ -2267,6 +2277,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return 1;
     }
 
+
+    if(dialogid == DIALOG_ADMIN_DAR_MINERAL_TIPO) { if(!response) return MostrarDialogoAdmin(playerid); if(!strcmp(inputtext,"piedra",true)) AdminMineralTipoPendiente[playerid]=0; else if(!strcmp(inputtext,"cobre",true)) AdminMineralTipoPendiente[playerid]=1; else if(!strcmp(inputtext,"hierro",true)) AdminMineralTipoPendiente[playerid]=2; else if(!strcmp(inputtext,"madera",true)) AdminMineralTipoPendiente[playerid]=3; else if(!strcmp(inputtext,"polvora",true)) AdminMineralTipoPendiente[playerid]=4; else if(!strcmp(inputtext,"prepieza",true)||!strcmp(inputtext,"prepiezas",true)) AdminMineralTipoPendiente[playerid]=5; else if(!strcmp(inputtext,"carbon",true)) AdminMineralTipoPendiente[playerid]=6; else return SendClientMessage(playerid,-1,"Tipo invalido."); return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_MONTO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Monto","Siguiente","Atras"); }
+    if(dialogid == DIALOG_ADMIN_DAR_MINERAL_MONTO) { if(!response) return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_TIPO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Tipo mineral","Siguiente","Atras"); AdminMineralCantidadPendiente[playerid]=strval(inputtext); if(AdminMineralCantidadPendiente[playerid]<=0) return SendClientMessage(playerid,-1,"Monto invalido."); return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_ID,DIALOG_STYLE_INPUT,"Admin - Dar minerales","ID del jugador","Dar","Atras"); }
+    if(dialogid == DIALOG_ADMIN_DAR_MINERAL_ID) { if(!response) return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_MONTO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Monto","Siguiente","Atras"); new id=strval(inputtext),cant=AdminMineralCantidadPendiente[playerid],tipo=AdminMineralTipoPendiente[playerid]; if(!IsPlayerConnected(id)||cant<=0||tipo<0) return SendClientMessage(playerid,-1,"Datos invalidos."); if(tipo==0) InvPiedra[id]+=cant; else if(tipo==1) InvCobre[id]+=cant; else if(tipo==2) InvHierroMineral[id]+=cant; else if(tipo==3) InvMadera[id]+=cant; else if(tipo==4) InvPolvora[id]+=cant; else if(tipo==5) InvPrepieza[id]+=cant; else InvCarbon[id]+=cant; return SendClientMessage(playerid,0x66FF66FF,"Minerales entregados."); }
     if(dialogid == DIALOG_PLANTAR) {
         if(!response) return 1;
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
@@ -2404,7 +2418,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ARMERIA_CATEGORIA) {
         if(!response) return 1;
-        if(listitem == 0) return ShowArmeriaArmasDisponibles(playerid);
+        if(listitem == 0) { if(ArmeroNivel[playerid] < 1) ArmeroNivel[playerid] = 1; return SendClientMessage(playerid, 0x66CCFFFF, "Trabajo de armero activado."); }
+        if(listitem == 1) return ShowArmeriaArmasDisponibles(playerid);
         return 1;
     }
 
@@ -2807,6 +2822,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     InvSemillaFlor[playerid] = 0;
                     InvHierba[playerid] = 0;
                     InvFlor[playerid] = 0;
+    ArmeroNivel[playerid] = 1;
                     PlayerTiempoJugadoMin[playerid] = 0;
                     v[0] = floatstr(line);
                     fread(h, line); v[1] = floatstr(line);
@@ -2821,6 +2837,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         InvSemillaFlor[playerid] = 0;
                         InvHierba[playerid] = 0;
                         InvFlor[playerid] = 0;
+    ArmeroNivel[playerid] = 1;
                         PlayerTiempoJugadoMin[playerid] = 0;
                         v[0] = floatstr(line);
                         fread(h, line); v[1] = floatstr(line);
@@ -2833,6 +2850,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             InvSemillaFlor[playerid] = 0;
                             InvHierba[playerid] = 0;
                             InvFlor[playerid] = 0;
+    ArmeroNivel[playerid] = 1;
                             PlayerTiempoJugadoMin[playerid] = 0;
                             v[0] = floatstr(line);
                             fread(h, line); v[1] = floatstr(line);
@@ -3218,7 +3236,7 @@ stock ShowAdminEditHint(playerid, const nombreSistema[]) {
 }
 
 stock ShowArmeriaMenu(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ARMERIA_CATEGORIA, DIALOG_STYLE_LIST, "Armeria KameHouse", "Armas disponibles (municion infinita)", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ARMERIA_CATEGORIA, DIALOG_STYLE_LIST, "Armeria KameHouse", "Obtener trabajo de armero\nArmas disponibles (municion infinita)", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -3415,7 +3433,7 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
-    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)");
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000) [ID 19631]");
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "KameTienda", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -3567,6 +3585,8 @@ stock CrearPuntosFijos() {
     }
     return 1;
 }
+
+stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms / 1000; format(dest, len, "%02d:%02d", total / 60, total % 60); return 1; }
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
@@ -4001,7 +4021,8 @@ public FinalizarMinado(playerid) {
     if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid]--;
     if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
     new msg[144];
-    format(msg, sizeof(msg), "[Minero] Obtienes Piedra:%d Cobre:%d Hierro:%d", piedra, cobre, hierro);
+    MineroCooldownTick[playerid][MineroMinaIndex[playerid]] = GetTickCount() + 180000;
+    format(msg, sizeof(msg), "[Minero] Piedra:%d | Cobre:%d | Hierro:%d", piedra, cobre, hierro);
     SendClientMessage(playerid, 0x66FF66FF, msg);
     return 1;
 }
@@ -4020,7 +4041,7 @@ public FinalizarCajaBusqueda(playerid, cajaidx) {
     InvMadera[playerid] += madera; InvPrepieza[playerid] += prep; InvPolvora[playerid] += pol; InvPiedra[playerid] += piedra; InvCobre[playerid] += cobre; InvHierroMineral[playerid] += hierro;
     GivePlayerMoney(playerid, dinero);
     new out[200];
-    format(out, sizeof(out), "[Caja] Encontraste madera:%d prepiezas:%d dinero:$%d polvora:%d piedra:%d cobre:%d hierro:%d", madera, prep, dinero, pol, piedra, cobre, hierro);
+    format(out, sizeof(out), "[Caja] Dinero:$%d | Madera:%d | Prepiezas:%d | Polvora:%d | Piedra:%d | Cobre:%d | Hierro:%d", dinero, madera, prep, pol, piedra, cobre, hierro);
     SendClientMessage(playerid, 0xFFFFFFFF, out);
     if(CajaDataLoot[cajaidx][cajaObj] != 0) DestroyObject(CajaDataLoot[cajaidx][cajaObj]);
     CajaDataLoot[cajaidx][cajaObj] = CreateObject(2359, CajaDataLoot[cajaidx][cajaX], CajaDataLoot[cajaidx][cajaY], CajaDataLoot[cajaidx][cajaZ] - 1.0, 0.0, 0.0, 0.0);
@@ -4064,7 +4085,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -4096,9 +4117,9 @@ stock GuardarHornos() {
 }
 stock CargarHornos() {
     new File:h = fopen(PATH_HORNOS, io_read), line[96]; if(!h) return 0; TotalHornos = 0;
-    while(fread(h, line) && TotalHornos < MAX_HORNOS) { new idx, Float:x=floatstr(strtok(line, idx)), Float:y=floatstr(strtok(line, idx)), Float:z=floatstr(strtok(line, idx)); HornoData[TotalHornos][hornoActivo]=true; HornoData[TotalHornos][hornoX]=x; HornoData[TotalHornos][hornoY]=y; HornoData[TotalHornos][hornoZ]=z; HornoData[TotalHornos][hornoObj]=CreateObject(2417, x, y, z-1.0, 0.0,0.0,0.0); HornoData[TotalHornos][hornoLabel]=Create3DTextLabel("Horno\nUsa H",0xFFAA00FF,x,y,z+0.8,12.0,0); TotalHornos++; } fclose(h); return 1;
+    while(fread(h, line) && TotalHornos < MAX_HORNOS) { new idx, Float:x=floatstr(strtok(line, idx)), Float:y=floatstr(strtok(line, idx)), Float:z=floatstr(strtok(line, idx)); HornoData[TotalHornos][hornoActivo]=true; HornoData[TotalHornos][hornoX]=x; HornoData[TotalHornos][hornoY]=y; HornoData[TotalHornos][hornoZ]=z; HornoData[TotalHornos][hornoObj]=CreateObject(19831, x, y, z-1.0, 0.0,0.0,0.0); HornoData[TotalHornos][hornoLabel]=Create3DTextLabel("Horno\nUsa H",0xFFAA00FF,x,y,z+0.8,12.0,0); TotalHornos++; } fclose(h); return 1;
 }
 stock GuardarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalCajas;i++){ if(!CajaDataLoot[i][cajaActiva]) continue; format(line,sizeof(line),"%f %f %f\n",CajaDataLoot[i][cajaX],CajaDataLoot[i][cajaY],CajaDataLoot[i][cajaZ]); fwrite(h,line);} fclose(h); return 1; }
 stock CargarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_read), line[96]; if(!h) return 0; TotalCajas=0; while(fread(h,line) && TotalCajas<MAX_CAJAS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); CajaDataLoot[TotalCajas][cajaActiva]=true; CajaDataLoot[TotalCajas][cajaX]=x; CajaDataLoot[TotalCajas][cajaY]=y; CajaDataLoot[TotalCajas][cajaZ]=z; CajaDataLoot[TotalCajas][cajaObj]=CreateObject(2358,x,y,z-1.0,0.0,0.0,0.0); CajaDataLoot[TotalCajas][cajaLabel]=Create3DTextLabel("Caja de busqueda\nUsa H",0xFFFFFFFF,x,y,z+0.7,10.0,0); TotalCajas++; } fclose(h); return 1; }
 stock GuardarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalPrepiezaPoints;i++){ if(!PrepiezaPoints[i][ppActivo]) continue; format(line,sizeof(line),"%f %f %f\n",PrepiezaPoints[i][ppX],PrepiezaPoints[i][ppY],PrepiezaPoints[i][ppZ]); fwrite(h,line);} fclose(h); return 1;}
-stock CargarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_read),line[96]; if(!h) return 0; TotalPrepiezaPoints=0; while(fread(h,line) && TotalPrepiezaPoints<MAX_PREPIEZA_POINTS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); PrepiezaPoints[TotalPrepiezaPoints][ppActivo]=true; PrepiezaPoints[TotalPrepiezaPoints][ppX]=x; PrepiezaPoints[TotalPrepiezaPoints][ppY]=y; PrepiezaPoints[TotalPrepiezaPoints][ppZ]=z; PrepiezaPoints[TotalPrepiezaPoints][ppObj]=CreateObject(1279,x,y,z-1.0,0.0,0.0,0.0); PrepiezaPoints[TotalPrepiezaPoints][ppLabel]=Create3DTextLabel("Punto de prepiezas\nUsa H",0x99CCFFFF,x,y,z+0.6,10.0,0); TotalPrepiezaPoints++; } fclose(h); return 1; }
+stock CargarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_read),line[96]; if(!h) return 0; TotalPrepiezaPoints=0; while(fread(h,line) && TotalPrepiezaPoints<MAX_PREPIEZA_POINTS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); PrepiezaPoints[TotalPrepiezaPoints][ppActivo]=true; PrepiezaPoints[TotalPrepiezaPoints][ppX]=x; PrepiezaPoints[TotalPrepiezaPoints][ppY]=y; PrepiezaPoints[TotalPrepiezaPoints][ppZ]=z; PrepiezaPoints[TotalPrepiezaPoints][ppObj]=CreateObject(1279,x,y,z-1.0,0.0,0.0,0.0); PrepiezaPoints[TotalPrepiezaPoints][ppLabel]=Create3DTextLabel("Punto de prepiezas ($100/2)\nUsa H",0x99CCFFFF,x,y,z+0.6,10.0,0); TotalPrepiezaPoints++; } fclose(h); return 1; }
