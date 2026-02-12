@@ -136,6 +136,7 @@
 #define DIALOG_ADMIN_MENU 53
 #define DIALOG_ADMIN_DAR_DINERO_ID 54
 #define DIALOG_ADMIN_DAR_DINERO_MONTO 55
+#define DIALOG_ADMIN_CREAR_MENU 56
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -221,6 +222,7 @@ new bool:MineroTrabajando[MAX_PLAYERS];
 new MineroMinaIndex[MAX_PLAYERS] = {-1, ...};
 new MineroTimer[MAX_PLAYERS] = {-1, ...};
 new HornoActivoJugador[MAX_PLAYERS] = {-1, ...};
+new bool:GPSCheckpointActivo[MAX_PLAYERS];
 new AdminTargetIdPendiente[MAX_PLAYERS] = {-1, ...};
 new CultivoActivo[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
 new CultivoTipo[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
@@ -286,6 +288,7 @@ enum ePuntoMovible {
     puntoVentaAutos,
     puntoCamper,
     puntoPintura,
+    puntoMinero,
     totalPuntosMovibles
 }
 new Float:PuntoPos[totalPuntosMovibles][3];
@@ -441,6 +444,7 @@ stock GuardarCajasLoot();
 stock CargarPrepiezaPoints();
 stock GuardarPrepiezaPoints();
 stock MostrarDialogoAdmin(playerid);
+stock GetHornoMasCercano(playerid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -587,6 +591,7 @@ public OnGameModeInit() {
     PuntoPos[puntoVentaAutos][2] = POS_BANCO_Z;
     PuntoPos[puntoCamper][0] = 2490.0; PuntoPos[puntoCamper][1] = -1648.0; PuntoPos[puntoCamper][2] = 13.3;
     PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
+    PuntoPos[puntoMinero][0] = PuntoPos[puntoCamionero][0] + 6.0; PuntoPos[puntoMinero][1] = PuntoPos[puntoCamionero][1]; PuntoPos[puntoMinero][2] = PuntoPos[puntoCamionero][2];
     VentaAutosActiva = true;
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
@@ -731,7 +736,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     // Sistema de minero
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0] + 6.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2])) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
         MineroTrabajando[playerid] = true;
         SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la semilleria (KameTienda) y busca minas.");
@@ -770,7 +775,6 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(GetTickCount() < CajaCooldownTick[playerid][c]) return SendClientMessage(playerid, -1, "Esta caja esta en cooldown para ti.");
         TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
-        SetPlayerAttachedObject(playerid, 7, 2360, 6, 0.08, 0.04, 0.0, 0.0, 0.0, 0.0, 0.65, 0.65, 0.65);
         SetTimerEx("FinalizarCajaBusqueda", 10000, false, "dd", playerid, c);
         SendClientMessage(playerid, 0x99FFFFFF, "Buscando en caja... espera 10 segundos.");
         return 1;
@@ -845,6 +849,13 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
 public OnPlayerEnterCheckpoint(playerid)
 {
+    if(GPSCheckpointActivo[playerid] && TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0) {
+        DisablePlayerCheckpoint(playerid);
+        GPSCheckpointActivo[playerid] = false;
+        SendClientMessage(playerid, 0x66FF66FF, "Llegaste al punto GPS. Checkpoint removido.");
+        return 1;
+    }
+
     if(TrabajandoCamionero[playerid] >= 2 && GetPlayerVehicleID(playerid) != CamioneroVehiculo[playerid])
     {
         SendClientMessage(playerid, 0xFF0000FF, "TRABAJO CANCELADO: Debes estar en el vehiculo de la empresa.");
@@ -1327,12 +1338,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nPizzeria Los Santos\nTrabajo Basurero\nDeposito de Carga\nBanco KameHouse\nSemilleria\nArmeria\nConcesionario\nVenta de campers\nTaller de pintura\nRestaurar vehiculos ocultos\nLocalizar uno de mis vehiculos", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nTrabajo Minero\nTrabajo Armero\nPizzeria Los Santos\nTrabajo Basurero\nDeposito de Carga\nBanco KameHouse\nKameTienda\nArmeria\nConcesionario\nVenta de campers\nTaller de pintura\nHorno mas cercano\nRestaurar vehiculos ocultos\nLocalizar uno de mis vehiculos", "Ir", "Cerrar");
         return 1;
     }
 
     if(!strcmp(cmd, "/ayuda", true)) {
-        ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nCasas y plantado\nEconomia\nAdmin", "Ver", "Cerrar");
+        if(PlayerAdmin[playerid] >= 1) ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nCasas y plantado\nEconomia\nAdmin", "Ver", "Cerrar");
+        else ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nCasas y plantado\nEconomia", "Ver", "Cerrar");
         return 1;
     }
 
@@ -1595,8 +1607,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         if(TotalCajas >= MAX_CAJAS) return SendClientMessage(playerid, -1, "Limite de cajas alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
-        CajaDataLoot[TotalCajas][cajaActiva] = true; CajaDataLoot[TotalCajas][cajaX] = x; CajaDataLoot[TotalCajas][cajaY] = y; CajaDataLoot[TotalCajas][cajaZ] = z;
-        CajaDataLoot[TotalCajas][cajaObj] = CreateObject(2358, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        CajaDataLoot[TotalCajas][cajaActiva] = true; CajaDataLoot[TotalCajas][cajaX] = x; CajaDataLoot[TotalCajas][cajaY] = y; CajaDataLoot[TotalCajas][cajaZ] = z + 0.25;
+        CajaDataLoot[TotalCajas][cajaObj] = CreateObject(2358, x, y, z - 0.75, 0.0, 0.0, 0.0);
         CajaDataLoot[TotalCajas][cajaLabel] = Create3DTextLabel("Caja de busqueda\nUsa H", 0xFFFFFFFF, x, y, z + 0.7, 10.0, 0);
         TotalCajas++; GuardarCajasLoot();
         return SendClientMessage(playerid, 0x00FF00FF, "Caja creada.");
@@ -1620,7 +1632,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nSemilleria\nArmeria\nVenta de autos\nVenta de campers\nCP pintura", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nKameTienda\nArmeria\nVenta de autos\nVenta de campers\nCP pintura\nTrabajo Minero", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2011,34 +2023,39 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "/dejartrabajo /cancelartrabajo\nCamionero: ir a checkpoint\nPizzero: entregar con moto\nBasurero: bajar, H para recoger, cargar bolsa al lado de la Rumpo con H", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /cosehar /inventario\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
-        if(listitem == 4) {
-            if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-            return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "/crearparada /crearparadapizza /crearparadabasura\n/kick /dardinero /adminarmas /mover /tp /ir /traer /kill /cord /sacarveh /fly\n/crearcasa /eliminarcasa /agregarauto /editarcamper /ventagas", "Cerrar", "");
-        }
+        if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
         return 1;
     }
     if(dialogid == DIALOG_GPS) {
         if(!response) return 1;
         if(listitem == 0) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 6.0);
-        else if(listitem == 1) SetPlayerCheckpoint(playerid, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2], 6.0);
-        else if(listitem == 2) SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
-        else if(listitem == 3) SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 6.0);
-        else if(listitem == 4) SetPlayerCheckpoint(playerid, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2], 6.0);
-        else if(listitem == 5) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
-        else if(listitem == 6) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
-        else if(listitem == 7) SetPlayerCheckpoint(playerid, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2], 6.0);
-        else if(listitem == 8) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamper][0], PuntoPos[puntoCamper][1], PuntoPos[puntoCamper][2], 6.0);
-        else if(listitem == 9) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
-        else if(listitem == 10) {
+        else if(listitem == 1) SetPlayerCheckpoint(playerid, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2], 6.0);
+        else if(listitem == 2) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
+        else if(listitem == 3) SetPlayerCheckpoint(playerid, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2], 6.0);
+        else if(listitem == 4) SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
+        else if(listitem == 5) SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 6.0);
+        else if(listitem == 6) SetPlayerCheckpoint(playerid, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2], 6.0);
+        else if(listitem == 7) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
+        else if(listitem == 8) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
+        else if(listitem == 9) SetPlayerCheckpoint(playerid, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2], 6.0);
+        else if(listitem == 10) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamper][0], PuntoPos[puntoCamper][1], PuntoPos[puntoCamper][2], 6.0);
+        else if(listitem == 11) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
+        else if(listitem == 12) {
+            new horno = GetHornoMasCercano(playerid);
+            if(horno == -1) return SendClientMessage(playerid, -1, "No hay hornos disponibles en el mapa.");
+            SetPlayerCheckpoint(playerid, HornoData[horno][hornoX], HornoData[horno][hornoY], HornoData[horno][hornoZ], 4.0);
+        }
+        else if(listitem == 13) {
             new restaurados = RestaurarVehiculosJugador(playerid);
             new msg[96];
             format(msg, sizeof(msg), "GPS: %d vehiculo(s) restaurado(s) en su ultima posicion.", restaurados);
             SendClientMessage(playerid, 0x00FF00FF, msg);
             return 1;
         }
-        else if(listitem == 11) {
+        else if(listitem == 14) {
             return ShowGPSVehiculosMenu(playerid);
         }
+        GPSCheckpointActivo[playerid] = true;
         SendClientMessage(playerid, 0x00FFFFFF, "GPS actualizado en tu mapa.");
         return 1;
     }
@@ -2058,6 +2075,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new Float:vx, Float:vy, Float:vz;
         GetVehiclePos(veh, vx, vy, vz);
         SetPlayerCheckpoint(playerid, vx, vy, vz, 8.0);
+        GPSCheckpointActivo[playerid] = true;
         SendClientMessage(playerid, 0x00FFFFFF, "GPS configurado hacia el vehiculo seleccionado.");
         return 1;
     }
@@ -2212,8 +2230,22 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
         if(listitem == 1) return OnPlayerCommandText(playerid, "/mover");
-        if(listitem == 2) return OnPlayerCommandText(playerid, "/creargas");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Nuevos comandos", "/crearmina /crearhorno /crearcaja /crearprepiezas", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly", "Cerrar", "");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_CREAR_MENU) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(listitem == 0) return OnPlayerCommandText(playerid, "/crearparada");
+        if(listitem == 1) return OnPlayerCommandText(playerid, "/crearparadapizza");
+        if(listitem == 2) return OnPlayerCommandText(playerid, "/crearparadabasura");
+        if(listitem == 3) return OnPlayerCommandText(playerid, "/crearmina");
+        if(listitem == 4) return OnPlayerCommandText(playerid, "/crearhorno");
+        if(listitem == 5) return OnPlayerCommandText(playerid, "/crearcaja");
+        if(listitem == 6) return OnPlayerCommandText(playerid, "/crearprepiezas");
+        if(listitem == 7) return OnPlayerCommandText(playerid, "/ventagas");
         return 1;
     }
 
@@ -3460,6 +3492,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoVentaAutos: format(dest, len, "Venta de autos");
         case puntoCamper: format(dest, len, "Venta de campers");
         case puntoPintura: format(dest, len, "CP pintura");
+        case puntoMinero: format(dest, len, "Trabajo minero");
         default: format(dest, len, "Punto");
     }
     return 1;
@@ -3517,6 +3550,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{00CCFF}CP pintura\n{FFFFFF}Conduce aqui y usa {FFFF00}/pintar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
         }
+        case puntoMinero: {
+            PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("{CCCCCC}Trabajo minero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
         case totalPuntosMovibles: {
             return 1;
         }
@@ -3533,12 +3570,7 @@ stock CrearPuntosFijos() {
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /mover /tp /ir /traer /kill /cord /sacarveh /fly /crearcasa /eliminarcasa /ventagas
-(Edicion de tiendas: tecla Y en el punto)");
-    } else {
-        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar o retirar dinero.");
-    }
+    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -3981,10 +4013,10 @@ public FinalizarCajaBusqueda(playerid, cajaidx) {
     RemovePlayerAttachedObject(playerid, 7);
     if(cajaidx < 0 || cajaidx >= TotalCajas) return 1;
     CajaCooldownTick[playerid][cajaidx] = GetTickCount() + 300000;
-    new madera = 2 + random(4), prep = 2 + random(4), dinero = 1000 + random(1001), pol = 0, piedra = random(4), cobre = 0, hierro = 0;
-    if(random(100) < 22) pol = 1 + random(2);
-    if(random(100) < 35) cobre = 1 + random(2);
-    if(random(100) < 22) hierro = 1 + random(2);
+    new madera = 1 + random(3), prep = 1 + random(3), dinero = 800 + random(801), pol = 0, piedra = random(3), cobre = 0, hierro = 0;
+    if(random(100) < 15) pol = 1 + random(2);
+    if(random(100) < 20) cobre = 1 + random(2);
+    if(random(100) < 14) hierro = 1 + random(2);
     InvMadera[playerid] += madera; InvPrepieza[playerid] += prep; InvPolvora[playerid] += pol; InvPiedra[playerid] += piedra; InvCobre[playerid] += cobre; InvHierroMineral[playerid] += hierro;
     GivePlayerMoney(playerid, dinero);
     new out[200];
@@ -4015,8 +4047,24 @@ public FinalizarHorno(hornoidx) {
     return 1;
 }
 
+stock GetHornoMasCercano(playerid) {
+    new Float:px, Float:py, Float:pz;
+    GetPlayerPos(playerid, px, py, pz);
+    new best = -1;
+    new Float:bestDist = 999999.0;
+    for(new h = 0; h < TotalHornos; h++) {
+        if(!HornoData[h][hornoActivo]) continue;
+        new Float:d = GetDistanceBetweenPoints(px, py, pz, HornoData[h][hornoX], HornoData[h][hornoY], HornoData[h][hornoZ]);
+        if(d < bestDist) {
+            bestDist = d;
+            best = h;
+        }
+    }
+    return best;
+}
+
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nMover puntos\nCrear gasolinera\nSistemas nuevos", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin", "Abrir", "Cerrar");
     return 1;
 }
 
