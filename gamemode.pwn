@@ -84,6 +84,7 @@
 #define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
 #define PATH_RUTAS_BASURA   "rutas_basurero.txt"
 #define PATH_CASAS          "casas.txt"
+#define PATH_PUNTOS_MOVIBLES "puntos_movibles.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -122,6 +123,9 @@
 #define DIALOG_VENTA_AUTOS_REMOVE_LIST 44
 #define DIALOG_PINTURA_COLOR 45
 #define DIALOG_GPS_VEHICULOS 46
+#define DIALOG_KAMETIENDA_TIPO 47
+#define DIALOG_KAMETIENDA_CANTIDAD 48
+#define DIALOG_KAMETIENDA_CONFIRMAR 49
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -304,6 +308,8 @@ new GasRefuelTimer[MAX_PLAYERS] = {-1, ...};
 new GasRefuelVeh[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new GasRefuelCost[MAX_PLAYERS];
 new BidonGasolina[MAX_PLAYERS];
+new KameTiendaTipoPendiente[MAX_PLAYERS];
+new KameTiendaCantidadPendiente[MAX_PLAYERS];
 new bool:AdminFlyActivo[MAX_PLAYERS];
 new GPSVehiculoSeleccionado[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 
@@ -440,6 +446,8 @@ stock GetOwnedVehicleByListIndex(playerid, listindex);
 stock RestaurarVehiculosJugador(playerid);
 stock bool:RestaurarVehiculoSeleccionado(playerid, veh);
 stock ContarCasasJugador(playerid);
+stock GuardarPuntosMovibles();
+stock CargarPuntosMovibles();
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -482,7 +490,14 @@ public OnGameModeInit() {
     PuntoPos[puntoVentaAutos][0] = POS_BANCO_X + 12.0;
     PuntoPos[puntoVentaAutos][1] = POS_BANCO_Y + 4.0;
     PuntoPos[puntoVentaAutos][2] = POS_BANCO_Z;
+    PuntoPos[puntoCamper][0] = 2490.0; PuntoPos[puntoCamper][1] = -1648.0; PuntoPos[puntoCamper][2] = 13.3;
+    PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
     VentaAutosActiva = true;
+    VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
+    VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
+    VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
+
+    CargarPuntosMovibles();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
@@ -818,10 +833,10 @@ stock FinalizarTrabajo(playerid) {
     if(nivelCamionero > NIVEL_MAX_TRABAJO) nivelCamionero = NIVEL_MAX_TRABAJO;
 
     new pagoBase = PAGO_BASE_CAMIONERO;
-    new pagoDistancia = floatround(distancia * 0.18);
-    if(pagoDistancia < 80) pagoDistancia = 80;
-    if(pagoDistancia > 420) pagoDistancia = 420;
-    new pagoNivel = nivelCamionero * 65;
+    new pagoDistancia = floatround(distancia * 0.35);
+    if(pagoDistancia < 220) pagoDistancia = 220;
+    if(pagoDistancia > 1700) pagoDistancia = 1700;
+    new pagoNivel = nivelCamionero * 180;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     if(pago > PAGO_MAX_CAMIONERO) pago = PAGO_MAX_CAMIONERO;
     GivePlayerMoney(playerid, pago);
@@ -898,10 +913,10 @@ public FinalizarEntregaPizza(playerid) {
     if(nivelPizzero > NIVEL_MAX_TRABAJO) nivelPizzero = NIVEL_MAX_TRABAJO;
 
     new pagoBase = PAGO_BASE_PIZZERO;
-    new pagoDistancia = floatround(distancia * 1.35);
-    if(pagoDistancia < 120) pagoDistancia = 120;
-    if(pagoDistancia > 340) pagoDistancia = 340;
-    new pagoNivel = nivelPizzero * 65;
+    new pagoDistancia = floatround(distancia * 1.95);
+    if(pagoDistancia < 260) pagoDistancia = 260;
+    if(pagoDistancia > 1800) pagoDistancia = 1800;
+    new pagoNivel = nivelPizzero * 170;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     if(pago > PAGO_MAX_PIZZERO) pago = PAGO_MAX_PIZZERO;
     GivePlayerMoney(playerid, pago);
@@ -985,7 +1000,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(PlayerHambre[playerid] >= 100) return SendClientMessage(playerid, -1, "Ya tienes el hambre al maximo.");
         if(GetPlayerMoney(playerid) < PRECIO_COMIDA) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para comprar comida.");
 
+        TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+        SetTimerEx("ClearPlayerAnimLock", 1600, false, "d", playerid);
         GivePlayerMoney(playerid, -PRECIO_COMIDA);
         PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
         if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
@@ -1087,10 +1104,15 @@ public OnPlayerCommandText(playerid, cmdtext[])
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         new extra = random(3);
         new total = CultivoCantidadBase[playerid][slot] + extra;
-        if(CultivoTipo[playerid][slot] == 1) {
-            InvHierba[playerid] += total;
-        } else {
-            InvFlor[playerid] += total;
+        new semillasExtra = 0;
+        new bool:esHierba = (CultivoTipo[playerid][slot] == 1);
+        if(esHierba) InvHierba[playerid] += total;
+        else InvFlor[playerid] += total;
+
+        if(random(100) < 45) {
+            semillasExtra = 1 + random(2);
+            if(esHierba) InvSemillaHierba[playerid] += semillasExtra;
+            else InvSemillaFlor[playerid] += semillasExtra;
         }
 
         FinalizarCultivoVisual(playerid, slot);
@@ -1100,8 +1122,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         CultivoCantidadBase[playerid][slot] = 0;
         CultivoReadyTick[playerid][slot] = 0;
 
-        new ok[96];
-        format(ok, sizeof(ok), "Cosecha completada. Obtuviste %d unidades. Plantas activas: %d/%d.", total, PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
+        new ok[160], tipo[16];
+        format(tipo, sizeof(tipo), esHierba ? "hierba" : "flores");
+        format(ok, sizeof(ok), "Cosechaste %d %s y %d semilla(s). Plantas activas: %d/%d.", total, tipo, semillasExtra, PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
         SendClientMessage(playerid, 0x00FF00FF, ok);
         return 1;
     }
@@ -1294,7 +1317,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
         GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
         new gastxt[96];
-        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nUsa /llenar dentro del vehiculo", GAS_PRECIO_POR_PUNTO);
+        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nUsa /llenar (vehiculo)\nUsa /bidon para comprar bidon", GAS_PRECIO_POR_PUNTO);
         GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
         SendClientMessage(playerid, 0x00FF00FF, "Punto de venta de gasolina creado.");
@@ -1831,6 +1854,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         PuntoPos[ePuntoMovible:listitem][1] = py;
         PuntoPos[ePuntoMovible:listitem][2] = pz;
         RecrearPuntoFijo(ePuntoMovible:listitem);
+        GuardarPuntosMovibles();
         if(ePuntoMovible:listitem == puntoVentaAutos) {
             VentaAutosPos[0] = px;
             VentaAutosPos[1] = py;
@@ -1847,17 +1871,46 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_SEMILLERIA) {
         if(!response) return 1;
-        if(listitem == 0) {
-            if(GetPlayerMoney(playerid) < SEMILLA_HIERBA_PRECIO) return SendClientMessage(playerid, -1, "No tienes dinero para esa semilla.");
-            GivePlayerMoney(playerid, -SEMILLA_HIERBA_PRECIO);
-            InvSemillaHierba[playerid]++;
-            SendClientMessage(playerid, 0x00FF00FF, "Compraste 1 semilla de hierba verde.");
-        } else if(listitem == 1) {
-            if(GetPlayerMoney(playerid) < SEMILLA_FLOR_PRECIO) return SendClientMessage(playerid, -1, "No tienes dinero para esa semilla.");
-            GivePlayerMoney(playerid, -SEMILLA_FLOR_PRECIO);
-            InvSemillaFlor[playerid]++;
-            SendClientMessage(playerid, 0x00FF00FF, "Compraste 1 semilla de flores.");
-        }
+        if(listitem < 0 || listitem > 1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        KameTiendaTipoPendiente[playerid] = listitem;
+        ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "KameTienda - Cantidad", "Ingresa la cantidad de semillas que deseas comprar:", "Continuar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_KAMETIENDA_CANTIDAD) {
+        if(!response) return ShowSemilleriaMenu(playerid);
+        new cantidad = strval(inputtext);
+        if(cantidad <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida. Debe ser mayor a 0.");
+        if(cantidad > 200) return SendClientMessage(playerid, -1, "Cantidad muy alta. Maximo por compra: 200.");
+
+        KameTiendaCantidadPendiente[playerid] = cantidad;
+        new precio = (KameTiendaTipoPendiente[playerid] == 0) ? SEMILLA_HIERBA_PRECIO : SEMILLA_FLOR_PRECIO;
+        new total = precio * cantidad;
+        new tipo[32], body[192];
+        format(tipo, sizeof(tipo), (KameTiendaTipoPendiente[playerid] == 0) ? "hierba verde" : "flores");
+        format(body, sizeof(body), "Comprar semillas de %s\nCantidad: %d\nCosto unitario: $%d\nCosto total: $%d", tipo, cantidad, precio, total);
+        ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CONFIRMAR, DIALOG_STYLE_MSGBOX, "KameTienda - Confirmar compra", body, "Comprar", "Cancelar");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_KAMETIENDA_CONFIRMAR) {
+        if(!response) return 1;
+        new cantidad = KameTiendaCantidadPendiente[playerid];
+        if(cantidad <= 0) return SendClientMessage(playerid, -1, "No hay compra pendiente.");
+
+        new precio = (KameTiendaTipoPendiente[playerid] == 0) ? SEMILLA_HIERBA_PRECIO : SEMILLA_FLOR_PRECIO;
+        new total = precio * cantidad;
+        if(GetPlayerMoney(playerid) < total) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esta compra.");
+
+        GivePlayerMoney(playerid, -total);
+        if(KameTiendaTipoPendiente[playerid] == 0) InvSemillaHierba[playerid] += cantidad;
+        else InvSemillaFlor[playerid] += cantidad;
+
+        new msg[160], tipo[16];
+        format(tipo, sizeof(tipo), (KameTiendaTipoPendiente[playerid] == 0) ? "hierba" : "flores");
+        format(msg, sizeof(msg), "KameTienda: compraste %d semillas de %s por $%d.", cantidad, tipo, total);
+        SendClientMessage(playerid, 0x00FF00FF, msg);
+        KameTiendaCantidadPendiente[playerid] = 0;
         return 1;
     }
 
@@ -1885,7 +1938,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         GetPlayerFacingAngle(playerid, angulo);
         CultivoPos[playerid][slot][0] = px + (floatsin(-angulo, degrees) * (1.4 + float(slot) * 0.25));
         CultivoPos[playerid][slot][1] = py + (floatcos(-angulo, degrees) * (1.4 + float(slot) * 0.25));
-        CultivoPos[playerid][slot][2] = pz - 0.95;
+        CultivoPos[playerid][slot][2] = pz - 0.35;
 
         CultivoActivo[playerid][slot] = 1;
         PlantasColocadas[playerid]++;
@@ -2491,6 +2544,36 @@ public GuardarCasas() {
     return 1;
 }
 
+stock GuardarPuntosMovibles() {
+    new File:h = fopen(PATH_PUNTOS_MOVIBLES, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    for(new i = 0; i < _:totalPuntosMovibles; i++) {
+        format(line, sizeof(line), "%f %f %f\n", PuntoPos[ePuntoMovible:i][0], PuntoPos[ePuntoMovible:i][1], PuntoPos[ePuntoMovible:i][2]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarPuntosMovibles() {
+    new File:h = fopen(PATH_PUNTOS_MOVIBLES, io_read);
+    if(!h) return 0;
+
+    new line[96], idx = 0;
+    while(fread(h, line) && idx < _:totalPuntosMovibles) {
+        new Float:px, Float:py, Float:pz;
+        sscanf_manual(line, px, py, pz);
+        PuntoPos[ePuntoMovible:idx][0] = px;
+        PuntoPos[ePuntoMovible:idx][1] = py;
+        PuntoPos[ePuntoMovible:idx][2] = pz;
+        idx++;
+    }
+    fclose(h);
+    return 1;
+}
+
 public BajarHambre() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
         if(PlayerHambre[i] > 0) {
@@ -2550,6 +2633,7 @@ public ChequearLimitesMapa() {
 public AutoGuardadoGlobal() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i)) GuardarCuenta(i);
     GuardarCasas();
+    GuardarPuntosMovibles();
     return 1;
 }
 
@@ -2904,8 +2988,8 @@ stock FinalizarTrabajoBasurero(playerid) {
         new nivel = BasureroNivel[playerid];
         if(nivel > NIVEL_MAX_TRABAJO) nivel = NIVEL_MAX_TRABAJO;
         new pagoBase = PAGO_BASE_BASURERO;
-        new pagoRecolecta = BasureroRecolectado[playerid] * 120;
-        new pagoNivel = nivel * 95;
+        new pagoRecolecta = BasureroRecolectado[playerid] * 180;
+        new pagoNivel = nivel * 150;
         new pago = pagoBase + pagoRecolecta + pagoNivel;
         if(pago > PAGO_MAX_BASURERO) pago = PAGO_MAX_BASURERO;
         GivePlayerMoney(playerid, pago);
@@ -2978,8 +3062,8 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
-    format(body, sizeof(body), "Semilla hierba verde - $%d\nSemilla de flores - $%d", SEMILLA_HIERBA_PRECIO, SEMILLA_FLOR_PRECIO);
-    ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Semilleria", body, "Comprar", "Cerrar");
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores");
+    ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "KameTienda", body, "Elegir", "Cerrar");
     return 1;
 }
 
@@ -2990,7 +3074,7 @@ stock ActualizarLabelCultivo(playerid, slot) {
     new label[128], tipo[20];
     if(CultivoTipo[playerid][slot] == 2) format(tipo, sizeof(tipo), "Flor");
     else format(tipo, sizeof(tipo), "Hierba");
-    if(restante == 0) format(label, sizeof(label), "%s lista para cosechar\nUsa /cosehar cerca", tipo);
+    if(restante == 0) format(label, sizeof(label), "%s lista para cosechar\nUsa /cosechar cerca", tipo);
     else format(label, sizeof(label), "%s en cultivo\nTiempo restante: %d segundo(s)", tipo, restante / 1000);
     if(CultivoLabel[playerid][slot] != Text3D:-1) Update3DTextLabelText(CultivoLabel[playerid][slot], 0xFFFFFFFF, label);
     return 1;
@@ -3050,7 +3134,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoBasurero: format(dest, len, "Trabajo basurero");
         case puntoCarga: format(dest, len, "Deposito de carga");
         case puntoBanco: format(dest, len, "Banco");
-        case puntoSemilleria: format(dest, len, "Semilleria");
+        case puntoSemilleria: format(dest, len, "KameTienda");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
         case puntoCamper: format(dest, len, "Venta de campers");
@@ -3095,7 +3179,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoSemilleria: {
             PuntoPickup[punto] = CreatePickup(1275, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("Semilleria\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("KameTienda\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoArmeria: {
             PuntoPickup[punto] = CreatePickup(1242, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -3209,10 +3293,6 @@ stock InitCamperSystem() {
     CamperTipos[1][ctActiva] = true; CamperTipos[1][ctPrecio] = 50000; CamperTipos[1][ctStock] = 4; CamperTipos[1][ctColor1] = 79; CamperTipos[1][ctColor2] = 79; CamperTipos[1][ctSlots] = 15; format(CamperTipos[1][ctNombre], 24, "Azul");
     CamperTipos[2][ctActiva] = true; CamperTipos[2][ctPrecio] = 110000; CamperTipos[2][ctStock] = 2; CamperTipos[2][ctColor1] = 0; CamperTipos[2][ctColor2] = 0; CamperTipos[2][ctSlots] = 40; format(CamperTipos[2][ctNombre], 24, "Negro");
     for(new v = 0; v < MAX_VEHICLES; v++) { CamperOwner[v] = -1; CamperSlotsVeh[v] = 0; CamperHierbaVeh[v] = 0; CamperFloresVeh[v] = 0; CamperSemillaHierbaVeh[v] = 0; CamperSemillaFlorVeh[v] = 0; VehOwner[v] = -1; VehLocked[v] = false; VehOculto[v] = false; VehLastUseTick[v] = 0; VehModelData[v] = 0; VehColor1Data[v] = -1; VehColor2Data[v] = -1; for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[v][w] = 0; }
-    PuntoPos[puntoCamper][0] = 2490.0; PuntoPos[puntoCamper][1] = -1648.0; PuntoPos[puntoCamper][2] = 13.3;
-    PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
-    RecrearPuntoFijo(puntoCamper);
-    RecrearPuntoFijo(puntoPintura);
     return 1;
 }
 
