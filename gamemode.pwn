@@ -114,6 +114,8 @@
 
 #define MAX_PLANTAS_POR_JUGADOR 5
 #define BOLSA_OBJ_MODEL 1264
+#define BASURERO_NPC_SKIN 16
+#define BASURERO_FLORES_CHANCE 30
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -161,14 +163,14 @@ new InvSemillaHierba[MAX_PLAYERS];
 new InvSemillaFlor[MAX_PLAYERS];
 new InvHierba[MAX_PLAYERS];
 new InvFlor[MAX_PLAYERS];
-new CultivoActivo[MAX_PLAYERS];
-new CultivoTipo[MAX_PLAYERS];
-new CultivoCantidadBase[MAX_PLAYERS];
-new CultivoReadyTick[MAX_PLAYERS];
-new CultivoObj[MAX_PLAYERS] = {-1, ...};
-new Text3D:CultivoLabel[MAX_PLAYERS] = {Text3D:-1, ...};
+new CultivoActivo[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
+new CultivoTipo[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
+new CultivoCantidadBase[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
+new CultivoReadyTick[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
+new CultivoObj[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
+new Text3D:CultivoLabel[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
+new Float:CultivoPos[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR][3];
 new CultivoTimer[MAX_PLAYERS] = {-1, ...};
-new Float:CultivoPos[MAX_PLAYERS][3];
 new PlantasColocadas[MAX_PLAYERS];
 
 // Variables Casas
@@ -212,6 +214,7 @@ new BasuraPickup[MAX_RUTAS_BASURA];
 new Text3D:BasuraLabel[MAX_RUTAS_BASURA] = {Text3D:-1, ...};
 new bool:BasuraRecolectadaPunto[MAX_PLAYERS][MAX_RUTAS_BASURA];
 new BasureroEntregando[MAX_PLAYERS];
+new BasureroFloresEncontradas[MAX_PLAYERS];
 
 enum ePuntoMovible {
     puntoCamionero,
@@ -227,6 +230,7 @@ enum ePuntoMovible {
 new Float:PuntoPos[totalPuntosMovibles][3];
 new PuntoPickup[totalPuntosMovibles] = {0, ...};
 new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
+new BasureroNPC = INVALID_ACTOR_ID;
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -251,6 +255,7 @@ forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
 forward FinalizarRecolectaBasura(playerid);
 forward SubirTiempoJugado();
+forward ClearPlayerAnimLock(playerid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -282,10 +287,10 @@ public FinalizarRecolectaBasura(playerid) {
         BasureroBolsaVisible[playerid] = true;
     }
     SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 4.5);
-    SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Tienes una bolsa. Sube a la Rumpo y presiona H para cargarla.");
+    SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Tienes una bolsa. Acercate a la Rumpo y presiona H para cargarla.");
 
     if(BasureroRecolectado[playerid] >= TotalRutasBasura) {
-        SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ultima bolsa recolectada. Cargala y usa /tirarbasura para cobrar.");
+        SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ultima bolsa recolectada. Cargala en la Rumpo para ir automaticamente al vertedero.");
     }
 
     return 1;
@@ -312,8 +317,11 @@ stock IniciarRutaBasurero(playerid);
 stock FinalizarTrabajoBasurero(playerid);
 stock GetBasuraPointNearPlayer(playerid);
 stock ActualizarHUDRecolectaBasurero(playerid);
-stock ActualizarLabelCultivo(playerid);
-stock FinalizarCultivoVisual(playerid);
+stock ActualizarLabelCultivo(playerid, slot);
+stock FinalizarCultivoVisual(playerid, slot);
+stock FinalizarTodosLosCultivos(playerid);
+stock GetPrimerSlotCultivoLibre(playerid);
+stock GetCultivoCosechableCercano(playerid);
 stock CrearPuntosFijos();
 stock CrearPuntosFijos();
 stock RecrearPuntoFijo(ePuntoMovible:punto);
@@ -368,6 +376,8 @@ public OnGameModeInit() {
     PuntoPos[puntoVentaAutos][2] = POS_BANCO_Z;
 
     CrearPuntosFijos();
+    if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
+    BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
     CargarRutasBasura();
 
     // Cargar casas
@@ -419,12 +429,27 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
-    if(TrabajandoBasurero[playerid] > 0 && IsPlayerInVehicle(playerid, BasureroVehiculo[playerid]) && BasureroTieneBolsa[playerid]) {
+    if(TrabajandoBasurero[playerid] > 0 && !IsPlayerInAnyVehicle(playerid) && BasureroTieneBolsa[playerid]) {
+        new Float:vx, Float:vy, Float:vz;
+        GetVehiclePos(BasureroVehiculo[playerid], vx, vy, vz);
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, vx, vy, vz)) {
+            SendClientMessage(playerid, 0xFF0000FF, "[Basurero] Debes estar al lado de la Rumpo para cargar la bolsa.");
+            return 1;
+        }
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+        SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
         BasureroTieneBolsa[playerid] = false;
         BasureroDepositandoBolsa[playerid] = false;
         if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
-        SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Bolsa subida a la Rumpo. Ve al siguiente punto.");
-        IniciarRutaBasurero(playerid);
+        if(BasureroRecolectado[playerid] >= TotalRutasBasura) {
+            BasureroEntregando[playerid] = 1;
+            SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
+            SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ruta completa. Sube a la Rumpo y regresa al vertedero para cobrar.");
+        } else {
+            SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Bolsa subida a la Rumpo. Ve al siguiente punto.");
+            IniciarRutaBasurero(playerid);
+        }
         return 1;
     }
 
@@ -433,6 +458,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS, DIALOG_STYLE_INPUT, "Admin Venta Autos", "1 [modelo] [precio] [stock] = agregar auto\n2 [modelo] = eliminar auto\n3 = eliminar venta\n\nEjemplo: 1 411 50000 3", "Aceptar", "Cerrar");
             return 1;
         }
+        return ShowVentaAutosBuyMenu(playerid);
     }
 
     // Entrada a casas desde el icono con H
@@ -497,10 +523,11 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         PutPlayerInVehicle(playerid, BasureroVehiculo[playerid], 0);
         BasureroRecolectado[playerid] = 0;
         BasureroEntregando[playerid] = 0;
+        BasureroFloresEncontradas[playerid] = 0;
         for(new b = 0; b < TotalRutasBasura; b++) BasuraRecolectadaPunto[playerid][b] = false;
         TrabajandoBasurero[playerid] = 1;
         IniciarRutaBasurero(playerid);
-        SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Recolecta basura y sube cada bolsa a la Rumpo con H.");
+        SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Recolecta basura y cargala en la Rumpo estando a su lado con H.");
         return 1;
     }
 
@@ -543,7 +570,7 @@ public OnPlayerEnterCheckpoint(playerid)
                 SendClientMessage(playerid, 0xFF0000FF, "[Basurero] Sube a la Rumpo para cargar la bolsa.");
                 return 1;
             }
-            SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Presiona H para subir la bolsa al vehiculo.");
+            SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Acercate a la Rumpo y presiona H para subir la bolsa.");
             return 1;
         }
 
@@ -616,6 +643,14 @@ public FinalizarCarga(playerid) {
 
 forward FinalizarDescarga(playerid);
 forward AsignarRutaPizzero(playerid);
+
+public ClearPlayerAnimLock(playerid) {
+    if(!IsPlayerConnected(playerid)) return 1;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    return 1;
+}
+
 forward FinalizarEntregaPizza(playerid);
 forward ActualizarCultivo(playerid);
 public FinalizarDescarga(playerid) {
@@ -799,9 +834,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new msg[256], pagoHora = nivel * 500;
-        format(msg, sizeof(msg), "Nivel PJ: %d | Tiempo jugado: %d horas | Prox nivel en: %dh %dm | Pago/hora: $%d | Vehiculos max: 3", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora);
-        SendClientMessage(playerid, 0x33CCFFFF, msg);
+        new body[384], pagoHora = nivel * 500;
+        format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d
+{33CCFF}Tiempo jugado: {FFFFFF}%d horas
+{33CCFF}Prox nivel en: {FFFFFF}%dh %dm
+{33CCFF}Pago por hora: {00FF00}$%d
+{33CCFF}Capacidad de vehiculos: {FFFFFF}1/3 Vehiculos", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora);
+        ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
 
@@ -832,45 +871,45 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/plantar", true)) {
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
-        if(CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un cultivo en progreso. Usa /cosehar cuando este listo.");
         if(PlantasColocadas[playerid] >= MAX_PLANTAS_POR_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 5 plantas por jugador en casa.");
-        ShowPlayerDialog(playerid, DIALOG_PLANTAR, DIALOG_STYLE_LIST, "Plantar", "Hierva verde\nFlores", "Plantar", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_PLANTAR, DIALOG_STYLE_LIST, "Plantar", "Hierba verde\nFlores", "Plantar", "Cerrar");
         return 1;
     }
 
     if(!strcmp(cmd, "/cosehar", true) || !strcmp(cmd, "/cosechar", true)) {
-        if(!CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "No tienes ningun cultivo activo.");
-        new restante = CultivoReadyTick[playerid] - GetTickCount();
+        new slot = GetCultivoCosechableCercano(playerid);
+        if(slot == -1) return SendClientMessage(playerid, -1, "No tienes cultivos listos cerca. Acercate a una planta madura para cosecharla.");
+        new restante = CultivoReadyTick[playerid][slot] - GetTickCount();
         if(restante > 0) {
             new ms[96];
-            format(ms, sizeof(ms), "Tu cultivo aun no esta listo. Falta: %d segundos.", restante / 1000);
+            format(ms, sizeof(ms), "Ese cultivo aun no esta listo. Falta: %d segundos.", restante / 1000);
             return SendClientMessage(playerid, -1, ms);
         }
 
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         new extra = random(3);
-        new total = CultivoCantidadBase[playerid] + extra;
-        if(CultivoTipo[playerid] == 1) {
+        new total = CultivoCantidadBase[playerid][slot] + extra;
+        if(CultivoTipo[playerid][slot] == 1) {
             InvHierba[playerid] += total;
         } else {
             InvFlor[playerid] += total;
         }
 
-        FinalizarCultivoVisual(playerid);
-        CultivoActivo[playerid] = 0;
+        FinalizarCultivoVisual(playerid, slot);
+        CultivoActivo[playerid][slot] = 0;
         if(PlantasColocadas[playerid] > 0) PlantasColocadas[playerid]--;
-        CultivoTipo[playerid] = 0;
-        CultivoCantidadBase[playerid] = 0;
-        CultivoReadyTick[playerid] = 0;
+        CultivoTipo[playerid][slot] = 0;
+        CultivoCantidadBase[playerid][slot] = 0;
+        CultivoReadyTick[playerid][slot] = 0;
 
         new ok[96];
-        format(ok, sizeof(ok), "Cosecha completada. Obtuviste %d unidades.", total);
+        format(ok, sizeof(ok), "Cosecha completada. Obtuviste %d unidades. Plantas activas: %d/%d.", total, PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
         SendClientMessage(playerid, 0x00FF00FF, ok);
         return 1;
     }
 
     if(!strcmp(cmd, "/consumir", true)) {
-        ShowPlayerDialog(playerid, DIALOG_CONSUMIR, DIALOG_STYLE_LIST, "Consumir", "Hierva verde (chaleco)\nFlores (vida)", "Usar", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_CONSUMIR, DIALOG_STYLE_LIST, "Consumir", "Hierba verde (chaleco)\nFlores (vida)", "Usar", "Cerrar");
         return 1;
     }
 
@@ -892,15 +931,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/tirarbasura", true)) {
-        if(TrabajandoBasurero[playerid] <= 0) return SendClientMessage(playerid, -1, "No estas trabajando de basurero.");
-        if(BasureroRecolectado[playerid] <= 0) return SendClientMessage(playerid, -1, "Primero debes recolectar basura en al menos un punto.");
-        if(BasureroTieneBolsa[playerid]) return SendClientMessage(playerid, -1, "Primero sube la bolsa actual a la Rumpo con H.");
-        BasureroEntregando[playerid] = 1;
-        BasureroRecolectando[playerid] = false;
-        TrabajandoBasurero[playerid] = 3;
-        SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 5.0);
-        SendClientMessage(playerid, 0x66FF66FF, "Entrega la basura en el punto del basurero para cobrar.");
-        return 1;
+        return SendClientMessage(playerid, -1, "Ahora la entrega es automatica: al cargar la ultima bolsa se marcara el vertedero automaticamente.");
     }
 
     if(!strcmp(cmd, "/gps", true)) {
@@ -953,8 +984,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/comprarauto", true)) {
-        if(!VentaAutosActiva || !IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "No estas en un punto de venta de autos.");
-        return ShowVentaAutosBuyMenu(playerid);
+        return SendClientMessage(playerid, -1, "Ahora se usa la tecla H en el concesionario para ver los autos disponibles.");
     }
 
     if(!strcmp(cmd, "/comprar", true)) {
@@ -1363,6 +1393,7 @@ public OnPlayerConnect(playerid) {
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
     BasureroEntregando[playerid] = 0;
+    BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
@@ -1371,14 +1402,19 @@ public OnPlayerConnect(playerid) {
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
     InvFlor[playerid] = 0;
-    CultivoActivo[playerid] = 0;
-    CultivoTipo[playerid] = 0;
-    CultivoCantidadBase[playerid] = 0;
-    CultivoReadyTick[playerid] = 0;
-    CultivoObj[playerid] = -1;
-    CultivoLabel[playerid] = Text3D:-1;
-    CultivoTimer[playerid] = -1;
     PlantasColocadas[playerid] = 0;
+    if(CultivoTimer[playerid] != -1) { KillTimer(CultivoTimer[playerid]); CultivoTimer[playerid] = -1; }
+    for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
+        CultivoActivo[playerid][c] = 0;
+        CultivoTipo[playerid][c] = 0;
+        CultivoCantidadBase[playerid][c] = 0;
+        CultivoReadyTick[playerid][c] = 0;
+        CultivoObj[playerid][c] = -1;
+        CultivoLabel[playerid][c] = Text3D:-1;
+        CultivoPos[playerid][c][0] = 0.0;
+        CultivoPos[playerid][c][1] = 0.0;
+        CultivoPos[playerid][c][2] = 0.0;
+    }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
 
     new name[MAX_PLAYER_NAME], path[64];
@@ -1409,9 +1445,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "/dejartrabajo /cancelartrabajo\nCamionero: ir a checkpoint\nPizzero: entregar con moto\nBasurero: bajar, H para recoger, subir a Rumpo y H para cargar", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "/dejartrabajo /cancelartrabajo\nCamionero: ir a checkpoint\nPizzero: entregar con moto\nBasurero: bajar, H para recoger, cargar bolsa al lado de la Rumpo con H", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /cosehar /inventario\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /pagar /comprarauto /comprar\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /pagar /comprar\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
         if(listitem == 4) {
             if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
             return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "/crearparada /crearparadapizza /crearparadabasura\n/kick /dardinero /adminarmas /mover /tp /gotomap\n/crearcasa /eliminarcasa /crearventadeautos /agregarauto", "Cerrar", "");
@@ -1463,7 +1499,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(GetPlayerMoney(playerid) < SEMILLA_HIERBA_PRECIO) return SendClientMessage(playerid, -1, "No tienes dinero para esa semilla.");
             GivePlayerMoney(playerid, -SEMILLA_HIERBA_PRECIO);
             InvSemillaHierba[playerid]++;
-            SendClientMessage(playerid, 0x00FF00FF, "Compraste 1 semilla de hierva verde.");
+            SendClientMessage(playerid, 0x00FF00FF, "Compraste 1 semilla de hierba verde.");
         } else if(listitem == 1) {
             if(GetPlayerMoney(playerid) < SEMILLA_FLOR_PRECIO) return SendClientMessage(playerid, -1, "No tienes dinero para esa semilla.");
             GivePlayerMoney(playerid, -SEMILLA_FLOR_PRECIO);
@@ -1476,42 +1512,43 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_PLANTAR) {
         if(!response) return 1;
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
-        if(CultivoActivo[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un cultivo activo.");
         if(PlantasColocadas[playerid] >= MAX_PLANTAS_POR_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 5 plantas por jugador en casa.");
 
+        new slot = GetPrimerSlotCultivoLibre(playerid);
+        if(slot == -1) return SendClientMessage(playerid, -1, "No tienes espacios libres para plantar.");
+
         if(listitem == 0) {
-            if(InvSemillaHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes semillas de hierva verde.");
+            if(InvSemillaHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes semillas de hierba verde.");
             InvSemillaHierba[playerid]--;
-            CultivoTipo[playerid] = 1;
+            CultivoTipo[playerid][slot] = 1;
         } else if(listitem == 1) {
             if(InvSemillaFlor[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes semillas de flores.");
             InvSemillaFlor[playerid]--;
-            CultivoTipo[playerid] = 2;
+            CultivoTipo[playerid][slot] = 2;
         }
 
         new Float:px, Float:py, Float:pz;
         GetPlayerPos(playerid, px, py, pz);
-        CultivoPos[playerid][0] = px + 1.0;
-        CultivoPos[playerid][1] = py + 1.0;
-        CultivoPos[playerid][2] = pz - 1.0;
+        CultivoPos[playerid][slot][0] = px + (0.7 * (slot + 1));
+        CultivoPos[playerid][slot][1] = py + (0.45 * ((slot % 2) + 1));
+        CultivoPos[playerid][slot][2] = pz - 1.0;
 
-        CultivoActivo[playerid] = 1;
+        CultivoActivo[playerid][slot] = 1;
         PlantasColocadas[playerid]++;
         new duracion = TIEMPO_CULTIVO_MIN + random(TIEMPO_CULTIVO_MAX - TIEMPO_CULTIVO_MIN + 1);
-        CultivoReadyTick[playerid] = GetTickCount() + (duracion * 1000);
-        CultivoCantidadBase[playerid] = 2;
+        CultivoReadyTick[playerid][slot] = GetTickCount() + (duracion * 1000);
+        CultivoCantidadBase[playerid][slot] = 2;
 
-        new modeloCultivo = (CultivoTipo[playerid] == 2) ? 325 : 3409;
-        CultivoObj[playerid] = CreateObject(modeloCultivo, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2], 0.0, 0.0, 0.0, 200.0);
-        CultivoLabel[playerid] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][0], CultivoPos[playerid][1], CultivoPos[playerid][2] + 1.0, 15.0, 0);
-        ActualizarLabelCultivo(playerid);
+        new modeloCultivo = (CultivoTipo[playerid][slot] == 2) ? 325 : 757;
+        CultivoObj[playerid][slot] = CreateObject(modeloCultivo, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2], 0.0, 0.0, 0.0, 200.0);
+        CultivoLabel[playerid][slot] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2] + 1.0, 15.0, 0);
+        ActualizarLabelCultivo(playerid, slot);
 
-        if(CultivoTimer[playerid] != -1) KillTimer(CultivoTimer[playerid]);
-        CultivoTimer[playerid] = SetTimerEx("ActualizarCultivo", 1000, true, "d", playerid);
+        if(CultivoTimer[playerid] == -1) CultivoTimer[playerid] = SetTimerEx("ActualizarCultivo", 1000, true, "d", playerid);
 
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
-        new plantmsg[96];
-        format(plantmsg, sizeof(plantmsg), "Semilla plantada (%d/%d). Usa /cosehar cuando madure.", PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
+        new plantmsg[120];
+        format(plantmsg, sizeof(plantmsg), "Semilla plantada (%d/%d). Revisa el tiempo en el texto de la planta.", PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
         SendClientMessage(playerid, 0x00FF00FF, plantmsg);
         return 1;
     }
@@ -1519,7 +1556,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_CONSUMIR) {
         if(!response) return 1;
         if(listitem == 0) {
-            if(InvHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes hierva verde para consumir.");
+            if(InvHierba[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes hierba verde para consumir.");
             InvHierba[playerid]--;
             ApplyAnimation(playerid, "SMOKING", "M_smk_in", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
             new Float:armour;
@@ -1527,7 +1564,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             armour += 3.0;
             if(armour > 100.0) armour = 100.0;
             SetPlayerArmour(playerid, armour);
-            SendClientMessage(playerid, 0x00FF00FF, "Consumiste hierva verde y recuperaste 3% de chaleco.");
+            SendClientMessage(playerid, 0x00FF00FF, "Consumiste hierba verde y recuperaste 3% de chaleco.");
         } else if(listitem == 1) {
             if(InvFlor[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes flores para consumir.");
             InvFlor[playerid]--;
@@ -2015,11 +2052,11 @@ public OnPlayerDisconnect(playerid, reason) {
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
     BasureroEntregando[playerid] = 0;
+    BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
-    FinalizarCultivoVisual(playerid);
-    CultivoActivo[playerid] = 0;
+    FinalizarTodosLosCultivos(playerid);
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
     return 1;
 }
@@ -2069,8 +2106,17 @@ public OnPlayerRequestClass(playerid, classid) {
 
 
 public ActualizarCultivo(playerid) {
-    if(!IsPlayerConnected(playerid) || !CultivoActivo[playerid]) return 0;
-    ActualizarLabelCultivo(playerid);
+    if(!IsPlayerConnected(playerid)) return 0;
+    new activos;
+    for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
+        if(!CultivoActivo[playerid][c]) continue;
+        ActualizarLabelCultivo(playerid, c);
+        activos++;
+    }
+    if(activos == 0 && CultivoTimer[playerid] != -1) {
+        KillTimer(CultivoTimer[playerid]);
+        CultivoTimer[playerid] = -1;
+    }
     return 1;
 }
 
@@ -2086,7 +2132,7 @@ stock IsNearArmeria(playerid) {
 
 stock IsNearVentaAutos(playerid) {
     if(VentaAutosActiva && IsPlayerInRangeOfPoint(playerid, 3.0, VentaAutosPos[0], VentaAutosPos[1], VentaAutosPos[2])) return 1;
-    if(!VentaAutosActiva && IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2])) return 1;
+    if(!VentaAutosActiva) return 0;
     return 0;
 }
 
@@ -2095,7 +2141,7 @@ stock ActualizarLabelVentaAutos() {
     if(!VentaAutosActiva) return 1;
     new texto[256], disponibles;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaStock] > 0) disponibles++;
-    format(texto, sizeof(texto), "Venta de autos\nModelos disponibles: %d\n/comprarauto", disponibles);
+    format(texto, sizeof(texto), "Venta de autos\nModelos disponibles: %d\nPresiona H para ver el catalogo", disponibles);
     VentaAutosLabel = Create3DTextLabel(texto, 0x33CCFFFF, VentaAutosPos[0], VentaAutosPos[1], VentaAutosPos[2] + 0.6, 15.0, 0);
     return 1;
 }
@@ -2260,9 +2306,9 @@ stock FinalizarTrabajoBasurero(playerid) {
             if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) BasureroNivel[playerid]++;
         }
 
-        if(random(100) < 14) {
+        if(random(100) < BASURERO_FLORES_CHANCE) {
             InvFlor[playerid]++;
-            SendClientMessage(playerid, 0xFF66CCFF, "Encontraste una flor mientras recolectabas basura.");
+            BasureroFloresEncontradas[playerid]++;
         }
 
         new msg[200];
@@ -2270,12 +2316,17 @@ stock FinalizarTrabajoBasurero(playerid) {
         SendClientMessage(playerid, 0x66FF66FF, msg);
         format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
         SendClientMessage(playerid, 0x66FF66FF, msg);
+        if(BasureroFloresEncontradas[playerid] > 0) {
+            format(msg, sizeof(msg), "{FF66CC}[Basurero]{FFFFFF} Encontraste {FF66CC}%d flor(es){FFFFFF} en este recorrido.", BasureroFloresEncontradas[playerid]);
+            SendClientMessage(playerid, 0xFF66CCFF, msg);
+        }
     }
 
     if(BasureroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(BasureroVehiculo[playerid]);
     BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
     TrabajandoBasurero[playerid] = 0;
     BasureroEntregando[playerid] = 0;
+    BasureroFloresEncontradas[playerid] = 0;
     BasureroRecolectado[playerid] = 0;
     BasureroRecolectando[playerid] = false;
     BasureroTieneBolsa[playerid] = false;
@@ -2321,41 +2372,71 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
-    format(body, sizeof(body), "Semilla hierva verde - $%d\nSemilla flores - $%d", SEMILLA_HIERBA_PRECIO, SEMILLA_FLOR_PRECIO);
+    format(body, sizeof(body), "Semilla hierba verde - $%d\nSemilla de flores - $%d", SEMILLA_HIERBA_PRECIO, SEMILLA_FLOR_PRECIO);
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Semilleria", body, "Comprar", "Cerrar");
     return 1;
 }
 
-stock ActualizarLabelCultivo(playerid) {
-    if(!CultivoActivo[playerid]) return 0;
-    new restante = CultivoReadyTick[playerid] - GetTickCount();
+stock ActualizarLabelCultivo(playerid, slot) {
+    if(!CultivoActivo[playerid][slot]) return 0;
+    new restante = CultivoReadyTick[playerid][slot] - GetTickCount();
     if(restante < 0) restante = 0;
-    new totalSeg = restante / 1000;
-    new mins = totalSeg / 60;
-    new segs = totalSeg % 60;
-    new label[96], tipo[16];
-    if(CultivoTipo[playerid] == 2) format(tipo, sizeof(tipo), "Flor");
+    new totalMin = restante / 60000;
+    if((restante % 60000) > 0) totalMin++;
+    new label[128], tipo[20];
+    if(CultivoTipo[playerid][slot] == 2) format(tipo, sizeof(tipo), "Flor");
     else format(tipo, sizeof(tipo), "Hierba");
-    if(restante == 0) format(label, sizeof(label), "%s lista\nUsa /cosehar", tipo);
-    else format(label, sizeof(label), "%s: %02d:%02d para madurar", tipo, mins, segs);
-    if(CultivoLabel[playerid] != Text3D:-1) Update3DTextLabelText(CultivoLabel[playerid], 0x00FF00FF, label);
+    if(restante == 0) format(label, sizeof(label), "%s lista para cosechar\nUsa /cosehar cerca", tipo);
+    else format(label, sizeof(label), "%s en cultivo\nTiempo restante: %d minuto(s)", tipo, totalMin);
+    if(CultivoLabel[playerid][slot] != Text3D:-1) Update3DTextLabelText(CultivoLabel[playerid][slot], 0x00FF00FF, label);
     return 1;
 }
 
-stock FinalizarCultivoVisual(playerid) {
+stock FinalizarCultivoVisual(playerid, slot) {
+    if(CultivoObj[playerid][slot] != -1) {
+        DestroyObject(CultivoObj[playerid][slot]);
+        CultivoObj[playerid][slot] = -1;
+    }
+    if(CultivoLabel[playerid][slot] != Text3D:-1) {
+        Delete3DTextLabel(CultivoLabel[playerid][slot]);
+        CultivoLabel[playerid][slot] = Text3D:-1;
+    }
+    CultivoPos[playerid][slot][0] = 0.0;
+    CultivoPos[playerid][slot][1] = 0.0;
+    CultivoPos[playerid][slot][2] = 0.0;
+    return 1;
+}
+
+stock FinalizarTodosLosCultivos(playerid) {
+    for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
+        if(CultivoActivo[playerid][c]) {
+            FinalizarCultivoVisual(playerid, c);
+            CultivoActivo[playerid][c] = 0;
+            CultivoTipo[playerid][c] = 0;
+            CultivoCantidadBase[playerid][c] = 0;
+            CultivoReadyTick[playerid][c] = 0;
+        }
+    }
+    PlantasColocadas[playerid] = 0;
     if(CultivoTimer[playerid] != -1) {
         KillTimer(CultivoTimer[playerid]);
         CultivoTimer[playerid] = -1;
     }
-    if(CultivoObj[playerid] != -1) {
-        DestroyObject(CultivoObj[playerid]);
-        CultivoObj[playerid] = -1;
-    }
-    if(CultivoLabel[playerid] != Text3D:-1) {
-        Delete3DTextLabel(CultivoLabel[playerid]);
-        CultivoLabel[playerid] = Text3D:-1;
-    }
     return 1;
+}
+
+stock GetPrimerSlotCultivoLibre(playerid) {
+    for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) if(!CultivoActivo[playerid][c]) return c;
+    return -1;
+}
+
+stock GetCultivoCosechableCercano(playerid) {
+    for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
+        if(!CultivoActivo[playerid][c]) continue;
+        if(CultivoReadyTick[playerid][c] > GetTickCount()) continue;
+        if(IsPlayerInRangeOfPoint(playerid, 2.5, CultivoPos[playerid][c][0], CultivoPos[playerid][c][1], CultivoPos[playerid][c][2])) return c;
+    }
+    return -1;
 }
 
 stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
@@ -2393,8 +2474,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoLabel[punto] = Create3DTextLabel("Trabajo: {FF4500}Pizzero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}en la pizzeria", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoBasurero: {
-            PuntoPickup[punto] = CreatePickup(1328, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("Trabajo: {00C853}Basurero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Trabajo: {00C853}Basurero\n{FFFFFF}NPC encargado + tecla {FFFF00}H", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
+            BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 180.0);
         }
         case puntoCarga: {
             PuntoPickup[punto] = CreatePickup(1271, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -2414,7 +2497,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoVentaAutos: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{33CCFF}Venta de autos\n{FFFFFF}Usa /comprarauto", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("{33CCFF}Venta de autos\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para ver autos", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case totalPuntosMovibles: {
             return 1;
@@ -2433,9 +2516,9 @@ stock CrearPuntosFijos() {
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /pagar /saldo /salir /comprar /abrircasa /comprarauto /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa /crearventadeautos /agregarauto /comprarauto");
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /adminarmas /mover /tp /gotomap /crearcasa /eliminarcasa /crearventadeautos /agregarauto");
     } else {
-        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /pagar /saldo /salir /comprar /abrircasa /comprarauto /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
+        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /gps /pagar /saldo /salir /comprar /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar, retirar o transferir dinero.");
     }
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
