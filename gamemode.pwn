@@ -9,8 +9,8 @@
 #define DINERO_INICIAL      500
 #define COLOR_HAMBRE        0xFFA500FF
 #define RADIO_CHAT_LOCAL    20.0
-#define PRECIO_COMIDA       25
-#define HAMBRE_POR_COMIDA   20
+#define PRECIO_COMIDA       1000
+#define HAMBRE_POR_COMIDA   15
 #define DISTANCIA_PAGO_MULT  3.0
 #define DISTANCIA_PAGO_PIZZA 2.2
 #define HORAS_POR_NIVEL_PJ   2
@@ -133,7 +133,7 @@
 #define BOLSA_OBJ_MODEL 1264
 #define BASURERO_NPC_SKIN 16
 #define BASURERO_FLORES_CHANCE 30
-#define GAS_PRECIO_POR_PUNTO 4
+#define GAS_PRECIO_POR_PUNTO 500
 #define GAS_CONSUMO_POR_MINUTO 5
 
 #define MAX_AUTOS_NORMALES_JUGADOR 3
@@ -303,6 +303,8 @@ new bool:GasInitVehiculo[MAX_VEHICLES];
 new GasRefuelTimer[MAX_PLAYERS] = {-1, ...};
 new GasRefuelVeh[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new GasRefuelCost[MAX_PLAYERS];
+new BidonGasolina[MAX_PLAYERS];
+new bool:AdminFlyActivo[MAX_PLAYERS];
 new GPSVehiculoSeleccionado[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 
 new bool:VehOculto[MAX_VEHICLES];
@@ -311,6 +313,13 @@ new VehColor1Data[MAX_VEHICLES];
 new VehColor2Data[MAX_VEHICLES];
 new Float:VehPosData[MAX_VEHICLES][4];
 new VehModelData[MAX_VEHICLES];
+new VehTempRestoreTimer[MAX_VEHICLES] = {-1, ...};
+new TempVehModel[MAX_VEHICLES];
+new TempVehColor1[MAX_VEHICLES];
+new TempVehColor2[MAX_VEHICLES];
+new Float:TempVehPos[MAX_VEHICLES][4];
+new TempVehVW[MAX_VEHICLES];
+new TempVehInterior[MAX_VEHICLES];
 
 new GasTotalPuntos;
 new Float:GasPos[MAX_GAS_POINTS][3];
@@ -330,6 +339,7 @@ forward SubirTiempoJugado();
 forward ClearPlayerAnimLock(playerid);
 forward FinalizarRepostaje(playerid);
 forward CheckInactiveVehicles();
+forward RestaurarVehiculoTemporal(slot);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -428,6 +438,8 @@ stock ContarVehiculosTotalesJugador(playerid);
 stock ShowGPSVehiculosMenu(playerid);
 stock GetOwnedVehicleByListIndex(playerid, listindex);
 stock RestaurarVehiculosJugador(playerid);
+stock bool:RestaurarVehiculoSeleccionado(playerid, veh);
+stock ContarCasasJugador(playerid);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -571,45 +583,6 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Bolsa subida a la Rumpo. Ve al siguiente punto.");
             IniciarRutaBasurero(playerid);
         }
-        return 1;
-    }
-
-    // Gasolineras: repostar con H segun faltante (max 10s)
-    if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
-        new punto = EncontrarGasCercano(playerid);
-        if(punto != -1) {
-            new veh = GetPlayerVehicleID(playerid);
-            if(veh == INVALID_VEHICLE_ID) return 1;
-            if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 100; }
-            if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
-            if(GasRefuelTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas repostando.");
-
-            new faltante = 100 - GasVehiculo[veh];
-            new costo = faltante * GAS_PRECIO_POR_PUNTO;
-            if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para repostar.");
-
-            new segundos = floatround(float(faltante) / 10.0, floatround_ceil);
-            if(segundos < 1) segundos = 1;
-            if(segundos > 10) segundos = 10;
-
-            TogglePlayerControllable(playerid, false);
-            ApplyAnimation(playerid, "CAR", "Sit_relaxed", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
-            GasRefuelVeh[playerid] = veh;
-            GasRefuelCost[playerid] = costo;
-            GasRefuelTimer[playerid] = SetTimerEx("FinalizarRepostaje", segundos * 1000, false, "d", playerid);
-            new tx[120];
-            format(tx, sizeof(tx), "Repostando... espera %d segundo(s). Costo: $%d.", segundos, costo);
-            SendClientMessage(playerid, 0xFFCC00FF, tx);
-            return 1;
-        }
-    }
-
-    // Taller de pintura (prioritario para evitar conflicto con concesionario cercano)
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) {
-        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo tu vehiculo para pintarlo.");
-        new vehid = GetPlayerVehicleID(playerid);
-        if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
-        ShowPlayerDialog(playerid, DIALOG_PINTURA_COLOR, DIALOG_STYLE_LIST, "Taller de pintura ($10000)", "Rojo\nAzul\nVerde\nNegro\nBlanco\nAmarillo", "Pintar", "Cerrar");
         return 1;
     }
 
@@ -1002,7 +975,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 {33CCFF}Tiempo jugado: {FFFFFF}%d horas
 {33CCFF}Prox nivel en: {FFFFFF}%dh %dm
 {33CCFF}Pago por hora: {00FF00}$%d
-{33CCFF}Capacidad de vehiculos: {FFFFFF}1/3 Vehiculos", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora);
+{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/3 + %d Rumpo", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid), ContarCampersJugador(playerid));
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -1022,6 +995,68 @@ public OnPlayerCommandText(playerid, cmdtext[])
         SendClientMessage(playerid, 0x00FF00FF, msg);
         format(hud, sizeof(hud), "H: %d", PlayerHambre[playerid]);
         PlayerTextDrawSetString(playerid, BarraHambre[playerid], hud);
+        return 1;
+    }
+
+
+    if(!strcmp(cmd, "/pintar", true)) {
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return SendClientMessage(playerid, -1, "Debes estar en el CP de pintura.");
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar sobre tu vehiculo conduciendo.");
+        new vehid = GetPlayerVehicleID(playerid);
+        if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
+        ShowPlayerDialog(playerid, DIALOG_PINTURA_COLOR, DIALOG_STYLE_LIST, "Taller de pintura ($10000)", "Rojo\nAzul\nVerde\nNegro\nBlanco\nAmarillo", "Pintar", "Cerrar");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/llenar", true)) {
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar sobre tu vehiculo conduciendo.");
+        new punto = EncontrarGasCercano(playerid);
+        if(punto == -1) return SendClientMessage(playerid, -1, "No estas en una gasolinera.");
+        new veh = GetPlayerVehicleID(playerid);
+        if(veh == INVALID_VEHICLE_ID) return 1;
+        if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 100; }
+        if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
+        if(GasRefuelTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas repostando.");
+        new faltante = 100 - GasVehiculo[veh];
+        new costo = faltante * GAS_PRECIO_POR_PUNTO;
+        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para repostar.");
+        new segundos = floatround(float(faltante) / 10.0, floatround_ceil);
+        if(segundos < 1) segundos = 1;
+        if(segundos > 10) segundos = 10;
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "CAR", "Sit_relaxed", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+        GasRefuelVeh[playerid] = veh;
+        GasRefuelCost[playerid] = costo;
+        GasRefuelTimer[playerid] = SetTimerEx("FinalizarRepostaje", segundos * 1000, false, "d", playerid);
+        new tx[120];
+        format(tx, sizeof(tx), "Repostando... espera %d segundo(s). Costo: $%d.", segundos, costo);
+        SendClientMessage(playerid, 0xFFCC00FF, tx);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/bidon", true)) {
+        if(IsPlayerInAnyVehicle(playerid)) return SendClientMessage(playerid, -1, "Debes estar a pie para comprar un bidon.");
+        if(EncontrarGasCercano(playerid) == -1) return SendClientMessage(playerid, -1, "Debes estar en una gasolinera.");
+        if(BidonGasolina[playerid] > 0) return SendClientMessage(playerid, -1, "Ya tienes un bidon.");
+        if(GetPlayerMoney(playerid) < 7500) return SendClientMessage(playerid, -1, "Necesitas $7500 para comprar el bidon.");
+        GivePlayerMoney(playerid, -7500);
+        BidonGasolina[playerid] = 1;
+        SendClientMessage(playerid, 0x00FF00FF, "Compraste un bidon de gasolina. Usa /usarbidon dentro del vehiculo.");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/usarbidon", true)) {
+        if(BidonGasolina[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes bidon.");
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes ir conduciendo el vehiculo para usar el bidon.");
+        new veh = GetPlayerVehicleID(playerid);
+        if(veh == INVALID_VEHICLE_ID) return 1;
+        if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 0; }
+        if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
+        GasVehiculo[veh] += 15;
+        if(GasVehiculo[veh] > 100) GasVehiculo[veh] = 100;
+        BidonGasolina[playerid] = 0;
+        ActualizarGasTextoVehiculo(playerid);
+        SendClientMessage(playerid, 0x00FF00FF, "Usaste el bidon. Gasolina +15.");
         return 1;
     }
 
@@ -1191,6 +1226,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new casa = GetClosestCasa(playerid);
         if(casa == -1) return SendClientMessage(playerid, -1, "No estas cerca de una casa.");
         if(strcmp(CasaData[casa][cOwner], "None") != 0) return SendClientMessage(playerid, -1, "Esta casa no esta en venta.");
+        if(ContarCasasJugador(playerid) >= 1) return SendClientMessage(playerid, -1, "Solo puedes tener 1 casa por jugador.");
         if(GetPlayerMoney(playerid) < CasaData[casa][cPrecio]) return SendClientMessage(playerid, -1, "No tienes suficiente dinero.");
         GivePlayerMoney(playerid, -CasaData[casa][cPrecio]);
         new name[MAX_PLAYER_NAME];
@@ -1258,7 +1294,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
         GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
         new gastxt[96];
-        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por punto\nPresiona H dentro del vehiculo", GAS_PRECIO_POR_PUNTO);
+        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nUsa /llenar dentro del vehiculo", GAS_PRECIO_POR_PUNTO);
         GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
         SendClientMessage(playerid, 0x00FF00FF, "Punto de venta de gasolina creado.");
@@ -1358,10 +1394,75 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/gotomap", true)) {
+    if(!strcmp(cmd, "/ir", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         if(AdminMapPos[playerid][0] == 0.0) return SendClientMessage(playerid, -1, "Marca el mapa.");
         SetPlayerPos(playerid, AdminMapPos[playerid][0], AdminMapPos[playerid][1], AdminMapPos[playerid][2]);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/traer", true)) {
+        new tmp[32], id;
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /traer [id]");
+        id = strval(tmp);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
+        new Float:px, Float:py, Float:pz;
+        GetPlayerPos(playerid, px, py, pz);
+        SetPlayerPos(id, px + 1.0, py, pz);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/kill", true)) {
+        new tmp[32], id;
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /kill [id]");
+        id = strval(tmp);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
+        SetPlayerHealth(id, 0.0);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/cord", true)) {
+        new Float:x, Float:y, Float:z, str[128];
+        GetPlayerPos(playerid, x, y, z);
+        format(str, sizeof(str), "Coords: %.4f %.4f %.4f", x, y, z);
+        SendClientMessage(playerid, 0x00FFFFFF, str);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/sacarveh", true)) {
+        new tmp[32], vid;
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /sacarveh [idveh]");
+        vid = strval(tmp);
+        if(vid <= 0 || vid >= MAX_VEHICLES || !IsValidVehicle(vid)) return SendClientMessage(playerid, -1, "Vehiculo invalido.");
+        if(VehTempRestoreTimer[vid] != -1) return SendClientMessage(playerid, -1, "Ese vehiculo ya esta temporalmente retirado.");
+        GetVehiclePos(vid, TempVehPos[vid][0], TempVehPos[vid][1], TempVehPos[vid][2]);
+        GetVehicleZAngle(vid, TempVehPos[vid][3]);
+        TempVehModel[vid] = GetVehicleModel(vid);
+        GetVehicleVirtualWorld(vid, TempVehVW[vid]);
+        GetVehicleInterior(vid, TempVehInterior[vid]);
+        new c1, c2;
+        GetVehicleColor(vid, c1, c2);
+        TempVehColor1[vid] = c1;
+        TempVehColor2[vid] = c2;
+        for(new i = 0; i < MAX_PLAYERS; i++) { if(IsPlayerConnected(i) && IsPlayerInVehicle(i, vid)) RemovePlayerFromVehicle(i); }
+        DestroyVehicle(vid);
+        VehTempRestoreTimer[vid] = SetTimerEx("RestaurarVehiculoTemporal", 600000, false, "d", vid);
+        SendClientMessage(playerid, 0xFFAA00FF, "Vehiculo retirado por 10 minutos.");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/fly", true)) {
+        AdminFlyActivo[playerid] = !AdminFlyActivo[playerid];
+        if(AdminFlyActivo[playerid]) {
+            SetPlayerSpecialAction(playerid, SPECIAL_ACTION_USEJETPACK);
+            SendClientMessage(playerid, 0x00FF00FF, "Fly activado.");
+        } else {
+            SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
+            SendClientMessage(playerid, 0xFFAA00FF, "Fly desactivado.");
+        }
         return 1;
     }
 
@@ -1551,7 +1652,7 @@ stock sscanf_manual(const string[], &Float:x, &Float:y, &Float:z) {
 
 public OnPlayerClickMap(playerid, Float:fX, Float:fY, Float:fZ) {
     AdminMapPos[playerid][0] = fX; AdminMapPos[playerid][1] = fY; AdminMapPos[playerid][2] = fZ;
-    if(PlayerAdmin[playerid] >= 1) SendClientMessage(playerid, -1, "{FFFF00}Punto marcado. /gotomap");
+    if(PlayerAdmin[playerid] >= 1) SendClientMessage(playerid, -1, "{FFFF00}Punto marcado. /ir");
     return 1;
 }
 
@@ -1606,6 +1707,8 @@ public OnPlayerConnect(playerid) {
     GasRefuelTimer[playerid] = -1;
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
     GasRefuelCost[playerid] = 0;
+    BidonGasolina[playerid] = 0;
+    AdminFlyActivo[playerid] = false;
     GPSVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
     InvSemillaHierba[playerid] = 0;
     InvSemillaFlor[playerid] = 0;
@@ -1668,7 +1771,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
         if(listitem == 4) {
             if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-            return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "/crearparada /crearparadapizza /crearparadabasura\n/kick /dardinero /adminarmas /mover /tp /gotomap\n/crearcasa /eliminarcasa /agregarauto /editarcamper /ventagas", "Cerrar", "");
+            return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "/crearparada /crearparadapizza /crearparadabasura\n/kick /dardinero /adminarmas /mover /tp /ir /traer /kill /cord /sacarveh /fly\n/crearcasa /eliminarcasa /agregarauto /editarcamper /ventagas", "Cerrar", "");
         }
         return 1;
     }
@@ -1705,8 +1808,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         GPSVehiculoSeleccionado[playerid] = veh;
         if(VehOculto[veh]) {
-            new restaurados = RestaurarVehiculosJugador(playerid);
-            if(restaurados <= 0) return SendClientMessage(playerid, -1, "Ese vehiculo no pudo restaurarse ahora.");
+            if(!RestaurarVehiculoSeleccionado(playerid, veh)) return SendClientMessage(playerid, -1, "Ese vehiculo no pudo restaurarse ahora.");
             veh = GPSVehiculoSeleccionado[playerid];
             if(veh == INVALID_VEHICLE_ID || !IsValidVehicle(veh)) return SendClientMessage(playerid, -1, "No fue posible restaurar el vehiculo elegido.");
         }
@@ -1793,7 +1895,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         new modeloCultivo = (CultivoTipo[playerid][slot] == 2) ? MODELO_FLOR_OBJ : MODELO_HIERBA_OBJ;
         CultivoObj[playerid][slot] = CreateObject(modeloCultivo, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2], 0.0, 0.0, 0.0, 200.0);
-        CultivoLabel[playerid][slot] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2] + 2.2, 32.0, 0);
+        CultivoLabel[playerid][slot] = Create3DTextLabel("Cultivo en progreso", 0x00FF00FF, CultivoPos[playerid][slot][0], CultivoPos[playerid][slot][1], CultivoPos[playerid][slot][2] + 0.9, 20.0, PlayerInCasa[playerid] + 1);
         ActualizarLabelCultivo(playerid, slot);
 
         if(CultivoTimer[playerid] == -1) CultivoTimer[playerid] = SetTimerEx("ActualizarCultivo", 1000, true, "d", playerid);
@@ -2559,7 +2661,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
                 new Float:vx, Float:vy, Float:vz;
                 GetVehicleVelocity(vehid, vx, vy, vz);
                 SetVehicleVelocity(vehid, vx * 0.2, vy * 0.2, vz);
-                SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a una gasolinera y presiona H para repostar.");
+                SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a una gasolinera y usa /llenar para repostar.");
             }
         }
     } else {
@@ -3008,7 +3110,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoPintura: {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{00CCFF}CP pintura\n{FFFFFF}Conduce aqui y presiona {FFFF00}H", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("{00CCFF}CP pintura\n{FFFFFF}Conduce aqui y usa {FFFF00}/pintar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
         }
         case totalPuntosMovibles: {
             return 1;
@@ -3027,10 +3129,10 @@ stock CrearPuntosFijos() {
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
     if(PlayerAdmin[playerid] >= 1) {
-        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /mover /tp /gotomap /crearcasa /eliminarcasa /ventagas
+        format(texto, sizeof(texto), "{00FF00}Comandos usuario:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{FFAA00}Comandos admin:\n{FFFFFF}/crearparada /crearparadapizza /crearparadabasura /kick /dardinero /dararma /mover /tp /ir /traer /kill /cord /sacarveh /fly /crearcasa /eliminarcasa /ventagas
 (Edicion de tiendas: tecla Y en el punto)");
     } else {
-        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar o retirar dinero.");
+        format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: ve al icono del banco y presiona H para guardar o retirar dinero.");
     }
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
@@ -3337,4 +3439,114 @@ stock RestaurarVehiculosJugador(playerid) {
         restaurados++;
     }
     return restaurados;
+}
+
+stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
+    if(VehOwner[veh] != playerid || !VehOculto[veh]) return false;
+    if(VehModelData[veh] < 400 || VehModelData[veh] > 611) return false;
+
+    new nv = CreateVehicle(VehModelData[veh], VehPosData[veh][0], VehPosData[veh][1], VehPosData[veh][2], VehPosData[veh][3], VehColor1Data[veh], VehColor2Data[veh], 120);
+    if(nv == INVALID_VEHICLE_ID) return false;
+
+    VehOwner[nv] = VehOwner[veh];
+    VehLocked[nv] = VehLocked[veh];
+    VehOculto[nv] = false;
+    VehLastUseTick[nv] = GetTickCount();
+    VehModelData[nv] = VehModelData[veh];
+    VehColor1Data[nv] = VehColor1Data[veh];
+    VehColor2Data[nv] = VehColor2Data[veh];
+    VehPosData[nv][0] = VehPosData[veh][0];
+    VehPosData[nv][1] = VehPosData[veh][1];
+    VehPosData[nv][2] = VehPosData[veh][2];
+    VehPosData[nv][3] = VehPosData[veh][3];
+    GasInitVehiculo[nv] = GasInitVehiculo[veh];
+    GasVehiculo[nv] = GasVehiculo[veh];
+
+    if(CamperOwner[veh] == playerid) {
+        CamperOwner[nv] = CamperOwner[veh];
+        CamperSlotsVeh[nv] = CamperSlotsVeh[veh];
+        CamperHierbaVeh[nv] = CamperHierbaVeh[veh];
+        CamperFloresVeh[nv] = CamperFloresVeh[veh];
+        CamperSemillaHierbaVeh[nv] = CamperSemillaHierbaVeh[veh];
+        CamperSemillaFlorVeh[nv] = CamperSemillaFlorVeh[veh];
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[nv][w] = CamperArmasVeh[veh][w];
+        CamperOwner[veh] = -1;
+        CamperSlotsVeh[veh] = 0;
+        CamperHierbaVeh[veh] = 0;
+        CamperFloresVeh[veh] = 0;
+        CamperSemillaHierbaVeh[veh] = 0;
+        CamperSemillaFlorVeh[veh] = 0;
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[veh][w] = 0;
+    }
+
+    VehOwner[veh] = -1;
+    VehLocked[veh] = false;
+    VehOculto[veh] = false;
+    VehLastUseTick[veh] = 0;
+    VehModelData[veh] = 0;
+    GPSVehiculoSeleccionado[playerid] = nv;
+    return true;
+}
+
+stock ContarCasasJugador(playerid) {
+    new name[MAX_PLAYER_NAME], total;
+    GetPlayerName(playerid, name, sizeof(name));
+    for(new i = 0; i < TotalCasas; i++) {
+        if(strcmp(CasaData[i][cOwner], name) == 0) total++;
+    }
+    return total;
+}
+
+public RestaurarVehiculoTemporal(slot) {
+    if(slot <= 0 || slot >= MAX_VEHICLES) return 1;
+    VehTempRestoreTimer[slot] = -1;
+    if(TempVehModel[slot] < 400 || TempVehModel[slot] > 611) return 1;
+
+    new nv = CreateVehicle(TempVehModel[slot], TempVehPos[slot][0], TempVehPos[slot][1], TempVehPos[slot][2], TempVehPos[slot][3], TempVehColor1[slot], TempVehColor2[slot], 120);
+    if(nv == INVALID_VEHICLE_ID) return 1;
+    SetVehicleVirtualWorld(nv, TempVehVW[slot]);
+    LinkVehicleToInterior(nv, TempVehInterior[slot]);
+
+    VehOwner[nv] = VehOwner[slot];
+    VehLocked[nv] = VehLocked[slot];
+    VehOculto[nv] = false;
+    VehLastUseTick[nv] = GetTickCount();
+    VehModelData[nv] = (VehModelData[slot] != 0) ? VehModelData[slot] : TempVehModel[slot];
+    VehColor1Data[nv] = TempVehColor1[slot];
+    VehColor2Data[nv] = TempVehColor2[slot];
+    VehPosData[nv][0] = TempVehPos[slot][0];
+    VehPosData[nv][1] = TempVehPos[slot][1];
+    VehPosData[nv][2] = TempVehPos[slot][2];
+    VehPosData[nv][3] = TempVehPos[slot][3];
+    GasInitVehiculo[nv] = GasInitVehiculo[slot];
+    GasVehiculo[nv] = GasVehiculo[slot];
+
+    if(CamperOwner[slot] != -1) {
+        CamperOwner[nv] = CamperOwner[slot];
+        CamperSlotsVeh[nv] = CamperSlotsVeh[slot];
+        CamperHierbaVeh[nv] = CamperHierbaVeh[slot];
+        CamperFloresVeh[nv] = CamperFloresVeh[slot];
+        CamperSemillaHierbaVeh[nv] = CamperSemillaHierbaVeh[slot];
+        CamperSemillaFlorVeh[nv] = CamperSemillaFlorVeh[slot];
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[nv][w] = CamperArmasVeh[slot][w];
+        CamperOwner[slot] = -1;
+        CamperSlotsVeh[slot] = 0;
+        CamperHierbaVeh[slot] = 0;
+        CamperFloresVeh[slot] = 0;
+        CamperSemillaHierbaVeh[slot] = 0;
+        CamperSemillaFlorVeh[slot] = 0;
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[slot][w] = 0;
+    }
+
+    VehOwner[slot] = -1;
+    VehLocked[slot] = false;
+    VehOculto[slot] = false;
+    VehLastUseTick[slot] = 0;
+    VehModelData[slot] = 0;
+    TempVehModel[slot] = 0;
+    TempVehColor1[slot] = 0;
+    TempVehColor2[slot] = 0;
+    TempVehVW[slot] = 0;
+    TempVehInterior[slot] = 0;
+    return 1;
 }
