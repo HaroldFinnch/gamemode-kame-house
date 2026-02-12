@@ -85,6 +85,10 @@
 #define PATH_RUTAS_BASURA   "rutas_basurero.txt"
 #define PATH_CASAS          "casas.txt"
 #define PATH_PUNTOS_MOVIBLES "puntos_movibles.txt"
+#define PATH_MINAS "minas.txt"
+#define PATH_HORNOS "hornos.txt"
+#define PATH_CAJAS "cajas_busqueda.txt"
+#define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -126,12 +130,23 @@
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
 #define DIALOG_KAMETIENDA_CONFIRMAR 49
+#define DIALOG_MINERO_MINAR 50
+#define DIALOG_HORNO_MENU 51
+#define DIALOG_ARMERO_MENU 52
+#define DIALOG_ADMIN_MENU 53
+#define DIALOG_ADMIN_DAR_DINERO_ID 54
+#define DIALOG_ADMIN_DAR_DINERO_MONTO 55
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
 #define MODELO_CAMPER 483
 #define MAX_CAMPER_TIPOS 3
 #define MAX_GAS_POINTS 64
+#define MAX_MINAS 128
+#define MAX_HORNOS 64
+#define MAX_CAJAS 128
+#define MAX_PREPIEZA_POINTS 64
+#define PRECIO_MAZO 10000
 
 #define MAX_PLANTAS_POR_JUGADOR 5
 #define BOLSA_OBJ_MODEL 1264
@@ -191,6 +206,22 @@ new InvSemillaHierba[MAX_PLAYERS];
 new InvSemillaFlor[MAX_PLAYERS];
 new InvHierba[MAX_PLAYERS];
 new InvFlor[MAX_PLAYERS];
+new InvMadera[MAX_PLAYERS];
+new InvPiedra[MAX_PLAYERS];
+new InvCobre[MAX_PLAYERS];
+new InvHierroMineral[MAX_PLAYERS];
+new InvPolvora[MAX_PLAYERS];
+new InvPrepieza[MAX_PLAYERS];
+new InvCarbon[MAX_PLAYERS];
+new bool:PlayerTieneMazo[MAX_PLAYERS];
+new MazoDurabilidad[MAX_PLAYERS];
+new ArmeroNivel[MAX_PLAYERS];
+new ArmeroExp[MAX_PLAYERS];
+new bool:MineroTrabajando[MAX_PLAYERS];
+new MineroMinaIndex[MAX_PLAYERS] = {-1, ...};
+new MineroTimer[MAX_PLAYERS] = {-1, ...};
+new HornoActivoJugador[MAX_PLAYERS] = {-1, ...};
+new AdminTargetIdPendiente[MAX_PLAYERS] = {-1, ...};
 new CultivoActivo[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
 new CultivoTipo[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
 new CultivoCantidadBase[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
@@ -332,6 +363,58 @@ new Float:GasPos[MAX_GAS_POINTS][3];
 new GasPickup[MAX_GAS_POINTS];
 new Text3D:GasLabel[MAX_GAS_POINTS] = {Text3D:-1, ...};
 
+enum eMinaData {
+    bool:minaActiva,
+    Float:minaX,
+    Float:minaY,
+    Float:minaZ,
+    minaObj,
+    Text3D:minaLabel
+}
+new MinaData[MAX_MINAS][eMinaData];
+new TotalMinas;
+
+enum eHornoData {
+    bool:hornoActivo,
+    Float:hornoX,
+    Float:hornoY,
+    Float:hornoZ,
+    hornoObj,
+    Text3D:hornoLabel,
+    bool:hornoEnUso,
+    hornoOwner,
+    hornoTipo,
+    hornoCantidadEntrada,
+    hornoCantidadSalida,
+    hornoReadyTick
+}
+new HornoData[MAX_HORNOS][eHornoData];
+new TotalHornos;
+
+enum eCajaData {
+    bool:cajaActiva,
+    Float:cajaX,
+    Float:cajaY,
+    Float:cajaZ,
+    cajaObj,
+    Text3D:cajaLabel
+}
+new CajaDataLoot[MAX_CAJAS][eCajaData];
+new TotalCajas;
+new CajaCooldownTick[MAX_PLAYERS][MAX_CAJAS];
+
+enum ePrepiezaPoint {
+    bool:ppActivo,
+    Float:ppX,
+    Float:ppY,
+    Float:ppZ,
+    ppObj,
+    Text3D:ppLabel
+}
+new PrepiezaPoints[MAX_PREPIEZA_POINTS][ePrepiezaPoint];
+new TotalPrepiezaPoints;
+new PrepiezaCooldownTick[MAX_PLAYERS][MAX_PREPIEZA_POINTS];
+
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
@@ -346,6 +429,18 @@ forward ClearPlayerAnimLock(playerid);
 forward FinalizarRepostaje(playerid);
 forward CheckInactiveVehicles();
 forward RestaurarVehiculoTemporal(slot);
+forward FinalizarMinado(playerid);
+forward FinalizarCajaBusqueda(playerid, cajaidx);
+forward FinalizarHorno(hornoidx);
+stock CargarMinas();
+stock GuardarMinas();
+stock CargarHornos();
+stock GuardarHornos();
+stock CargarCajasLoot();
+stock GuardarCajasLoot();
+stock CargarPrepiezaPoints();
+stock GuardarPrepiezaPoints();
+stock MostrarDialogoAdmin(playerid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
@@ -507,6 +602,10 @@ public OnGameModeInit() {
     if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
     BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
     CargarRutasBasura();
+    CargarMinas();
+    CargarHornos();
+    CargarCajasLoot();
+    CargarPrepiezaPoints();
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -628,6 +727,65 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Sistema de semilleria
     if(IsNearSemilleria(playerid)) {
         ShowSemilleriaMenu(playerid);
+        return 1;
+    }
+
+    // Sistema de minero
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0] + 6.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2])) {
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        MineroTrabajando[playerid] = true;
+        SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la semilleria (KameTienda) y busca minas.");
+        return 1;
+    }
+
+    for(new m = 0; m < TotalMinas; m++) {
+        if(!MinaData[m][minaActiva]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
+        if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de minero primero.");
+        if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en KameTienda.");
+        if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
+        new segs = 15 + random(6);
+        MineroMinaIndex[playerid] = m;
+        TogglePlayerControllable(playerid, false);
+        SetPlayerAttachedObject(playerid, 8, 2226, 6, 0.11, 0.03, 0.00, 0.0, 0.0, 0.0, 0.90, 0.90, 0.90);
+        ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, segs * 1000, t_FORCE_SYNC:SYNC_ALL);
+        MineroTimer[playerid] = SetTimerEx("FinalizarMinado", segs * 1000, false, "d", playerid);
+        new msgm[96]; format(msgm, sizeof(msgm), "[Minero] Minando... tiempo estimado: %d segundos.", segs);
+        SendClientMessage(playerid, 0xFFFF66FF, msgm);
+        return 1;
+    }
+
+    for(new h = 0; h < TotalHornos; h++) {
+        if(!HornoData[h][hornoActivo]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 2.5, HornoData[h][hornoX], HornoData[h][hornoY], HornoData[h][hornoZ])) continue;
+        if(HornoData[h][hornoEnUso] && HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Este horno esta en uso por otro jugador.");
+        HornoActivoJugador[playerid] = h;
+        ShowPlayerDialog(playerid, DIALOG_HORNO_MENU, DIALOG_STYLE_LIST, "Horno", "20 Piedra => 5 Polvora (5 min)\n20 Madera => 5 Carbon (2 min)\nAgregar 1 Carbon (-30s)", "Seleccionar", "Cerrar");
+        return 1;
+    }
+
+    for(new c = 0; c < TotalCajas; c++) {
+        if(!CajaDataLoot[c][cajaActiva]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 2.3, CajaDataLoot[c][cajaX], CajaDataLoot[c][cajaY], CajaDataLoot[c][cajaZ])) continue;
+        if(GetTickCount() < CajaCooldownTick[playerid][c]) return SendClientMessage(playerid, -1, "Esta caja esta en cooldown para ti.");
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
+        SetPlayerAttachedObject(playerid, 7, 2360, 6, 0.08, 0.04, 0.0, 0.0, 0.0, 0.0, 0.65, 0.65, 0.65);
+        SetTimerEx("FinalizarCajaBusqueda", 10000, false, "dd", playerid, c);
+        SendClientMessage(playerid, 0x99FFFFFF, "Buscando en caja... espera 10 segundos.");
+        return 1;
+    }
+
+    for(new pp = 0; pp < TotalPrepiezaPoints; pp++) {
+        if(!PrepiezaPoints[pp][ppActivo]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 2.5, PrepiezaPoints[pp][ppX], PrepiezaPoints[pp][ppY], PrepiezaPoints[pp][ppZ])) continue;
+        if(ArmeroNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes ser armero (minimo nivel 1).");
+        if(GetTickCount() < PrepiezaCooldownTick[playerid][pp]) return SendClientMessage(playerid, -1, "Debes esperar 5 minutos para volver a comprar aqui.");
+        if(GetPlayerMoney(playerid) < 100) return SendClientMessage(playerid, -1, "Necesitas $100.");
+        GivePlayerMoney(playerid, -100);
+        InvPrepieza[playerid] += 2;
+        PrepiezaCooldownTick[playerid][pp] = GetTickCount() + 300000;
+        SendClientMessage(playerid, 0x66FF66FF, "Compraste 2 prepiezas por $100.");
         return 1;
     }
 
@@ -972,7 +1130,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/skills", true)) {
         new str[256];
-        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d\n\n{FFFFFF}Basurero Nivel: {66FF66}%d/%d\n{FFFFFF}Recorridos: {66FF66}%d/%d", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL);
+        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d\n\n{FFFFFF}Basurero Nivel: {66FF66}%d/%d\n{FFFFFF}Recorridos: {66FF66}%d/%d\n\n{FFFFFF}Armero Nivel: {99CCFF}%d/%d\n{FFFFFF}Progreso: {99CCFF}%d/3", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
@@ -1079,7 +1237,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/inventario", true)) {
         new inv[256];
-        format(inv, sizeof(inv), "Semillas: Hierba %d | Flores %d\nConsumo: Hierba %d | Flores %d", InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid]);
+        format(inv, sizeof(inv), "Semillas: Hierba %d | Flores %d\nConsumo: Hierba %d | Flores %d\nMadera:%d Piedra:%d Cobre:%d Hierro:%d\nPolvora:%d Prepieza:%d Carbon:%d\nMazo:%s Durabilidad:%d\nArmero Nivel:%d", InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid], ArmeroNivel[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -1135,7 +1293,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
         if(TrabajandoCamionero[playerid] > 0) {
             CanceladoTrabajo(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
@@ -1147,6 +1305,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(TrabajandoBasurero[playerid] > 0) {
             FinalizarTrabajoBasurero(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de basurero.");
+        }
+        if(MineroTrabajando[playerid]) {
+            MineroTrabajando[playerid] = false;
+            if(MineroTimer[playerid] != -1) { KillTimer(MineroTimer[playerid]); MineroTimer[playerid] = -1; }
+            TogglePlayerControllable(playerid, true);
+            RemovePlayerAttachedObject(playerid, 8);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de minero.");
         }
         return 1;
     }
@@ -1397,6 +1562,60 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/adminarmas", true) || !strcmp(cmd, "/adminarma", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         return SendClientMessage(playerid, -1, "Acercate a la armeria y usa la tecla Y para editar armas.");
+    }
+
+    if(!strcmp(cmd, "/admm", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        return MostrarDialogoAdmin(playerid);
+    }
+
+    if(!strcmp(cmd, "/crearmina", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(TotalMinas >= MAX_MINAS) return SendClientMessage(playerid, -1, "Limite de minas alcanzado.");
+        new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
+        MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
+        MinaData[TotalMinas][minaObj] = CreateObject(2936, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
+        TotalMinas++; GuardarMinas();
+        return SendClientMessage(playerid, 0x00FF00FF, "Mina creada.");
+    }
+
+    if(!strcmp(cmd, "/crearhorno", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(TotalHornos >= MAX_HORNOS) return SendClientMessage(playerid, -1, "Limite de hornos alcanzado.");
+        new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
+        HornoData[TotalHornos][hornoActivo] = true; HornoData[TotalHornos][hornoX] = x; HornoData[TotalHornos][hornoY] = y; HornoData[TotalHornos][hornoZ] = z;
+        HornoData[TotalHornos][hornoObj] = CreateObject(2417, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
+        TotalHornos++; GuardarHornos();
+        return SendClientMessage(playerid, 0x00FF00FF, "Horno creado.");
+    }
+
+    if(!strcmp(cmd, "/crearcaja", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(TotalCajas >= MAX_CAJAS) return SendClientMessage(playerid, -1, "Limite de cajas alcanzado.");
+        new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
+        CajaDataLoot[TotalCajas][cajaActiva] = true; CajaDataLoot[TotalCajas][cajaX] = x; CajaDataLoot[TotalCajas][cajaY] = y; CajaDataLoot[TotalCajas][cajaZ] = z;
+        CajaDataLoot[TotalCajas][cajaObj] = CreateObject(2358, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        CajaDataLoot[TotalCajas][cajaLabel] = Create3DTextLabel("Caja de busqueda\nUsa H", 0xFFFFFFFF, x, y, z + 0.7, 10.0, 0);
+        TotalCajas++; GuardarCajasLoot();
+        return SendClientMessage(playerid, 0x00FF00FF, "Caja creada.");
+    }
+
+    if(!strcmp(cmd, "/crearprepiezas", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(TotalPrepiezaPoints >= MAX_PREPIEZA_POINTS) return SendClientMessage(playerid, -1, "Limite alcanzado.");
+        new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
+        PrepiezaPoints[TotalPrepiezaPoints][ppActivo] = true; PrepiezaPoints[TotalPrepiezaPoints][ppX] = x; PrepiezaPoints[TotalPrepiezaPoints][ppY] = y; PrepiezaPoints[TotalPrepiezaPoints][ppZ] = z;
+        PrepiezaPoints[TotalPrepiezaPoints][ppObj] = CreateObject(1279, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        PrepiezaPoints[TotalPrepiezaPoints][ppLabel] = Create3DTextLabel("Punto de prepiezas\nUsa H", 0x99CCFFFF, x, y, z + 0.6, 10.0, 0);
+        TotalPrepiezaPoints++; GuardarPrepiezaPoints();
+        return SendClientMessage(playerid, 0x00FF00FF, "Punto de prepiezas creado.");
+    }
+
+    if(!strcmp(cmd, "/armero", true)) {
+        ShowPlayerDialog(playerid, DIALOG_ARMERO_MENU, DIALOG_STYLE_LIST, "Trabajo de Armero", "Craft Lvl1\nCraft Lvl3\nCraft Lvl6\nCraft Lvl10", "Abrir", "Cerrar");
+        return 1;
     }
 
     if(!strcmp(cmd, "/mover", true)) {
@@ -1871,8 +2090,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_SEMILLERIA) {
         if(!response) return 1;
-        if(listitem < 0 || listitem > 1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(listitem < 0 || listitem > 2) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         KameTiendaTipoPendiente[playerid] = listitem;
+        if(listitem == 2) {
+            if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
+            GivePlayerMoney(playerid, -PRECIO_MAZO);
+            PlayerTieneMazo[playerid] = true;
+            MazoDurabilidad[playerid] = 35 + random(16);
+            return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
+        }
         ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "KameTienda - Cantidad", "Ingresa la cantidad de semillas que deseas comprar:", "Continuar", "Atras");
         return 1;
     }
@@ -1911,6 +2137,101 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         format(msg, sizeof(msg), "KameTienda: compraste %d semillas de %s por $%d.", cantidad, tipo, total);
         SendClientMessage(playerid, 0x00FF00FF, msg);
         KameTiendaCantidadPendiente[playerid] = 0;
+        return 1;
+    }
+
+    if(dialogid == DIALOG_HORNO_MENU) {
+        if(!response) return 1;
+        new h = HornoActivoJugador[playerid];
+        if(h < 0 || h >= TotalHornos || !HornoData[h][hornoActivo]) return SendClientMessage(playerid, -1, "Horno invalido.");
+        if(listitem == 0) {
+            if(InvPiedra[playerid] < 20) return SendClientMessage(playerid, -1, "Necesitas 20 piedra.");
+            InvPiedra[playerid] -= 20;
+            HornoData[h][hornoEnUso] = true; HornoData[h][hornoOwner] = playerid; HornoData[h][hornoTipo] = 1; HornoData[h][hornoCantidadEntrada] = 20; HornoData[h][hornoCantidadSalida] = 5;
+            HornoData[h][hornoReadyTick] = GetTickCount() + 300000;
+            SetTimerEx("FinalizarHorno", 300000, false, "d", h);
+            return SendClientMessage(playerid, 0xFFAA00FF, "Horno encendido: polvora lista en 5 minutos.");
+        }
+        if(listitem == 1) {
+            if(InvMadera[playerid] < 20) return SendClientMessage(playerid, -1, "Necesitas 20 madera.");
+            InvMadera[playerid] -= 20;
+            HornoData[h][hornoEnUso] = true; HornoData[h][hornoOwner] = playerid; HornoData[h][hornoTipo] = 2; HornoData[h][hornoCantidadEntrada] = 20; HornoData[h][hornoCantidadSalida] = 5;
+            HornoData[h][hornoReadyTick] = GetTickCount() + 120000;
+            SetTimerEx("FinalizarHorno", 120000, false, "d", h);
+            return SendClientMessage(playerid, 0xFFAA00FF, "Horno encendido: carbon listo en 2 minutos.");
+        }
+        if(listitem == 2) {
+            if(!HornoData[h][hornoEnUso]) return SendClientMessage(playerid, -1, "El horno no esta cocinando.");
+            if(HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Solo el dueño puede acelerar.");
+            if(InvCarbon[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes carbon.");
+            InvCarbon[playerid]--;
+            HornoData[h][hornoReadyTick] -= 30000;
+            return SendClientMessage(playerid, 0x66FF66FF, "Agregaste carbon: -30 segundos.");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ARMERO_MENU) {
+        if(!response) return 1;
+        new list[1024];
+        if(listitem == 0) format(list, sizeof(list), "Colt 45\nSilenced Pistol\nDesert Eagle");
+        else if(listitem == 1) format(list, sizeof(list), "Tec-9\nUzi\nMP5");
+        else if(listitem == 2) format(list, sizeof(list), "Shotgun\nSawn-Off\nSPAS-12");
+        else format(list, sizeof(list), "Country Rifle\nSniper Rifle");
+        ShowPlayerDialog(playerid, DIALOG_MINERO_MINAR, DIALOG_STYLE_LIST, "Armero - Selecciona arma", list, "Crear", "Atras");
+        SetPVarInt(playerid, "ArmeroTier", listitem);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_MINERO_MINAR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ARMERO_MENU, DIALOG_STYLE_LIST, "Trabajo de Armero", "Craft Lvl1\nCraft Lvl3\nCraft Lvl6\nCraft Lvl10", "Abrir", "Cerrar");
+        new tier = GetPVarInt(playerid, "ArmeroTier");
+        new reqLvl = (tier == 0) ? 1 : ((tier == 1) ? 3 : ((tier == 2) ? 6 : 10));
+        if(ArmeroNivel[playerid] < reqLvl) return SendClientMessage(playerid, -1, "Tu nivel de armero es insuficiente para este tier.");
+        new needM = 12, needH = 22, needP = 50, needPr = 20, needC = 0;
+        if(tier == 0 && listitem == 1) { needM = 14; needH = 24; needP = 60; needPr = 25; needC = 6; }
+        if(tier == 0 && listitem == 2) { needM = 20; needH = 38; needP = 95; needPr = 35; needC = 12; }
+        if(tier == 1 && listitem == 0) { needM = 18; needH = 22; needP = 85; needPr = 40; needC = 0; }
+        if(tier == 1 && listitem == 1) { needM = 20; needH = 24; needP = 90; needPr = 45; needC = 0; }
+        if(tier == 1 && listitem == 2) { needM = 22; needH = 32; needP = 120; needPr = 55; needC = 12; }
+        if(tier == 2 && listitem == 0) { needM = 28; needH = 38; needP = 130; needPr = 50; needC = 0; }
+        if(tier == 2 && listitem == 1) { needM = 24; needH = 34; needP = 120; needPr = 45; needC = 0; }
+        if(tier == 2 && listitem == 2) { needM = 34; needH = 48; needP = 160; needPr = 65; needC = 18; }
+        if(tier == 3 && listitem == 0) { needM = 38; needH = 45; needP = 150; needPr = 60; needC = 0; }
+        if(tier == 3 && listitem == 1) { needM = 48; needH = 65; needP = 230; needPr = 95; needC = 28; }
+        if(InvMadera[playerid] < needM || InvHierroMineral[playerid] < needH || InvPolvora[playerid] < needP || InvPrepieza[playerid] < needPr || InvCobre[playerid] < needC) return SendClientMessage(playerid, -1, "No tienes materiales suficientes.");
+        InvMadera[playerid] -= needM; InvHierroMineral[playerid] -= needH; InvPolvora[playerid] -= needP; InvPrepieza[playerid] -= needPr; InvCobre[playerid] -= needC;
+        ArmeroExp[playerid]++;
+        if(ArmeroExp[playerid] >= 3 && ArmeroNivel[playerid] < NIVEL_MAX_TRABAJO) { ArmeroExp[playerid] = 0; ArmeroNivel[playerid]++; }
+        SendClientMessage(playerid, 0x66FF66FF, "Arma creada con exito. Subes armero creando armas.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_MENU) {
+        if(!response) return 1;
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
+        if(listitem == 1) return OnPlayerCommandText(playerid, "/mover");
+        if(listitem == 2) return OnPlayerCommandText(playerid, "/creargas");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Nuevos comandos", "/crearmina /crearhorno /crearcaja /crearprepiezas", "Cerrar", "");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_DAR_DINERO_ID) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        AdminTargetIdPendiente[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_MONTO, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa el monto", "Dar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_DAR_DINERO_MONTO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
+        new amount = strval(inputtext);
+        new id = AdminTargetIdPendiente[playerid];
+        if(amount <= 0 || !IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Datos invalidos.");
+        GivePlayerMoney(id, amount);
+        SendClientMessage(playerid, 0x00FF00FF, "Dinero entregado correctamente.");
         return 1;
     }
 
@@ -3062,7 +3383,7 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
-    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores");
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)");
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "KameTienda", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -3630,3 +3951,106 @@ public RestaurarVehiculoTemporal(slot) {
     TempVehInterior[slot] = 0;
     return 1;
 }
+
+
+public FinalizarMinado(playerid) {
+    if(!IsPlayerConnected(playerid)) return 1;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    RemovePlayerAttachedObject(playerid, 8);
+    MineroTimer[playerid] = -1;
+    if(MineroMinaIndex[playerid] < 0) return 1;
+    new piedra = 1 + random(7), cobre = random(5), hierro = random(4);
+    if(cobre == 0 && random(100) < 35) cobre = 1;
+    if(hierro == 0 && random(100) < 22) hierro = 1;
+    InvPiedra[playerid] += piedra;
+    InvCobre[playerid] += cobre;
+    InvHierroMineral[playerid] += hierro;
+    if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid]--;
+    if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
+    new msg[144];
+    format(msg, sizeof(msg), "[Minero] Obtienes Piedra:%d Cobre:%d Hierro:%d", piedra, cobre, hierro);
+    SendClientMessage(playerid, 0x66FF66FF, msg);
+    return 1;
+}
+
+public FinalizarCajaBusqueda(playerid, cajaidx) {
+    if(!IsPlayerConnected(playerid)) return 1;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    RemovePlayerAttachedObject(playerid, 7);
+    if(cajaidx < 0 || cajaidx >= TotalCajas) return 1;
+    CajaCooldownTick[playerid][cajaidx] = GetTickCount() + 300000;
+    new madera = 2 + random(4), prep = 2 + random(4), dinero = 1000 + random(1001), pol = 0, piedra = random(4), cobre = 0, hierro = 0;
+    if(random(100) < 22) pol = 1 + random(2);
+    if(random(100) < 35) cobre = 1 + random(2);
+    if(random(100) < 22) hierro = 1 + random(2);
+    InvMadera[playerid] += madera; InvPrepieza[playerid] += prep; InvPolvora[playerid] += pol; InvPiedra[playerid] += piedra; InvCobre[playerid] += cobre; InvHierroMineral[playerid] += hierro;
+    GivePlayerMoney(playerid, dinero);
+    new out[200];
+    format(out, sizeof(out), "[Caja] Encontraste madera:%d prepiezas:%d dinero:$%d polvora:%d piedra:%d cobre:%d hierro:%d", madera, prep, dinero, pol, piedra, cobre, hierro);
+    SendClientMessage(playerid, 0xFFFFFFFF, out);
+    if(CajaDataLoot[cajaidx][cajaObj] != 0) DestroyObject(CajaDataLoot[cajaidx][cajaObj]);
+    CajaDataLoot[cajaidx][cajaObj] = CreateObject(2359, CajaDataLoot[cajaidx][cajaX], CajaDataLoot[cajaidx][cajaY], CajaDataLoot[cajaidx][cajaZ] - 1.0, 0.0, 0.0, 0.0);
+    SetTimerEx("FinalizarHorno", 300000, false, "d", -1000 - cajaidx);
+    return 1;
+}
+
+public FinalizarHorno(hornoidx) {
+    if(hornoidx <= -1000) {
+        new cidx = -1000 - hornoidx;
+        if(cidx >= 0 && cidx < TotalCajas && CajaDataLoot[cidx][cajaActiva]) { if(CajaDataLoot[cidx][cajaObj] != 0) DestroyObject(CajaDataLoot[cidx][cajaObj]); CajaDataLoot[cidx][cajaObj] = CreateObject(2358, CajaDataLoot[cidx][cajaX], CajaDataLoot[cidx][cajaY], CajaDataLoot[cidx][cajaZ] - 1.0, 0.0, 0.0, 0.0); }
+        return 1;
+    }
+    if(hornoidx < 0 || hornoidx >= TotalHornos || !HornoData[hornoidx][hornoActivo] || !HornoData[hornoidx][hornoEnUso]) return 1;
+    new owner = HornoData[hornoidx][hornoOwner];
+    if(IsPlayerConnected(owner)) {
+        if(HornoData[hornoidx][hornoTipo] == 1) InvPolvora[owner] += HornoData[hornoidx][hornoCantidadSalida];
+        else InvCarbon[owner] += HornoData[hornoidx][hornoCantidadSalida];
+        SendClientMessage(owner, 0x66FF66FF, "Tu horno termino la coccion.");
+    }
+    HornoData[hornoidx][hornoEnUso] = false;
+    HornoData[hornoidx][hornoOwner] = INVALID_PLAYER_ID;
+    HornoData[hornoidx][hornoTipo] = 0;
+    return 1;
+}
+
+stock MostrarDialogoAdmin(playerid) {
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nMover puntos\nCrear gasolinera\nSistemas nuevos", "Abrir", "Cerrar");
+    return 1;
+}
+
+stock GuardarMinas() {
+    new File:h = fopen(PATH_MINAS, io_write);
+    if(!h) return 0;
+    new line[96];
+    for(new i = 0; i < TotalMinas; i++) { if(!MinaData[i][minaActiva]) continue; format(line, sizeof(line), "%f %f %f\n", MinaData[i][minaX], MinaData[i][minaY], MinaData[i][minaZ]); fwrite(h, line); }
+    fclose(h);
+    return 1;
+}
+stock CargarMinas() {
+    new File:h = fopen(PATH_MINAS, io_read), line[96];
+    if(!h) return 0;
+    TotalMinas = 0;
+    while(fread(h, line) && TotalMinas < MAX_MINAS) {
+        new idx, Float:x = floatstr(strtok(line, idx)), Float:y = floatstr(strtok(line, idx)), Float:z = floatstr(strtok(line, idx));
+        MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
+        MinaData[TotalMinas][minaObj] = CreateObject(2936, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
+        TotalMinas++;
+    }
+    fclose(h);
+    return 1;
+}
+stock GuardarHornos() {
+    new File:h = fopen(PATH_HORNOS, io_write); if(!h) return 0; new line[96];
+    for(new i = 0; i < TotalHornos; i++) { if(!HornoData[i][hornoActivo]) continue; format(line, sizeof(line), "%f %f %f\n", HornoData[i][hornoX], HornoData[i][hornoY], HornoData[i][hornoZ]); fwrite(h, line); } fclose(h); return 1;
+}
+stock CargarHornos() {
+    new File:h = fopen(PATH_HORNOS, io_read), line[96]; if(!h) return 0; TotalHornos = 0;
+    while(fread(h, line) && TotalHornos < MAX_HORNOS) { new idx, Float:x=floatstr(strtok(line, idx)), Float:y=floatstr(strtok(line, idx)), Float:z=floatstr(strtok(line, idx)); HornoData[TotalHornos][hornoActivo]=true; HornoData[TotalHornos][hornoX]=x; HornoData[TotalHornos][hornoY]=y; HornoData[TotalHornos][hornoZ]=z; HornoData[TotalHornos][hornoObj]=CreateObject(2417, x, y, z-1.0, 0.0,0.0,0.0); HornoData[TotalHornos][hornoLabel]=Create3DTextLabel("Horno\nUsa H",0xFFAA00FF,x,y,z+0.8,12.0,0); TotalHornos++; } fclose(h); return 1;
+}
+stock GuardarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalCajas;i++){ if(!CajaDataLoot[i][cajaActiva]) continue; format(line,sizeof(line),"%f %f %f\n",CajaDataLoot[i][cajaX],CajaDataLoot[i][cajaY],CajaDataLoot[i][cajaZ]); fwrite(h,line);} fclose(h); return 1; }
+stock CargarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_read), line[96]; if(!h) return 0; TotalCajas=0; while(fread(h,line) && TotalCajas<MAX_CAJAS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); CajaDataLoot[TotalCajas][cajaActiva]=true; CajaDataLoot[TotalCajas][cajaX]=x; CajaDataLoot[TotalCajas][cajaY]=y; CajaDataLoot[TotalCajas][cajaZ]=z; CajaDataLoot[TotalCajas][cajaObj]=CreateObject(2358,x,y,z-1.0,0.0,0.0,0.0); CajaDataLoot[TotalCajas][cajaLabel]=Create3DTextLabel("Caja de busqueda\nUsa H",0xFFFFFFFF,x,y,z+0.7,10.0,0); TotalCajas++; } fclose(h); return 1; }
+stock GuardarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalPrepiezaPoints;i++){ if(!PrepiezaPoints[i][ppActivo]) continue; format(line,sizeof(line),"%f %f %f\n",PrepiezaPoints[i][ppX],PrepiezaPoints[i][ppY],PrepiezaPoints[i][ppZ]); fwrite(h,line);} fclose(h); return 1;}
+stock CargarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_read),line[96]; if(!h) return 0; TotalPrepiezaPoints=0; while(fread(h,line) && TotalPrepiezaPoints<MAX_PREPIEZA_POINTS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); PrepiezaPoints[TotalPrepiezaPoints][ppActivo]=true; PrepiezaPoints[TotalPrepiezaPoints][ppX]=x; PrepiezaPoints[TotalPrepiezaPoints][ppY]=y; PrepiezaPoints[TotalPrepiezaPoints][ppZ]=z; PrepiezaPoints[TotalPrepiezaPoints][ppObj]=CreateObject(1279,x,y,z-1.0,0.0,0.0,0.0); PrepiezaPoints[TotalPrepiezaPoints][ppLabel]=Create3DTextLabel("Punto de prepiezas\nUsa H",0x99CCFFFF,x,y,z+0.6,10.0,0); TotalPrepiezaPoints++; } fclose(h); return 1; }
