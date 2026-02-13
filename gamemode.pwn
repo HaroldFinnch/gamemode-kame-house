@@ -144,6 +144,10 @@
 #define DIALOG_PRENDAS_MENU 60
 #define DIALOG_PRENDAS_EDITAR 61
 #define DIALOG_PRENDAS_BONE 62
+#define DIALOG_PRENDA_USUARIO_MENU 63
+#define DIALOG_PRENDA_USUARIO_EDITAR 64
+#define DIALOG_ADMIN_ARMAS_EDITAR 65
+#define DIALOG_ADMIN_ARMAS_PRECIO 66
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -155,6 +159,7 @@
 #define MAX_CAJAS 128
 #define MAX_PREPIEZA_POINTS 64
 #define MAX_PRENDAS 8
+#define MAX_PRENDAS_USUARIO 5
 #define PRECIO_MAZO 10000
 
 #define MAX_PLANTAS_POR_JUGADOR 5
@@ -326,7 +331,19 @@ new PrendaEditIndex[MAX_PLAYERS] = {-1, ...};
 new PrendaMoveIndex[MAX_PLAYERS] = {-1, ...};
 new PrendaBonePendiente[MAX_PLAYERS] = {-1, ...};
 new PrendaPrecioPendiente[MAX_PLAYERS] = {-1, ...};
+new PrendaUsuarioEditando[MAX_PLAYERS] = {-1, ...};
+new ArmeriaAdminItemEditando[MAX_PLAYERS] = {-1, ...};
 new PlayerPrendaActiva[MAX_PLAYERS][MAX_PRENDAS];
+new PlayerPrendaBone[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaOffX[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaOffY[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaOffZ[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaRotX[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaRotY[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaRotZ[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaScaleX[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaScaleY[MAX_PLAYERS][MAX_PRENDAS];
+new Float:PlayerPrendaScaleZ[MAX_PLAYERS][MAX_PRENDAS];
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -580,6 +597,9 @@ stock ShowPrendasMenu(playerid);
 stock AplicarPrendaJugador(playerid, idx);
 stock QuitarPrendaJugador(playerid, idx);
 stock ShowPrendasAdminEditar(playerid, idx);
+stock ShowPrendaUsuarioMenu(playerid);
+stock ShowPrendaUsuarioEditar(playerid, idx);
+stock ContarPrendasJugador(playerid);
 stock GetPrendaBoneName(bone, dest[], len);
 stock IsNearPrendas(playerid);
 stock ShowVentaAutosRemoveMenu(playerid);
@@ -714,6 +734,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearCamperPoint(playerid)) return SendClientMessage(playerid, 0xFFAA00FF, "Sistema de campers deshabilitado.");
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
+        if(IsNearPrendas(playerid)) return ShowPrendasAdminEditar(playerid, -1);
     }
 
     if((newkeys & KEY_LOOK_BEHIND)) { // Tecla B
@@ -819,6 +840,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
         new segs = 15 + random(6);
         MineroMinaIndex[playerid] = m;
+        MineroDuracionActual[playerid] = segs;
         TogglePlayerControllable(playerid, false);
         SetPlayerAttachedObject(playerid, 8, 19631, 6, 0.11, 0.03, 0.00, 0.0, 0.0, 0.0, 0.90, 0.90, 0.90);
         ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, segs * 1000, t_FORCE_SYNC:SYNC_ALL);
@@ -1664,7 +1686,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(TotalMinas >= MAX_MINAS) return SendClientMessage(playerid, -1, "Limite de minas alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
-        MinaData[TotalMinas][minaObj] = CreateObject(2936, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
         MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
         TotalMinas++; GuardarMinas();
@@ -1712,6 +1734,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/prendas", true)) {
         if(!IsNearPrendas(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el icono de Prendas Kame House.");
         ShowPrendasMenu(playerid);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/prenda", true)) {
+        ShowPrendaUsuarioMenu(playerid);
         return 1;
     }
 
@@ -2205,7 +2232,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
             GivePlayerMoney(playerid, -PRECIO_MAZO);
             PlayerTieneMazo[playerid] = true;
-            MazoDurabilidad[playerid] = 35 + random(16);
+            MazoDurabilidad[playerid] = 120 + random(61);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
         }
         ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "KameTienda - Cantidad", "Ingresa la cantidad de semillas que deseas comprar:", "Continuar", "Atras");
@@ -2251,21 +2278,24 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_PRENDAS_MENU) {
         if(!response) return 1;
-        if(listitem < 0 || listitem >= MAX_PRENDAS || !PrendasData[listitem][prendaActiva]) return SendClientMessage(playerid, -1, "Prenda invalida.");
-
-        if(PlayerAdmin[playerid] >= 1 && IsNearPrendas(playerid) && listitem == 0 && !strcmp(PrendasData[listitem][prendaNombre], "[ADMIN] Editar prendas", true)) {
-            return ShowPrendasAdminEditar(playerid, -1);
+        new idxPrenda = -1, cur;
+        for(new i = 0; i < MAX_PRENDAS; i++) {
+            if(!PrendasData[i][prendaActiva]) continue;
+            if(cur == listitem) { idxPrenda = i; break; }
+            cur++;
         }
+        if(idxPrenda == -1) return SendClientMessage(playerid, -1, "Prenda invalida.");
 
-        if(PlayerPrendaActiva[playerid][listitem]) {
-            QuitarPrendaJugador(playerid, listitem);
+        if(PlayerPrendaActiva[playerid][idxPrenda]) {
+            QuitarPrendaJugador(playerid, idxPrenda);
             return SendClientMessage(playerid, 0xFFAA00FF, "Te quitaste esa prenda.");
         }
 
-        if(GetPlayerMoney(playerid) < PrendasData[listitem][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        GivePlayerMoney(playerid, -PrendasData[listitem][prendaPrecio]);
-        PlayerPrendaActiva[playerid][listitem] = 1;
-        AplicarPrendaJugador(playerid, listitem);
+        if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas equipadas.");
+        if(GetPlayerMoney(playerid) < PrendasData[idxPrenda][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+        GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
+        PlayerPrendaActiva[playerid][idxPrenda] = 1;
+        AplicarPrendaJugador(playerid, idxPrenda);
         SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
         return 1;
     }
@@ -2302,23 +2332,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return ShowPrendasAdminEditar(playerid, idxp);
         }
         if(listitem == 1) {
-            ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_INPUT, "Prendas Admin - Precio", "Ingresa el nuevo precio:", "Guardar", "Atras");
-            PrendaPrecioPendiente[playerid] = idxp;
-            return 1;
-        }
-        if(listitem == 2) {
-            ShowPlayerDialog(playerid, DIALOG_PRENDAS_BONE, DIALOG_STYLE_LIST, "Selecciona parte del cuerpo", "Cabeza\nPecho\nEspalda\nBrazo izquierdo\nBrazo derecho\nMano izquierda\nMano derecha\nMuslo izquierdo\nMuslo derecho\nPie izquierdo\nPie derecho", "Elegir", "Atras");
-            PrendaBonePendiente[playerid] = idxp;
-            return 1;
-        }
-        if(listitem == 3) {
-            PrendaMoveIndex[playerid] = idxp;
-            SendClientMessage(playerid, 0x00FFFFFF, "Usa /editarobjeto para mover/rotar la prenda en tu skin.");
-            AplicarPrendaJugador(playerid, idxp);
-            EditAttachedObject(playerid, idxp);
-            return 1;
-        }
-        if(listitem == 4) {
             ShowPrendasAdminEditar(playerid, -1);
             return 1;
         }
@@ -2326,14 +2339,58 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
     if(dialogid == DIALOG_PRENDAS_BONE) {
-        if(!response) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
         new idxp = PrendaBonePendiente[playerid];
         if(idxp < 0 || idxp >= MAX_PRENDAS) return 1;
+        if(!response) {
+            if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
+            return ShowPrendaUsuarioEditar(playerid, idxp);
+        }
         new bones[] = {1,2,3,4,5,6,7,8,9,10,11};
         if(listitem < 0 || listitem >= sizeof(bones)) return 1;
-        PrendasData[idxp][prendaBone] = bones[listitem];
-        GuardarPrendasConfig();
-        return ShowPrendasAdminEditar(playerid, idxp);
+        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1) {
+            PrendasData[idxp][prendaBone] = bones[listitem];
+            GuardarPrendasConfig();
+            return ShowPrendasAdminEditar(playerid, idxp);
+        }
+        PlayerPrendaBone[playerid][idxp] = bones[listitem];
+        AplicarPrendaJugador(playerid, idxp);
+        return ShowPrendaUsuarioEditar(playerid, idxp);
+    }
+
+
+    if(dialogid == DIALOG_PRENDA_USUARIO_MENU) {
+        if(!response) return 1;
+        new idxp = -1, cur;
+        for(new i = 0; i < MAX_PRENDAS; i++) {
+            if(!PlayerPrendaActiva[playerid][i]) continue;
+            if(cur == listitem) { idxp = i; break; }
+            cur++;
+        }
+        if(idxp == -1) return SendClientMessage(playerid, -1, "Prenda invalida.");
+        return ShowPrendaUsuarioEditar(playerid, idxp);
+    }
+
+    if(dialogid == DIALOG_PRENDA_USUARIO_EDITAR) {
+        if(!response) return ShowPrendaUsuarioMenu(playerid);
+        new idxp = PrendaUsuarioEditando[playerid];
+        if(idxp < 0 || idxp >= MAX_PRENDAS || !PlayerPrendaActiva[playerid][idxp]) return 1;
+        if(listitem == 0) {
+            PrendaMoveIndex[playerid] = idxp;
+            AplicarPrendaJugador(playerid, idxp);
+            EditAttachedObject(playerid, idxp);
+            return 1;
+        }
+        if(listitem == 1) {
+            PrendaBonePendiente[playerid] = idxp;
+            ShowPlayerDialog(playerid, DIALOG_PRENDAS_BONE, DIALOG_STYLE_LIST, "Selecciona parte del cuerpo", "Cabeza\nPecho\nEspalda\nBrazo izquierdo\nBrazo derecho\nMano izquierda\nMano derecha\nMuslo izquierdo\nMuslo derecho\nPie izquierdo\nPie derecho", "Elegir", "Atras");
+            return 1;
+        }
+        if(listitem == 2) {
+            QuitarPrendaJugador(playerid, idxp);
+            SendClientMessage(playerid, 0xFFAA00FF, "Prenda eliminada permanentemente de tu personaje.");
+            return ShowPrendaUsuarioMenu(playerid);
+        }
+        return 1;
     }
 
     if(dialogid == DIALOG_HORNO_MENU) {
@@ -2569,8 +2626,21 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_ARMAS_MENU) {
         if(!response) return 1;
-        ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD_ID, DIALOG_STYLE_INPUT, "Admin Armas - Paso 1", "Ingresa el ID del arma a agregar:", "Siguiente", "Atras");
-        return 1;
+        if(listitem == 0) {
+            ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD_ID, DIALOG_STYLE_INPUT, "Admin Armas - Paso 1", "Ingresa el ID del arma a agregar:", "Siguiente", "Atras");
+            return 1;
+        }
+        new body[1024], line[128], nombreArma[32], count;
+        body[0] = EOS;
+        for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+            if(!ArmeriaItems[i][aiActiva]) continue;
+            GetWeaponNameGM(ArmeriaItems[i][aiArma], nombreArma, sizeof(nombreArma));
+            format(line, sizeof(line), "%d) %s | Arma:$%d | %s\n", i, nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiStockArma] > 0 ? "DISPONIBLE" : "NO DISPONIBLE");
+            strcat(body, line);
+            count++;
+        }
+        if(count == 0) return SendClientMessage(playerid, -1, "No hay armas cargadas para editar.");
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_EDITAR, DIALOG_STYLE_LIST, "Admin Armas - Editar", body, "Editar", "Atras");
     }
 
     if(dialogid == DIALOG_ADMIN_ARMAS_ADD_ID) {
@@ -2586,6 +2656,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return ShowAdminArmasMenu(playerid);
         new precioArma = strval(inputtext);
         if(precioArma <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        if(GetPVarInt(playerid, "AdminEditArmaPrecio") == 1) {
+            DeletePVar(playerid, "AdminEditArmaPrecio");
+            new item = ArmeriaAdminItemEditando[playerid];
+            if(item < 0 || item >= MAX_ARMAS_TIENDA || !ArmeriaItems[item][aiActiva]) return SendClientMessage(playerid, -1, "Item invalido.");
+            ArmeriaItems[item][aiPrecioArma] = precioArma;
+            SendClientMessage(playerid, 0x00FF00FF, "Precio de arma actualizado.");
+            return ShowAdminArmasMenu(playerid);
+        }
         SetPVarInt(playerid, "AdminArmaPrecio", precioArma);
         ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD_STOCK, DIALOG_STYLE_INPUT, "Admin Armas - Paso 3", "Ingresa el stock inicial del arma:", "Guardar", "Atras");
         return 1;
@@ -2618,6 +2696,29 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         DeletePVar(playerid, "AdminArmaPrecio");
         SendClientMessage(playerid, -1, "No hay mas espacio en la tienda de armas.");
+        return ShowAdminArmasMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_ADMIN_ARMAS_EDITAR) {
+        if(!response) return ShowAdminArmasMenu(playerid);
+        new item = GetArmeriaItemByListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Item invalido.");
+        ArmeriaAdminItemEditando[playerid] = item;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_PRECIO, DIALOG_STYLE_LIST, "Admin Armas - Accion", "Cambiar precio\nAlternar disponibilidad", "Elegir", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_ARMAS_PRECIO) {
+        if(!response) return ShowAdminArmasMenu(playerid);
+        new item = ArmeriaAdminItemEditando[playerid];
+        if(item < 0 || item >= MAX_ARMAS_TIENDA || !ArmeriaItems[item][aiActiva]) return SendClientMessage(playerid, -1, "Item invalido.");
+        if(listitem == 0) {
+            ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD_PRECIO, DIALOG_STYLE_INPUT, "Admin Armas - Precio", "Ingresa nuevo precio para el arma:", "Guardar", "Atras");
+            SetPVarInt(playerid, "AdminEditArmaPrecio", 1);
+            return 1;
+        }
+        if(ArmeriaItems[item][aiStockArma] > 0) ArmeriaItems[item][aiStockArma] = 0;
+        else ArmeriaItems[item][aiStockArma] = 1;
+        SendClientMessage(playerid, 0x00FF00FF, "Disponibilidad de arma actualizada.");
         return ShowAdminArmasMenu(playerid);
     }
 
@@ -3489,7 +3590,8 @@ stock ShowArmeriaMunicionDisponible(playerid) {
 }
 
 stock ShowAdminArmasMenu(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma (ID + stock)", "Seleccionar", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma (ID + stock)
+Editar precio/disponibilidad", "Seleccionar", "Cerrar");
     return 1;
 }
 
@@ -3791,7 +3893,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoLabel[punto] = Create3DTextLabel("{CCCCCC}Trabajo minero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoPrendas: {
-            PuntoPickup[punto] = CreatePickup(1526, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoPickup[punto] = CreatePickup(2704, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{00CCFF}Prendas Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case totalPuntosMovibles: {
@@ -4240,7 +4342,10 @@ public FinalizarMinado(playerid) {
     InvPiedra[playerid] += piedra;
     InvCobre[playerid] += cobre;
     InvHierroMineral[playerid] += hierro;
-    if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid]--;
+    new desgaste = MineroDuracionActual[playerid] / 8;
+    if(desgaste < 1) desgaste = 1;
+    if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid] -= desgaste;
+    MineroDuracionActual[playerid] = 0;
     if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
     new msg[144];
     MineroCooldownTick[playerid][MineroMinaIndex[playerid]] = GetTickCount() + 180000;
@@ -4360,7 +4465,7 @@ stock CargarMinas() {
     while(fread(h, line) && TotalMinas < MAX_MINAS) {
         new idx, Float:x = floatstr(strtok(line, idx)), Float:y = floatstr(strtok(line, idx)), Float:z = floatstr(strtok(line, idx));
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
-        MinaData[TotalMinas][minaObj] = CreateObject(2936, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
         MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
         TotalMinas++;
@@ -4371,7 +4476,7 @@ stock CargarMinas() {
 
 stock AplicarTexturaMinaEstatica(objectid) {
     if(objectid == 0) return 0;
-    SetObjectMaterial(objectid, 0, 16131, "des_rockgp2", "des_rockgp2_17", 0xFFFFFFFF);
+    // Modelo 748 (sm_scrb_grp1) ya incluye la textura objetivo.
     return 1;
 }
 
@@ -4433,7 +4538,7 @@ stock CrearPrendasDefault() {
     }
     PrendasData[0][prendaActiva] = true;
     format(PrendasData[0][prendaNombre], 32, "[ADMIN] Editar prendas");
-    PrendasData[0][prendaModelo] = 18926;
+    PrendasData[0][prendaModelo] = 2704;
     PrendasData[0][prendaPrecio] = 0;
     PrendasData[1][prendaActiva] = true;
     format(PrendasData[1][prendaNombre], 32, "Cadena Kame");
@@ -4492,12 +4597,13 @@ stock ShowPrendasMenu(playerid) {
     new list[1024], line[128];
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
-        if(!PrendasData[i][prendaActiva]) format(line, sizeof(line), "%s - NO DISPONIBLE", PrendasData[i][prendaNombre]);
-        else format(line, sizeof(line), "%s - $%d", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio]);
+        if(!PrendasData[i][prendaActiva]) continue;
+        format(line, sizeof(line), "%s - $%d", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio]);
         if(PlayerPrendaActiva[playerid][i]) strcat(line, " (EQUIPADA)");
         if(strlen(list) > 0) strcat(list, "\n");
         strcat(list, line);
     }
+    if(!strlen(list)) return SendClientMessage(playerid, -1, "No hay prendas disponibles en este momento.");
     ShowPlayerDialog(playerid, DIALOG_PRENDAS_MENU, DIALOG_STYLE_LIST, "Prendas Kame House", list, "Seleccionar", "Cerrar");
     return 1;
 }
@@ -4516,13 +4622,23 @@ stock ShowPrendasAdminEditar(playerid, idx) {
     }
     new body[256], boneName[32];
     GetPrendaBoneName(PrendasData[idx][prendaBone], boneName, sizeof(boneName));
-    format(body, sizeof(body), "Activar/Desactivar (actual: %s)\nCambiar precio (actual: $%d)\nCambiar parte del cuerpo (actual: %s)\nEditar posicion/rotacion\nVolver", PrendasData[idx][prendaActiva] ? "ON" : "OFF", PrendasData[idx][prendaPrecio], boneName);
+    format(body, sizeof(body), "Activar/Desactivar (actual: %s)\nVolver", PrendasData[idx][prendaActiva] ? "ON" : "OFF");
     return ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_LIST, "Prendas Admin - Editar", body, "Seleccionar", "Cerrar");
 }
 
 stock AplicarPrendaJugador(playerid, idx) {
     if(idx < 0 || idx >= MAX_PRENDAS) return 0;
-    SetPlayerAttachedObject(playerid, idx, PrendasData[idx][prendaModelo], PrendasData[idx][prendaBone], PrendasData[idx][prendaOffX], PrendasData[idx][prendaOffY], PrendasData[idx][prendaOffZ], PrendasData[idx][prendaRotX], PrendasData[idx][prendaRotY], PrendasData[idx][prendaRotZ], PrendasData[idx][prendaScaleX], PrendasData[idx][prendaScaleY], PrendasData[idx][prendaScaleZ]);
+    new bone = PlayerPrendaBone[playerid][idx] > 0 ? PlayerPrendaBone[playerid][idx] : PrendasData[idx][prendaBone];
+    new Float:offX = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaOffX[playerid][idx] : PrendasData[idx][prendaOffX];
+    new Float:offY = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaOffY[playerid][idx] : PrendasData[idx][prendaOffY];
+    new Float:offZ = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaOffZ[playerid][idx] : PrendasData[idx][prendaOffZ];
+    new Float:rotX = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaRotX[playerid][idx] : PrendasData[idx][prendaRotX];
+    new Float:rotY = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaRotY[playerid][idx] : PrendasData[idx][prendaRotY];
+    new Float:rotZ = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaRotZ[playerid][idx] : PrendasData[idx][prendaRotZ];
+    new Float:scX = PlayerPrendaScaleX[playerid][idx] > 0.0 ? PlayerPrendaScaleX[playerid][idx] : PrendasData[idx][prendaScaleX];
+    new Float:scY = PlayerPrendaScaleY[playerid][idx] > 0.0 ? PlayerPrendaScaleY[playerid][idx] : PrendasData[idx][prendaScaleY];
+    new Float:scZ = PlayerPrendaScaleZ[playerid][idx] > 0.0 ? PlayerPrendaScaleZ[playerid][idx] : PrendasData[idx][prendaScaleZ];
+    SetPlayerAttachedObject(playerid, idx, PrendasData[idx][prendaModelo], bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
     return 1;
 }
 
@@ -4551,20 +4667,58 @@ stock GetPrendaBoneName(bone, dest[], len) {
     return 1;
 }
 
+
+stock ContarPrendasJugador(playerid) {
+    new total;
+    for(new i = 0; i < MAX_PRENDAS; i++) if(PlayerPrendaActiva[playerid][i]) total++;
+    return total;
+}
+
+stock ShowPrendaUsuarioMenu(playerid) {
+    new list[1024], line[128], count;
+    list[0] = EOS;
+    for(new i = 0; i < MAX_PRENDAS; i++) {
+        if(!PlayerPrendaActiva[playerid][i]) continue;
+        format(line, sizeof(line), "%d) %s", i, PrendasData[i][prendaNombre]);
+        if(strlen(list) > 0) strcat(list, "\n");
+        strcat(list, line);
+        count++;
+    }
+    if(count == 0) return SendClientMessage(playerid, -1, "No tienes prendas equipadas para editar.");
+    return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_MENU, DIALOG_STYLE_LIST, "Mis prendas", list, "Editar", "Cerrar");
+}
+
+stock ShowPrendaUsuarioEditar(playerid, idx) {
+    PrendaUsuarioEditando[playerid] = idx;
+    return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_EDITAR, DIALOG_STYLE_LIST, "Editar prenda", "Editar posicion/rotacion\nCambiar parte del cuerpo\nEliminar permanentemente", "Elegir", "Atras");
+}
+
 public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, modelid, boneid, Float:fOffsetX, Float:fOffsetY, Float:fOffsetZ, Float:fRotX, Float:fRotY, Float:fRotZ, Float:fScaleX, Float:fScaleY, Float:fScaleZ) {
     #pragma unused modelid
     #pragma unused boneid
     if(response == EDIT_RESPONSE_FINAL && PrendaMoveIndex[playerid] == index && index >= 0 && index < MAX_PRENDAS) {
-        PrendasData[index][prendaOffX] = fOffsetX;
-        PrendasData[index][prendaOffY] = fOffsetY;
-        PrendasData[index][prendaOffZ] = fOffsetZ;
-        PrendasData[index][prendaRotX] = fRotX;
-        PrendasData[index][prendaRotY] = fRotY;
-        PrendasData[index][prendaRotZ] = fRotZ;
-        PrendasData[index][prendaScaleX] = fScaleX;
-        PrendasData[index][prendaScaleY] = fScaleY;
-        PrendasData[index][prendaScaleZ] = fScaleZ;
-        GuardarPrendasConfig();
+        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] == index) {
+            PrendasData[index][prendaOffX] = fOffsetX;
+            PrendasData[index][prendaOffY] = fOffsetY;
+            PrendasData[index][prendaOffZ] = fOffsetZ;
+            PrendasData[index][prendaRotX] = fRotX;
+            PrendasData[index][prendaRotY] = fRotY;
+            PrendasData[index][prendaRotZ] = fRotZ;
+            PrendasData[index][prendaScaleX] = fScaleX;
+            PrendasData[index][prendaScaleY] = fScaleY;
+            PrendasData[index][prendaScaleZ] = fScaleZ;
+            GuardarPrendasConfig();
+        } else {
+            PlayerPrendaOffX[playerid][index] = fOffsetX;
+            PlayerPrendaOffY[playerid][index] = fOffsetY;
+            PlayerPrendaOffZ[playerid][index] = fOffsetZ;
+            PlayerPrendaRotX[playerid][index] = fRotX;
+            PlayerPrendaRotY[playerid][index] = fRotY;
+            PlayerPrendaRotZ[playerid][index] = fRotZ;
+            PlayerPrendaScaleX[playerid][index] = fScaleX;
+            PlayerPrendaScaleY[playerid][index] = fScaleY;
+            PlayerPrendaScaleZ[playerid][index] = fScaleZ;
+        }
         SendClientMessage(playerid, 0x00FF00FF, "Posicion de prenda guardada.");
     }
     PrendaMoveIndex[playerid] = -1;
