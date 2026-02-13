@@ -335,6 +335,7 @@ new PrendaPrecioPendiente[MAX_PLAYERS] = {-1, ...};
 new PrendaUsuarioEditando[MAX_PLAYERS] = {-1, ...};
 new ArmeriaAdminItemEditando[MAX_PLAYERS] = {-1, ...};
 new PlayerPrendaActiva[MAX_PLAYERS][MAX_PRENDAS];
+new PlayerPrendaComprada[MAX_PLAYERS][MAX_PRENDAS];
 new PlayerPrendaBone[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaOffX[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaOffY[MAX_PLAYERS][MAX_PRENDAS];
@@ -735,7 +736,6 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearCamperPoint(playerid)) return SendClientMessage(playerid, 0xFFAA00FF, "Sistema de campers deshabilitado.");
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
-        if(IsNearPrendas(playerid)) return ShowPrendasAdminEditar(playerid, -1);
     }
 
     if((newkeys & KEY_LOOK_BEHIND)) { // Tecla B
@@ -1345,9 +1345,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/inventario", true)) {
-        new inv[256];
-        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF}%d\n{FF66CC}Flor:{FFFFFF}%d\n{A9A9A9}Hierro:{FFFFFF}%d\n{B87333}Cobre:{FFFFFF}%d\n{C0C0C0}Piedra:{FFFFFF}%d\n{8B4513}Madera:{FFFFFF}%d\n{FFD700}Polvora:{FFFFFF}%d\n{555555}Carbon:{FFFFFF}%d\nPrepiezas:%d\nDinero:$%d\nBanco:$%d\nMazo:%s\nDurabilidad:%d", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid]);
+    if(!strcmp(cmd, "/inventario", true) || !strcmp(cmd, "/inv", true) || !strcmp(cmd, "/cosas", true)) {
+        new inv[512];
+        new mazoPct = MazoDurabilidad[playerid];
+        if(mazoPct < 0) mazoPct = 0;
+        if(mazoPct > 100) mazoPct = 100;
+        format(inv, sizeof(inv), "{33CCFF}--- INVENTARIO ---\n{66FF66}Hierba:{FFFFFF} %d\n{FF66CC}Flor:{FFFFFF} %d\n{A9A9A9}Hierro:{FFFFFF} %d\n{B87333}Cobre:{FFFFFF} %d\n{C0C0C0}Piedra:{FFFFFF} %d\n{8B4513}Madera:{FFFFFF} %d\n{FFD700}Polvora:{FFFFFF} %d\n{555555}Carbon:{FFFFFF} %d\n{99CCFF}Prepiezas:{FFFFFF} %d\n{99FF99}Dinero:{FFFFFF} $%d\n{66CC66}Banco:{FFFFFF} $%d\n{FFCC66}Mazo:{FFFFFF} %d%%", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? mazoPct : 0);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -1733,8 +1736,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/prendas", true)) {
-        if(!IsNearPrendas(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el icono de Prendas Kame House.");
-        ShowPrendasMenu(playerid);
+        ShowPrendaUsuarioMenu(playerid);
         return 1;
     }
 
@@ -2287,17 +2289,26 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         if(idxPrenda == -1) return SendClientMessage(playerid, -1, "Prenda invalida.");
 
-        if(PlayerPrendaActiva[playerid][idxPrenda]) {
-            QuitarPrendaJugador(playerid, idxPrenda);
-            return SendClientMessage(playerid, 0xFFAA00FF, "Te quitaste esa prenda.");
+        if(!PlayerPrendaComprada[playerid][idxPrenda]) {
+            if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
+            if(GetPlayerMoney(playerid) < PrendasData[idxPrenda][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+            GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
+            PlayerPrendaComprada[playerid][idxPrenda] = 1;
+            PlayerPrendaActiva[playerid][idxPrenda] = 1;
+            AplicarPrendaJugador(playerid, idxPrenda);
+            SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
+            return 1;
         }
 
-        if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas equipadas.");
-        if(GetPlayerMoney(playerid) < PrendasData[idxPrenda][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
+        if(PlayerPrendaActiva[playerid][idxPrenda]) {
+            QuitarPrendaJugador(playerid, idxPrenda);
+            return SendClientMessage(playerid, 0xFFAA00FF, "Prenda oculta. Usa /prendas para volver a mostrarla.");
+        }
+
+        if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
         PlayerPrendaActiva[playerid][idxPrenda] = 1;
         AplicarPrendaJugador(playerid, idxPrenda);
-        SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
+        SendClientMessage(playerid, 0x66FF66FF, "Prenda equipada.");
         return 1;
     }
 
@@ -2363,7 +2374,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         new idxp = -1, cur;
         for(new i = 0; i < MAX_PRENDAS; i++) {
-            if(!PlayerPrendaActiva[playerid][i]) continue;
+            if(!PlayerPrendaComprada[playerid][i]) continue;
             if(cur == listitem) { idxp = i; break; }
             cur++;
         }
@@ -2374,7 +2385,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_PRENDA_USUARIO_EDITAR) {
         if(!response) return ShowPrendaUsuarioMenu(playerid);
         new idxp = PrendaUsuarioEditando[playerid];
-        if(idxp < 0 || idxp >= MAX_PRENDAS || !PlayerPrendaActiva[playerid][idxp]) return 1;
+        if(idxp < 0 || idxp >= MAX_PRENDAS || !PlayerPrendaComprada[playerid][idxp]) return 1;
         if(listitem == 0) {
             PrendaMoveIndex[playerid] = idxp;
             AplicarPrendaJugador(playerid, idxp);
@@ -2387,8 +2398,31 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return 1;
         }
         if(listitem == 2) {
+            if(PlayerPrendaActiva[playerid][idxp]) {
+                QuitarPrendaJugador(playerid, idxp);
+                SendClientMessage(playerid, 0xFFAA00FF, "Prenda oculta.");
+            } else {
+                if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
+                PlayerPrendaActiva[playerid][idxp] = 1;
+                AplicarPrendaJugador(playerid, idxp);
+                SendClientMessage(playerid, 0x66FF66FF, "Prenda visible nuevamente.");
+            }
+            return ShowPrendaUsuarioMenu(playerid);
+        }
+        if(listitem == 3) {
             QuitarPrendaJugador(playerid, idxp);
-            SendClientMessage(playerid, 0xFFAA00FF, "Prenda eliminada permanentemente de tu personaje.");
+            PlayerPrendaComprada[playerid][idxp] = 0;
+            PlayerPrendaBone[playerid][idxp] = 0;
+            PlayerPrendaOffX[playerid][idxp] = 0.0;
+            PlayerPrendaOffY[playerid][idxp] = 0.0;
+            PlayerPrendaOffZ[playerid][idxp] = 0.0;
+            PlayerPrendaRotX[playerid][idxp] = 0.0;
+            PlayerPrendaRotY[playerid][idxp] = 0.0;
+            PlayerPrendaRotZ[playerid][idxp] = 0.0;
+            PlayerPrendaScaleX[playerid][idxp] = 0.0;
+            PlayerPrendaScaleY[playerid][idxp] = 0.0;
+            PlayerPrendaScaleZ[playerid][idxp] = 0.0;
+            SendClientMessage(playerid, 0xFF4444FF, "Prenda eliminada de tu inventario.");
             return ShowPrendaUsuarioMenu(playerid);
         }
         return 1;
@@ -4336,9 +4370,13 @@ public FinalizarMinado(playerid) {
     RemovePlayerAttachedObject(playerid, 8);
     MineroTimer[playerid] = -1;
     if(MineroMinaIndex[playerid] < 0) return 1;
-    new piedra = 1 + random(7), cobre = random(5), hierro = random(4);
-    if(cobre == 0 && random(100) < 35) cobre = 1;
-    if(hierro == 0 && random(100) < 22) hierro = 1;
+    new tiempo = MineroDuracionActual[playerid];
+    if(tiempo < 10) tiempo = 10;
+    new piedra = 1 + (tiempo / 4) + random(3);
+    new cobre = (tiempo / 6) + random(3);
+    new hierro = (tiempo / 8) + random(2);
+    if(cobre < 1 && random(100) < 35) cobre = 1;
+    if(hierro < 1 && random(100) < 22) hierro = 1;
     InvPiedra[playerid] += piedra;
     InvCobre[playerid] += cobre;
     InvHierroMineral[playerid] += hierro;
@@ -4522,8 +4560,8 @@ stock CargarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_read),line[96
 stock CrearPrendasDefault() {
     for(new i = 0; i < MAX_PRENDAS; i++) {
         PrendasData[i][prendaActiva] = false;
-        PrendasData[i][prendaModelo] = 19006 + i;
-        PrendasData[i][prendaPrecio] = 500;
+        PrendasData[i][prendaModelo] = 0;
+        PrendasData[i][prendaPrecio] = 0;
         PrendasData[i][prendaBone] = 2;
         PrendasData[i][prendaOffX] = 0.0;
         PrendasData[i][prendaOffY] = 0.0;
@@ -4534,7 +4572,7 @@ stock CrearPrendasDefault() {
         PrendasData[i][prendaScaleX] = 1.0;
         PrendasData[i][prendaScaleY] = 1.0;
         PrendasData[i][prendaScaleZ] = 1.0;
-        format(PrendasData[i][prendaNombre], 32, "Prenda %d", i + 1);
+        format(PrendasData[i][prendaNombre], 32, "");
     }
     PrendasData[0][prendaActiva] = true;
     format(PrendasData[0][prendaNombre], 32, "Lentes Verdes");
@@ -4543,7 +4581,7 @@ stock CrearPrendasDefault() {
     PrendasData[0][prendaBone] = 2;
 
     PrendasData[1][prendaActiva] = true;
-    format(PrendasData[1][prendaNombre], 32, "Sombrero De Bruja");
+    format(PrendasData[1][prendaNombre], 32, "Sobrero De Bruja");
     PrendasData[1][prendaModelo] = 19528;
     PrendasData[1][prendaPrecio] = 100000;
     PrendasData[1][prendaBone] = 2;
@@ -4610,6 +4648,12 @@ stock CargarPrendasConfig() {
         i++;
     }
     fclose(h);
+    for(new j = 5; j < MAX_PRENDAS; j++) {
+        PrendasData[j][prendaActiva] = false;
+        PrendasData[j][prendaModelo] = 0;
+        PrendasData[j][prendaPrecio] = 0;
+        format(PrendasData[j][prendaNombre], 32, "");
+    }
     return 1;
 }
 
@@ -4619,7 +4663,10 @@ stock ShowPrendasMenu(playerid) {
     for(new i = 0; i < MAX_PRENDAS; i++) {
         if(!PrendasData[i][prendaActiva]) continue;
         format(line, sizeof(line), "%s - $%d", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio]);
-        if(PlayerPrendaActiva[playerid][i]) strcat(line, " (EQUIPADA)");
+        if(PlayerPrendaComprada[playerid][i]) {
+            if(PlayerPrendaActiva[playerid][i]) strcat(line, " {66FF66}(EQUIPADA)");
+            else strcat(line, " {FFAA00}(COMPRADA)");
+        }
         if(strlen(list) > 0) strcat(list, "\n");
         strcat(list, line);
     }
@@ -4648,6 +4695,7 @@ stock ShowPrendasAdminEditar(playerid, idx) {
 
 stock AplicarPrendaJugador(playerid, idx) {
     if(idx < 0 || idx >= MAX_PRENDAS) return 0;
+    if(!PlayerPrendaComprada[playerid][idx]) return 0;
     new bone = PlayerPrendaBone[playerid][idx] > 0 ? PlayerPrendaBone[playerid][idx] : PrendasData[idx][prendaBone];
     new Float:offX = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaOffX[playerid][idx] : PrendasData[idx][prendaOffX];
     new Float:offY = (PlayerPrendaOffX[playerid][idx] != 0.0 || PlayerPrendaOffY[playerid][idx] != 0.0 || PlayerPrendaOffZ[playerid][idx] != 0.0 || PlayerPrendaRotX[playerid][idx] != 0.0 || PlayerPrendaRotY[playerid][idx] != 0.0 || PlayerPrendaRotZ[playerid][idx] != 0.0) ? PlayerPrendaOffY[playerid][idx] : PrendasData[idx][prendaOffY];
@@ -4665,7 +4713,7 @@ stock AplicarPrendaJugador(playerid, idx) {
 stock QuitarPrendaJugador(playerid, idx) {
     if(idx < 0 || idx >= MAX_PRENDAS) return 0;
     PlayerPrendaActiva[playerid][idx] = 0;
-    RemovePlayerAttachedObject(playerid, idx);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, idx)) RemovePlayerAttachedObject(playerid, idx);
     return 1;
 }
 
@@ -4698,19 +4746,19 @@ stock ShowPrendaUsuarioMenu(playerid) {
     new list[1024], line[128], count;
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
-        if(!PlayerPrendaActiva[playerid][i]) continue;
-        format(line, sizeof(line), "%d) %s", i, PrendasData[i][prendaNombre]);
+        if(!PlayerPrendaComprada[playerid][i]) continue;
+        format(line, sizeof(line), "%d) %s%s", i, PrendasData[i][prendaNombre], PlayerPrendaActiva[playerid][i] ? " {66FF66}(Visible)" : " {FFAA00}(Oculta)");
         if(strlen(list) > 0) strcat(list, "\n");
         strcat(list, line);
         count++;
     }
-    if(count == 0) return SendClientMessage(playerid, -1, "No tienes prendas equipadas para editar.");
+    if(count == 0) return SendClientMessage(playerid, -1, "No tienes prendas compradas para editar.");
     return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_MENU, DIALOG_STYLE_LIST, "Mis prendas", list, "Editar", "Cerrar");
 }
 
 stock ShowPrendaUsuarioEditar(playerid, idx) {
     PrendaUsuarioEditando[playerid] = idx;
-    return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_EDITAR, DIALOG_STYLE_LIST, "Editar prenda", "Editar posicion/rotacion\nCambiar parte del cuerpo\nEliminar permanentemente", "Elegir", "Atras");
+    return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_EDITAR, DIALOG_STYLE_LIST, "Editar prenda", "Editar posicion/rotacion\nCambiar parte del cuerpo\nMostrar/Ocultar\nEliminar permanentemente", "Elegir", "Atras");
 }
 
 public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, modelid, boneid, Float:fOffsetX, Float:fOffsetY, Float:fOffsetZ, Float:fRotX, Float:fRotY, Float:fRotZ, Float:fScaleX, Float:fScaleY, Float:fScaleZ) {
