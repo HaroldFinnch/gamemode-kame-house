@@ -89,6 +89,7 @@
 #define PATH_HORNOS "hornos.txt"
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
+#define PATH_PRENDAS "prendas_config.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -140,6 +141,9 @@
 #define DIALOG_ADMIN_DAR_MINERAL_TIPO 57
 #define DIALOG_ADMIN_DAR_MINERAL_MONTO 58
 #define DIALOG_ADMIN_DAR_MINERAL_ID 59
+#define DIALOG_PRENDAS_MENU 60
+#define DIALOG_PRENDAS_EDITAR 61
+#define DIALOG_PRENDAS_BONE 62
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -150,6 +154,7 @@
 #define MAX_HORNOS 64
 #define MAX_CAJAS 128
 #define MAX_PREPIEZA_POINTS 64
+#define MAX_PRENDAS 8
 #define PRECIO_MAZO 10000
 
 #define MAX_PLANTAS_POR_JUGADOR 5
@@ -292,12 +297,36 @@ enum ePuntoMovible {
     puntoCamper,
     puntoPintura,
     puntoMinero,
+    puntoPrendas,
     totalPuntosMovibles
 }
 new Float:PuntoPos[totalPuntosMovibles][3];
 new PuntoPickup[totalPuntosMovibles] = {0, ...};
 new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
 new BasureroNPC = INVALID_ACTOR_ID;
+
+enum ePrendaData {
+    bool:prendaActiva,
+    prendaModelo,
+    prendaPrecio,
+    prendaBone,
+    Float:prendaOffX,
+    Float:prendaOffY,
+    Float:prendaOffZ,
+    Float:prendaRotX,
+    Float:prendaRotY,
+    Float:prendaRotZ,
+    Float:prendaScaleX,
+    Float:prendaScaleY,
+    Float:prendaScaleZ,
+    prendaNombre[32]
+}
+new PrendasData[MAX_PRENDAS][ePrendaData];
+new PrendaEditIndex[MAX_PLAYERS] = {-1, ...};
+new PrendaMoveIndex[MAX_PLAYERS] = {-1, ...};
+new PrendaBonePendiente[MAX_PLAYERS] = {-1, ...};
+new PrendaPrecioPendiente[MAX_PLAYERS] = {-1, ...};
+new PlayerPrendaActiva[MAX_PLAYERS][MAX_PRENDAS];
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -544,6 +573,15 @@ stock ActualizarLabelVentaAutos();
 stock ShowVentaAutosBuyMenu(playerid);
 stock GetVentaAutoByListIndex(listindex);
 stock ShowVentaAutosAdminMenu(playerid);
+stock CargarPrendasConfig();
+stock GuardarPrendasConfig();
+stock CrearPrendasDefault();
+stock ShowPrendasMenu(playerid);
+stock AplicarPrendaJugador(playerid, idx);
+stock QuitarPrendaJugador(playerid, idx);
+stock ShowPrendasAdminEditar(playerid, idx);
+stock GetPrendaBoneName(bone, dest[], len);
+stock IsNearPrendas(playerid);
 stock ShowVentaAutosRemoveMenu(playerid);
 stock GetVentaAutoByAnyListIndex(listindex);
 stock ShowAdminEditHint(playerid, const nombreSistema[]);
@@ -605,12 +643,14 @@ public OnGameModeInit() {
     PuntoPos[puntoCamper][0] = 2490.0; PuntoPos[puntoCamper][1] = -1648.0; PuntoPos[puntoCamper][2] = 13.3;
     PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
     PuntoPos[puntoMinero][0] = PuntoPos[puntoCamionero][0] + 6.0; PuntoPos[puntoMinero][1] = PuntoPos[puntoCamionero][1]; PuntoPos[puntoMinero][2] = PuntoPos[puntoCamionero][2];
+    PuntoPos[puntoPrendas][0] = PuntoPos[puntoSemilleria][0] + 6.0; PuntoPos[puntoPrendas][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoPrendas][2] = PuntoPos[puntoSemilleria][2];
     VentaAutosActiva = true;
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
 
     CargarPuntosMovibles();
+    CargarPrendasConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
@@ -756,6 +796,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
+    // Sistema de prendas
+    if(IsNearPrendas(playerid)) {
+        ShowPrendasMenu(playerid);
+        return 1;
+    }
+
     // Sistema de minero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
@@ -813,6 +859,9 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             return SendClientMessage(playerid, 0xFFAA00FF, msgPP);
         }
         if(GetPlayerMoney(playerid) < 100) return SendClientMessage(playerid, -1, "Necesitas $100.");
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "SHOP", "SHP_Rob_React", 4.1, false, false, false, false, 1200, t_FORCE_SYNC:SYNC_ALL);
+        SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
         GivePlayerMoney(playerid, -100);
         InvPrepieza[playerid] += 2;
         PrepiezaCooldownTick[playerid][pp] = GetTickCount() + 300000;
@@ -1275,7 +1324,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/inventario", true)) {
         new inv[256];
-        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF}%d\n{FFFFFFFF}Flor:{FFFFFF}%d\n{A9A9A9}Hierro:{FFFFFF}%d\n{B87333}Cobre:{FFFFFF}%d\n{C0C0C0}Piedra:{FFFFFF}%d\n{8B4513}Madera:{FFFFFF}%d\n{FFD700}Polvora:{FFFFFF}%d\n{555555}Carbon:{FFFFFF}%d\nPrepiezas:%d\nDinero:$%d\nBanco:$%d\nMazo:%s\nDurabilidad:%d", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid]);
+        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF}%d\n{FF66CC}Flor:{FFFFFF}%d\n{A9A9A9}Hierro:{FFFFFF}%d\n{B87333}Cobre:{FFFFFF}%d\n{C0C0C0}Piedra:{FFFFFF}%d\n{8B4513}Madera:{FFFFFF}%d\n{FFD700}Polvora:{FFFFFF}%d\n{555555}Carbon:{FFFFFF}%d\nPrepiezas:%d\nDinero:$%d\nBanco:$%d\nMazo:%s\nDurabilidad:%d", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -1660,9 +1709,21 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/prendas", true)) {
+        if(!IsNearPrendas(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el icono de Prendas Kame House.");
+        ShowPrendasMenu(playerid);
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/admprendas", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        ShowPrendasAdminEditar(playerid, -1);
+        return 1;
+    }
+
     if(!strcmp(cmd, "/mover", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nKameTienda\nArmeria\nVenta de autos\nVenta de campers\nCP pintura\nTrabajo Minero", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nKameTienda\nArmeria\nVenta de autos\nVenta de campers\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2188,6 +2249,93 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return 1;
     }
 
+    if(dialogid == DIALOG_PRENDAS_MENU) {
+        if(!response) return 1;
+        if(listitem < 0 || listitem >= MAX_PRENDAS || !PrendasData[listitem][prendaActiva]) return SendClientMessage(playerid, -1, "Prenda invalida.");
+
+        if(PlayerAdmin[playerid] >= 1 && IsNearPrendas(playerid) && listitem == 0 && !strcmp(PrendasData[listitem][prendaNombre], "[ADMIN] Editar prendas", true)) {
+            return ShowPrendasAdminEditar(playerid, -1);
+        }
+
+        if(PlayerPrendaActiva[playerid][listitem]) {
+            QuitarPrendaJugador(playerid, listitem);
+            return SendClientMessage(playerid, 0xFFAA00FF, "Te quitaste esa prenda.");
+        }
+
+        if(GetPlayerMoney(playerid) < PrendasData[listitem][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+        GivePlayerMoney(playerid, -PrendasData[listitem][prendaPrecio]);
+        PlayerPrendaActiva[playerid][listitem] = 1;
+        AplicarPrendaJugador(playerid, listitem);
+        SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_PRENDAS_EDITAR) {
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(PrendaPrecioPendiente[playerid] != -1) {
+            if(!response) {
+                PrendaPrecioPendiente[playerid] = -1;
+                return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
+            }
+            new np = strval(inputtext);
+            if(np < 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+            new ip = PrendaPrecioPendiente[playerid];
+            if(ip >= 0 && ip < MAX_PRENDAS) PrendasData[ip][prendaPrecio] = np;
+            PrendaPrecioPendiente[playerid] = -1;
+            GuardarPrendasConfig();
+            return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
+        }
+
+        if(!response) return 1;
+        if(PrendaEditIndex[playerid] == -1) {
+            if(listitem < 0 || listitem >= MAX_PRENDAS) return 1;
+            PrendaEditIndex[playerid] = listitem;
+            ShowPrendasAdminEditar(playerid, listitem);
+            return 1;
+        }
+
+        new idxp = PrendaEditIndex[playerid];
+        if(idxp < 0 || idxp >= MAX_PRENDAS) return 1;
+        if(listitem == 0) {
+            PrendasData[idxp][prendaActiva] = !PrendasData[idxp][prendaActiva];
+            GuardarPrendasConfig();
+            return ShowPrendasAdminEditar(playerid, idxp);
+        }
+        if(listitem == 1) {
+            ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_INPUT, "Prendas Admin - Precio", "Ingresa el nuevo precio:", "Guardar", "Atras");
+            PrendaPrecioPendiente[playerid] = idxp;
+            return 1;
+        }
+        if(listitem == 2) {
+            ShowPlayerDialog(playerid, DIALOG_PRENDAS_BONE, DIALOG_STYLE_LIST, "Selecciona parte del cuerpo", "Cabeza\nPecho\nEspalda\nBrazo izquierdo\nBrazo derecho\nMano izquierda\nMano derecha\nMuslo izquierdo\nMuslo derecho\nPie izquierdo\nPie derecho", "Elegir", "Atras");
+            PrendaBonePendiente[playerid] = idxp;
+            return 1;
+        }
+        if(listitem == 3) {
+            PrendaMoveIndex[playerid] = idxp;
+            SendClientMessage(playerid, 0x00FFFFFF, "Usa /editarobjeto para mover/rotar la prenda en tu skin.");
+            AplicarPrendaJugador(playerid, idxp);
+            EditAttachedObject(playerid, idxp);
+            return 1;
+        }
+        if(listitem == 4) {
+            ShowPrendasAdminEditar(playerid, -1);
+            return 1;
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_PRENDAS_BONE) {
+        if(!response) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
+        new idxp = PrendaBonePendiente[playerid];
+        if(idxp < 0 || idxp >= MAX_PRENDAS) return 1;
+        new bones[] = {1,2,3,4,5,6,7,8,9,10,11};
+        if(listitem < 0 || listitem >= sizeof(bones)) return 1;
+        PrendasData[idxp][prendaBone] = bones[listitem];
+        GuardarPrendasConfig();
+        return ShowPrendasAdminEditar(playerid, idxp);
+    }
+
     if(dialogid == DIALOG_HORNO_MENU) {
         if(!response) return 1;
         new h = HornoActivoJugador[playerid];
@@ -2228,9 +2376,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(InvCarbon[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes carbon.");
             InvCarbon[playerid]--;
             HornoData[h][hornoReadyTick] -= 30000;
-            if(HornoData[h][hornoReadyTick] < GetTickCount() + 1000) HornoData[h][hornoReadyTick] = GetTickCount() + 1000;
+            if(HornoData[h][hornoReadyTick] <= GetTickCount() + 1000) {
+                HornoData[h][hornoReadyTick] = 0;
+                HornoData[h][hornoListoRetiro] = true;
+                SendClientMessage(playerid, 0x66FF66FF, "Agregaste carbon y la coccion quedo lista para retirar.");
+            } else {
+                SendClientMessage(playerid, 0x66FF66FF, "Agregaste carbon: -30 segundos.");
+            }
             ActualizarLabelHorno(h);
-            return SendClientMessage(playerid, 0x66FF66FF, "Agregaste carbon: -30 segundos.");
+            return 1;
         }
 
         if(listitem == 3) {
@@ -3209,6 +3363,11 @@ stock IsNearSemilleria(playerid) {
     return 0;
 }
 
+stock IsNearPrendas(playerid) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPrendas][0], PuntoPos[puntoPrendas][1], PuntoPos[puntoPrendas][2])) return 1;
+    return 0;
+}
+
 stock IsNearArmeria(playerid) {
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2])) return 1;
     return 0;
@@ -3568,6 +3727,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoCamper: format(dest, len, "Venta de campers");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
+        case puntoPrendas: format(dest, len, "Prendas Kame House");
         default: format(dest, len, "Punto");
     }
     return 1;
@@ -3628,6 +3788,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoMinero: {
             PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{CCCCCC}Trabajo minero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoPrendas: {
+            PuntoPickup[punto] = CreatePickup(1526, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("{00CCFF}Prendas Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case totalPuntosMovibles: {
             return 1;
@@ -4206,7 +4370,7 @@ stock CargarMinas() {
 
 stock AplicarTexturaMinaEstatica(objectid) {
     if(objectid == 0) return 0;
-    SetObjectMaterial(objectid, 0, 16131, "des_rockgp2_", "des_rockgp2_", 0xFFFFFFFF);
+    SetObjectMaterial(objectid, 0, 16131, "des_rockgp2", "des_rockgp2_17", 0xFFFFFFFF);
     return 1;
 }
 
@@ -4248,3 +4412,160 @@ stock GuardarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_write); if(!h) return
 stock CargarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_read), line[96]; if(!h) return 0; TotalCajas=0; while(fread(h,line) && TotalCajas<MAX_CAJAS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); CajaDataLoot[TotalCajas][cajaActiva]=true; CajaDataLoot[TotalCajas][cajaX]=x; CajaDataLoot[TotalCajas][cajaY]=y; CajaDataLoot[TotalCajas][cajaZ]=z; CajaDataLoot[TotalCajas][cajaObj]=CreateObject(2358,x,y,z-1.0,0.0,0.0,0.0); CajaDataLoot[TotalCajas][cajaLabel]=Create3DTextLabel("Caja de busqueda\nUsa H",0xFFFFFFFF,x,y,z+0.7,10.0,0); TotalCajas++; } fclose(h); return 1; }
 stock GuardarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalPrepiezaPoints;i++){ if(!PrepiezaPoints[i][ppActivo]) continue; format(line,sizeof(line),"%f %f %f\n",PrepiezaPoints[i][ppX],PrepiezaPoints[i][ppY],PrepiezaPoints[i][ppZ]); fwrite(h,line);} fclose(h); return 1;}
 stock CargarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_read),line[96]; if(!h) return 0; TotalPrepiezaPoints=0; while(fread(h,line) && TotalPrepiezaPoints<MAX_PREPIEZA_POINTS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); PrepiezaPoints[TotalPrepiezaPoints][ppActivo]=true; PrepiezaPoints[TotalPrepiezaPoints][ppX]=x; PrepiezaPoints[TotalPrepiezaPoints][ppY]=y; PrepiezaPoints[TotalPrepiezaPoints][ppZ]=z; PrepiezaPoints[TotalPrepiezaPoints][ppObj]=CreateObject(1279,x,y,z-1.0,0.0,0.0,0.0); PrepiezaPoints[TotalPrepiezaPoints][ppLabel]=Create3DTextLabel("Punto de prepiezas ($100/2)\nUsa H",0x99CCFFFF,x,y,z+0.6,10.0,0); TotalPrepiezaPoints++; } fclose(h); return 1; }
+
+stock CrearPrendasDefault() {
+    for(new i = 0; i < MAX_PRENDAS; i++) {
+        PrendasData[i][prendaActiva] = false;
+        PrendasData[i][prendaModelo] = 19006 + i;
+        PrendasData[i][prendaPrecio] = 500;
+        PrendasData[i][prendaBone] = 2;
+        PrendasData[i][prendaOffX] = 0.0;
+        PrendasData[i][prendaOffY] = 0.0;
+        PrendasData[i][prendaOffZ] = 0.0;
+        PrendasData[i][prendaRotX] = 0.0;
+        PrendasData[i][prendaRotY] = 0.0;
+        PrendasData[i][prendaRotZ] = 0.0;
+        PrendasData[i][prendaScaleX] = 1.0;
+        PrendasData[i][prendaScaleY] = 1.0;
+        PrendasData[i][prendaScaleZ] = 1.0;
+        format(PrendasData[i][prendaNombre], 32, "Prenda %d", i + 1);
+    }
+    PrendasData[0][prendaActiva] = true;
+    format(PrendasData[0][prendaNombre], 32, "[ADMIN] Editar prendas");
+    PrendasData[0][prendaModelo] = 18926;
+    PrendasData[0][prendaPrecio] = 0;
+    PrendasData[1][prendaActiva] = true;
+    format(PrendasData[1][prendaNombre], 32, "Cadena Kame");
+    PrendasData[1][prendaModelo] = 19488;
+    PrendasData[1][prendaPrecio] = 1500;
+    PrendasData[1][prendaBone] = 2;
+}
+
+stock GuardarPrendasConfig() {
+    new File:h = fopen(PATH_PRENDAS, io_write);
+    if(!h) return 0;
+    new line[256];
+    for(new i = 0; i < MAX_PRENDAS; i++) {
+        format(line, sizeof(line), "%d %d %d %d %f %f %f %f %f %f %f %f %f %s\n",
+            PrendasData[i][prendaActiva], PrendasData[i][prendaModelo], PrendasData[i][prendaPrecio], PrendasData[i][prendaBone],
+            PrendasData[i][prendaOffX], PrendasData[i][prendaOffY], PrendasData[i][prendaOffZ],
+            PrendasData[i][prendaRotX], PrendasData[i][prendaRotY], PrendasData[i][prendaRotZ],
+            PrendasData[i][prendaScaleX], PrendasData[i][prendaScaleY], PrendasData[i][prendaScaleZ], PrendasData[i][prendaNombre]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarPrendasConfig() {
+    CrearPrendasDefault();
+    new File:h = fopen(PATH_PRENDAS, io_read), line[256];
+    if(!h) {
+        GuardarPrendasConfig();
+        return 1;
+    }
+    new i = 0;
+    while(fread(h, line) && i < MAX_PRENDAS) {
+        new idx = 0;
+        PrendasData[i][prendaActiva] = strval(strtok(line, idx)) != 0;
+        PrendasData[i][prendaModelo] = strval(strtok(line, idx));
+        PrendasData[i][prendaPrecio] = strval(strtok(line, idx));
+        PrendasData[i][prendaBone] = strval(strtok(line, idx));
+        PrendasData[i][prendaOffX] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaOffY] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaOffZ] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaRotX] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaRotY] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaRotZ] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaScaleX] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaScaleY] = floatstr(strtok(line, idx));
+        PrendasData[i][prendaScaleZ] = floatstr(strtok(line, idx));
+        strmid(PrendasData[i][prendaNombre], strtok(line, idx), 0, 32, 32);
+        i++;
+    }
+    fclose(h);
+    return 1;
+}
+
+stock ShowPrendasMenu(playerid) {
+    new list[1024], line[128];
+    list[0] = EOS;
+    for(new i = 0; i < MAX_PRENDAS; i++) {
+        if(!PrendasData[i][prendaActiva]) format(line, sizeof(line), "%s - NO DISPONIBLE", PrendasData[i][prendaNombre]);
+        else format(line, sizeof(line), "%s - $%d", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio]);
+        if(PlayerPrendaActiva[playerid][i]) strcat(line, " (EQUIPADA)");
+        if(strlen(list) > 0) strcat(list, "\n");
+        strcat(list, line);
+    }
+    ShowPlayerDialog(playerid, DIALOG_PRENDAS_MENU, DIALOG_STYLE_LIST, "Prendas Kame House", list, "Seleccionar", "Cerrar");
+    return 1;
+}
+
+stock ShowPrendasAdminEditar(playerid, idx) {
+    if(idx == -1) {
+        new list[1024], line[96];
+        list[0] = EOS;
+        for(new i = 0; i < MAX_PRENDAS; i++) {
+            format(line, sizeof(line), "%d) %s | $%d | %s", i, PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio], PrendasData[i][prendaActiva] ? "ON" : "OFF");
+            if(strlen(list) > 0) strcat(list, "\n");
+            strcat(list, line);
+        }
+        PrendaEditIndex[playerid] = -1;
+        return ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_LIST, "Prendas Admin - Lista", list, "Editar", "Cerrar");
+    }
+    new body[256], boneName[32];
+    GetPrendaBoneName(PrendasData[idx][prendaBone], boneName, sizeof(boneName));
+    format(body, sizeof(body), "Activar/Desactivar (actual: %s)\nCambiar precio (actual: $%d)\nCambiar parte del cuerpo (actual: %s)\nEditar posicion/rotacion\nVolver", PrendasData[idx][prendaActiva] ? "ON" : "OFF", PrendasData[idx][prendaPrecio], boneName);
+    return ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_LIST, "Prendas Admin - Editar", body, "Seleccionar", "Cerrar");
+}
+
+stock AplicarPrendaJugador(playerid, idx) {
+    if(idx < 0 || idx >= MAX_PRENDAS) return 0;
+    SetPlayerAttachedObject(playerid, idx, PrendasData[idx][prendaModelo], PrendasData[idx][prendaBone], PrendasData[idx][prendaOffX], PrendasData[idx][prendaOffY], PrendasData[idx][prendaOffZ], PrendasData[idx][prendaRotX], PrendasData[idx][prendaRotY], PrendasData[idx][prendaRotZ], PrendasData[idx][prendaScaleX], PrendasData[idx][prendaScaleY], PrendasData[idx][prendaScaleZ]);
+    return 1;
+}
+
+stock QuitarPrendaJugador(playerid, idx) {
+    if(idx < 0 || idx >= MAX_PRENDAS) return 0;
+    PlayerPrendaActiva[playerid][idx] = 0;
+    RemovePlayerAttachedObject(playerid, idx);
+    return 1;
+}
+
+stock GetPrendaBoneName(bone, dest[], len) {
+    switch(bone) {
+        case 1: format(dest, len, "Cabeza");
+        case 2: format(dest, len, "Pecho");
+        case 3: format(dest, len, "Espalda");
+        case 4: format(dest, len, "Brazo izq");
+        case 5: format(dest, len, "Brazo der");
+        case 6: format(dest, len, "Mano izq");
+        case 7: format(dest, len, "Mano der");
+        case 8: format(dest, len, "Muslo izq");
+        case 9: format(dest, len, "Muslo der");
+        case 10: format(dest, len, "Pie izq");
+        case 11: format(dest, len, "Pie der");
+        default: format(dest, len, "Pecho");
+    }
+    return 1;
+}
+
+public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Float:fOffsetX, Float:fOffsetY, Float:fOffsetZ, Float:fRotX, Float:fRotY, Float:fRotZ, Float:fScaleX, Float:fScaleY, Float:fScaleZ) {
+    #pragma unused modelid
+    #pragma unused boneid
+    if(response == EDIT_RESPONSE_FINAL && PrendaMoveIndex[playerid] == index && index >= 0 && index < MAX_PRENDAS) {
+        PrendasData[index][prendaOffX] = fOffsetX;
+        PrendasData[index][prendaOffY] = fOffsetY;
+        PrendasData[index][prendaOffZ] = fOffsetZ;
+        PrendasData[index][prendaRotX] = fRotX;
+        PrendasData[index][prendaRotY] = fRotY;
+        PrendasData[index][prendaRotZ] = fRotZ;
+        PrendasData[index][prendaScaleX] = fScaleX;
+        PrendasData[index][prendaScaleY] = fScaleY;
+        PrendasData[index][prendaScaleZ] = fScaleZ;
+        GuardarPrendasConfig();
+        SendClientMessage(playerid, 0x00FF00FF, "Posicion de prenda guardada.");
+    }
+    PrendaMoveIndex[playerid] = -1;
+    return 1;
+}
