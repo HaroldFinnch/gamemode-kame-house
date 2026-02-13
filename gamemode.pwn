@@ -158,7 +158,7 @@
 #define MAX_HORNOS 64
 #define MAX_CAJAS 128
 #define MAX_PREPIEZA_POINTS 64
-#define MAX_PRENDAS 8
+#define MAX_PRENDAS 10
 #define MAX_PRENDAS_USUARIO 5
 #define PRECIO_MAZO 10000
 
@@ -478,6 +478,8 @@ forward strtok(const string[], &index);
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
 forward GuardarCasas();
 forward GuardarCuenta(playerid);
+stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h);
+stock GuardarVehiculosJugadorEnCuenta(playerid, File:h);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
@@ -734,7 +736,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     if((newkeys & KEY_YES) && PlayerAdmin[playerid] >= 1) { // Tecla Y (solo admin)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
-        if(IsNearCamperPoint(playerid)) return SendClientMessage(playerid, 0xFFAA00FF, "Sistema de campers deshabilitado.");
+        if(IsNearCamperPoint(playerid)) return SendClientMessage(playerid, 0xFFAA00FF, "Sistema de maletero independiente activo (campers eliminados).");
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
     }
 
@@ -790,7 +792,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     if(IsNearCamperPoint(playerid)) {
-        return SendClientMessage(playerid, 0xFFAA00FF, "El sistema de campers fue eliminado. Usa /maletero en cualquier vehiculo propio.");
+        return SendClientMessage(playerid, 0xFFAA00FF, "Sistema antiguo de campers eliminado. Usa /maletero en cualquier vehiculo propio.");
     }
 
     if(IsNearVentaAutos(playerid)) {
@@ -812,7 +814,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
-    // Sistema de semilleria
+    // Sistema de Tienda Kame House
     if(IsNearSemilleria(playerid)) {
         ShowSemilleriaMenu(playerid);
         return 1;
@@ -828,7 +830,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
         MineroTrabajando[playerid] = true;
-        SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la semilleria (KameTienda) y busca minas.");
+        SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la Tienda Kame House y busca minas.");
         return 1;
     }
 
@@ -836,7 +838,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!MinaData[m][minaActiva]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
         if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de minero primero.");
-        if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en KameTienda.");
+        if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en Tienda Kame House.");
         if(GetTickCount() < MineroCooldownTick[playerid][m]) { new left[24], msgcd[120]; FormatTiempoRestante(MineroCooldownTick[playerid][m] - GetTickCount(), left, sizeof(left)); format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %s", left); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
         if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
         new segs = 15 + random(6);
@@ -1440,7 +1442,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}KameTienda\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano\n{FFFF66}Restaurar vehiculos ocultos\n{00FFFF}Localizar uno de mis vehiculos", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano\n{FFFF66}Restaurar vehiculos ocultos\n{00FFFF}Localizar uno de mis vehiculos", "Ir", "Cerrar");
         return 1;
     }
 
@@ -1523,7 +1525,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
     if(!strcmp(cmd, "/editarcamper", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        return SendClientMessage(playerid, -1, "Sistema de campers deshabilitado.");
+        return SendClientMessage(playerid, -1, "Sistema de maletero independiente activo (campers eliminados).");
     }
 
     if(!strcmp(cmd, "/comprar", true)) {
@@ -1753,7 +1755,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nKameTienda\nArmeria\nVenta de autos\nVenta de campers\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nZona de maletero\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2089,7 +2091,17 @@ public OnPlayerConnect(playerid) {
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
     InvFlor[playerid] = 0;
-                        ArmeroNivel[playerid] = 1;
+    InvMadera[playerid] = 0;
+    InvPiedra[playerid] = 0;
+    InvCobre[playerid] = 0;
+    InvHierroMineral[playerid] = 0;
+    InvPolvora[playerid] = 0;
+    InvPrepieza[playerid] = 0;
+    InvCarbon[playerid] = 0;
+    PlayerTieneMazo[playerid] = false;
+    MazoDurabilidad[playerid] = 0;
+    ArmeroNivel[playerid] = 1;
+    ArmeroExp[playerid] = 0;
     PlantasColocadas[playerid] = 0;
     if(CultivoTimer[playerid] != -1) { KillTimer(CultivoTimer[playerid]); CultivoTimer[playerid] = -1; }
     for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
@@ -2238,7 +2250,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             MazoDurabilidad[playerid] = 120 + random(61);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
         }
-        ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "KameTienda - Cantidad", "Ingresa la cantidad de semillas que deseas comprar:", "Continuar", "Atras");
+        ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "Tienda Kame House - Cantidad", "Ingresa la cantidad de productos que deseas comprar:", "Continuar", "Atras");
         return 1;
     }
 
@@ -2254,7 +2266,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new tipo[32], body[192];
         format(tipo, sizeof(tipo), (KameTiendaTipoPendiente[playerid] == 0) ? "hierba verde" : "flores");
         format(body, sizeof(body), "Comprar semillas de %s\nCantidad: %d\nCosto unitario: $%d\nCosto total: $%d", tipo, cantidad, precio, total);
-        ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CONFIRMAR, DIALOG_STYLE_MSGBOX, "KameTienda - Confirmar compra", body, "Comprar", "Cancelar");
+        ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CONFIRMAR, DIALOG_STYLE_MSGBOX, "Tienda Kame House - Confirmar compra", body, "Comprar", "Cancelar");
         return 1;
     }
 
@@ -2273,7 +2285,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         new msg[160], tipo[16];
         format(tipo, sizeof(tipo), (KameTiendaTipoPendiente[playerid] == 0) ? "hierba" : "flores");
-        format(msg, sizeof(msg), "KameTienda: compraste %d semillas de %s por $%d.", cantidad, tipo, total);
+        format(msg, sizeof(msg), "Tienda Kame House: compraste %d semillas de %s por $%d.", cantidad, tipo, total);
         SendClientMessage(playerid, 0x00FF00FF, msg);
         KameTiendaCantidadPendiente[playerid] = 0;
         return 1;
@@ -3142,6 +3154,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             IsPlayerLoggedIn[playerid] = true;
             GivePlayerMoney(playerid, DINERO_INICIAL);
             ActualizarNivelPJ(playerid);
+            GuardarCuenta(playerid);
             SpawnPlayer(playerid);
         }
     }
@@ -3224,6 +3237,46 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     }
                 }
                 SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
+
+                if(fread(h, line)) {
+                    new dataVersion = strval(line);
+                    if(dataVersion >= 2) {
+                        fread(h, line); InvMadera[playerid] = strval(line);
+                        fread(h, line); InvPiedra[playerid] = strval(line);
+                        fread(h, line); InvCobre[playerid] = strval(line);
+                        fread(h, line); InvHierroMineral[playerid] = strval(line);
+                        fread(h, line); InvPolvora[playerid] = strval(line);
+                        fread(h, line); InvPrepieza[playerid] = strval(line);
+                        fread(h, line); InvCarbon[playerid] = strval(line);
+                        fread(h, line); PlayerTieneMazo[playerid] = strval(line) != 0;
+                        fread(h, line); MazoDurabilidad[playerid] = strval(line);
+                        fread(h, line); ArmeroNivel[playerid] = strval(line);
+                        fread(h, line); ArmeroExp[playerid] = strval(line);
+                        fread(h, line); BasureroNivel[playerid] = strval(line);
+                        fread(h, line); BasureroRecorridos[playerid] = strval(line);
+                        fread(h, line); BidonGasolina[playerid] = strval(line);
+
+                        for(new pi = 0; pi < MAX_PRENDAS; pi++) {
+                            if(!fread(h, line)) break;
+                            new idxp = 0;
+                            PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
+                            PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
+                            PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
+                            PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
+                            PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
+                        }
+
+                        CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                    }
+                }
+
                 ActualizarNivelPJ(playerid);
                 fclose(h); SpawnPlayer(playerid);
             } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
@@ -3239,10 +3292,27 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n2",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
                 CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], p[0], p[1], p[2]);
-            fwrite(h, line); fclose(h);
+            fwrite(h, line);
+
+            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
+                InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
+                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid]);
+            fwrite(h, line);
+
+            for(new pi = 0; pi < MAX_PRENDAS; pi++) {
+                format(line, sizeof(line), "\n%d %d %d %f %f %f %f %f %f %f %f %f",
+                    PlayerPrendaComprada[playerid][pi], PlayerPrendaActiva[playerid][pi], PlayerPrendaBone[playerid][pi],
+                    PlayerPrendaOffX[playerid][pi], PlayerPrendaOffY[playerid][pi], PlayerPrendaOffZ[playerid][pi],
+                    PlayerPrendaRotX[playerid][pi], PlayerPrendaRotY[playerid][pi], PlayerPrendaRotZ[playerid][pi],
+                    PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi]);
+                fwrite(h, line);
+            }
+
+            GuardarVehiculosJugadorEnCuenta(playerid, h);
+            fclose(h);
         }
     }
     return 1;
@@ -3787,7 +3857,7 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
     format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)");
-    ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "KameTienda", body, "Elegir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Tienda Kame House", body, "Elegir", "Cerrar");
     return 1;
 }
 
@@ -3858,10 +3928,10 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoBasurero: format(dest, len, "Trabajo basurero");
         case puntoCarga: format(dest, len, "Deposito de carga");
         case puntoBanco: format(dest, len, "Banco");
-        case puntoSemilleria: format(dest, len, "KameTienda");
+        case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
-        case puntoCamper: format(dest, len, "Venta de campers");
+        case puntoCamper: format(dest, len, "Zona de maletero");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
@@ -3905,7 +3975,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoSemilleria: {
             PuntoPickup[punto] = CreatePickup(1275, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("KameTienda\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("Tienda Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoArmeria: {
             PuntoPickup[punto] = CreatePickup(1242, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -3948,7 +4018,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
+    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosechar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -4046,8 +4116,8 @@ stock ShowCamperBuyMenu(playerid) {
         format(line, sizeof(line), "%s | Slots:%d | Precio:$%d | Stock:%d\n", CamperTipos[i][ctNombre], CamperTipos[i][ctSlots], CamperTipos[i][ctPrecio], CamperTipos[i][ctStock]);
         strcat(body, line); count++;
     }
-    if(count == 0) return SendClientMessage(playerid, -1, "No hay campers disponibles por ahora.");
-    ShowPlayerDialog(playerid, DIALOG_CAMPER_MENU, DIALOG_STYLE_LIST, "Campers", body, "Comprar", "Cerrar");
+    if(count == 0) return SendClientMessage(playerid, -1, "Sistema eliminado: usa maletero de vehiculos propios.");
+    ShowPlayerDialog(playerid, DIALOG_CAMPER_MENU, DIALOG_STYLE_LIST, "Maleteros", body, "Comprar", "Cerrar");
     return 1;
 }
 
@@ -4057,7 +4127,7 @@ stock ShowCamperAdminMenu(playerid) {
         format(line, sizeof(line), "%s | Activa:%s | Precio:$%d | Stock:%d\n", CamperTipos[i][ctNombre], CamperTipos[i][ctActiva] ? "Si" : "No", CamperTipos[i][ctPrecio], CamperTipos[i][ctStock]);
         strcat(body, line);
     }
-    ShowPlayerDialog(playerid, DIALOG_CAMPER_ADMIN_MENU, DIALOG_STYLE_LIST, "Editar campers", body, "Editar", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_CAMPER_ADMIN_MENU, DIALOG_STYLE_LIST, "Editar maleteros", body, "Editar", "Cerrar");
     return 1;
 }
 
@@ -4297,6 +4367,88 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
     VehModelData[veh] = 0;
     GPSVehiculoSeleccionado[playerid] = nv;
     return true;
+}
+
+stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
+    new line[256];
+    if(!fread(h, line)) return 0;
+    new cantidad = strval(line);
+    if(cantidad < 0) cantidad = 0;
+    if(cantidad > MAX_VEHICULOS_TOTALES_JUGADOR) cantidad = MAX_VEHICULOS_TOTALES_JUGADOR;
+
+    for(new i = 0; i < cantidad; i++) {
+        if(!fread(h, line)) break;
+        new idx = 0;
+        new model = strval(strtok(line, idx));
+        new color1 = strval(strtok(line, idx));
+        new color2 = strval(strtok(line, idx));
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+        new Float:a = floatstr(strtok(line, idx));
+        new locked = strval(strtok(line, idx));
+        new gas = strval(strtok(line, idx));
+        new isCamper = strval(strtok(line, idx));
+        new camperSlots = strval(strtok(line, idx));
+        new camperHierba = strval(strtok(line, idx));
+        new camperFlores = strval(strtok(line, idx));
+        new camperSemHierba = strval(strtok(line, idx));
+        new camperSemFlor = strval(strtok(line, idx));
+
+        new veh = CreateVehicle(model, x, y, z, a, color1, color2, 120);
+        if(veh == INVALID_VEHICLE_ID) continue;
+
+        VehOwner[veh] = playerid;
+        VehLocked[veh] = (locked != 0);
+        VehOculto[veh] = false;
+        VehLastUseTick[veh] = GetTickCount();
+        VehModelData[veh] = model;
+        VehColor1Data[veh] = color1;
+        VehColor2Data[veh] = color2;
+        VehPosData[veh][0] = x;
+        VehPosData[veh][1] = y;
+        VehPosData[veh][2] = z;
+        VehPosData[veh][3] = a;
+        GasInitVehiculo[veh] = true;
+        GasVehiculo[veh] = gas;
+
+        if(isCamper) {
+            CamperOwner[veh] = playerid;
+            CamperSlotsVeh[veh] = camperSlots;
+            CamperHierbaVeh[veh] = camperHierba;
+            CamperFloresVeh[veh] = camperFlores;
+            CamperSemillaHierbaVeh[veh] = camperSemHierba;
+            CamperSemillaFlorVeh[veh] = camperSemFlor;
+        }
+    }
+    return 1;
+}
+
+stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
+    new line[256];
+    new cantidad = ContarAutosJugador(playerid);
+    if(cantidad > MAX_VEHICULOS_TOTALES_JUGADOR) cantidad = MAX_VEHICULOS_TOTALES_JUGADOR;
+    format(line, sizeof(line), "\n%d", cantidad);
+    fwrite(h, line);
+
+    new guardados = 0;
+    for(new v = 1; v < MAX_VEHICLES && guardados < cantidad; v++) {
+        if(VehOwner[v] != playerid) continue;
+        if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
+
+        new Float:x, Float:y, Float:z, Float:a;
+        GetVehiclePos(v, x, y, z);
+        GetVehicleZAngle(v, a);
+        VehPosData[v][0] = x; VehPosData[v][1] = y; VehPosData[v][2] = z; VehPosData[v][3] = a;
+
+        format(line, sizeof(line), "\n%d %d %d %f %f %f %f %d %d %d %d %d %d %d %d",
+            VehModelData[v], VehColor1Data[v], VehColor2Data[v], x, y, z, a,
+            VehLocked[v] ? 1 : 0, GasVehiculo[v],
+            CamperOwner[v] == playerid ? 1 : 0, CamperSlotsVeh[v], CamperHierbaVeh[v], CamperFloresVeh[v], CamperSemillaHierbaVeh[v], CamperSemillaFlorVeh[v]);
+        fwrite(h, line);
+        guardados++;
+    }
+    return 1;
 }
 
 stock ContarCasasJugador(playerid) {
@@ -4581,7 +4733,7 @@ stock CrearPrendasDefault() {
     PrendasData[0][prendaBone] = 2;
 
     PrendasData[1][prendaActiva] = true;
-    format(PrendasData[1][prendaNombre], 32, "Sobrero De Bruja");
+    format(PrendasData[1][prendaNombre], 32, "Sombrero De Bruja");
     PrendasData[1][prendaModelo] = 19528;
     PrendasData[1][prendaPrecio] = 100000;
     PrendasData[1][prendaBone] = 2;
@@ -4603,6 +4755,36 @@ stock CrearPrendasDefault() {
     PrendasData[4][prendaModelo] = 19801;
     PrendasData[4][prendaPrecio] = 300000;
     PrendasData[4][prendaBone] = 2;
+
+    PrendasData[5][prendaActiva] = true;
+    format(PrendasData[5][prendaNombre], 32, "Reloj de lujo");
+    PrendasData[5][prendaModelo] = 19039;
+    PrendasData[5][prendaPrecio] = 125000;
+    PrendasData[5][prendaBone] = 6;
+
+    PrendasData[6][prendaActiva] = true;
+    format(PrendasData[6][prendaNombre], 32, "Gorra Azul");
+    PrendasData[6][prendaModelo] = 18939;
+    PrendasData[6][prendaPrecio] = 70000;
+    PrendasData[6][prendaBone] = 2;
+
+    PrendasData[7][prendaActiva] = true;
+    format(PrendasData[7][prendaNombre], 32, "Mascara Roja");
+    PrendasData[7][prendaModelo] = 19036;
+    PrendasData[7][prendaPrecio] = 150000;
+    PrendasData[7][prendaBone] = 2;
+
+    PrendasData[8][prendaActiva] = true;
+    format(PrendasData[8][prendaNombre], 32, "Mochila Urbana");
+    PrendasData[8][prendaModelo] = 3026;
+    PrendasData[8][prendaPrecio] = 135000;
+    PrendasData[8][prendaBone] = 1;
+
+    PrendasData[9][prendaActiva] = true;
+    format(PrendasData[9][prendaNombre], 32, "Auriculares");
+    PrendasData[9][prendaModelo] = 19421;
+    PrendasData[9][prendaPrecio] = 90000;
+    PrendasData[9][prendaBone] = 2;
 }
 
 stock GuardarPrendasConfig() {
@@ -4648,7 +4830,7 @@ stock CargarPrendasConfig() {
         i++;
     }
     fclose(h);
-    for(new j = 5; j < MAX_PRENDAS; j++) {
+    for(new j = i; j < MAX_PRENDAS; j++) {
         PrendasData[j][prendaActiva] = false;
         PrendasData[j][prendaModelo] = 0;
         PrendasData[j][prendaPrecio] = 0;
