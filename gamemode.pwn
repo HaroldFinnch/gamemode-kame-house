@@ -676,6 +676,14 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
     }
 
+    if((newkeys & KEY_LOOK_BEHIND)) { // Tecla B
+        new vehMaletero = GetNearbyOwnedVehicle(playerid);
+        if(vehMaletero != INVALID_VEHICLE_ID) {
+            ShowCamperMaletero(playerid, vehMaletero);
+            return 1;
+        }
+    }
+
     if(!(newkeys & KEY_CTRL_BACK)) return 1; // Tecla H
 
     if(TrabajandoBasurero[playerid] > 0 && !IsPlayerInAnyVehicle(playerid) && BasureroRecolectando[playerid]) {
@@ -822,7 +830,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 // Inicio de trabajo camionero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2]))
     {
-        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
         CrearVehiculoTrabajoUnico(playerid, 498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 0, 0, CamioneroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
@@ -836,7 +844,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo pizzero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2]))
     {
-        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
 
         CrearVehiculoTrabajoUnico(playerid, 448, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, PizzeroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, PizzeroVehiculo[playerid], 0);
@@ -848,7 +856,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo basurero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2]))
     {
-        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
+        if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
         if(TotalRutasBasura <= 0) return SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de basura cargadas.");
 
         CrearVehiculoTrabajoUnico(playerid, 440, PuntoPos[puntoBasurero][0] + 4.0, PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2] + 1.0, 0.0, 0, 0, BasureroVehiculo[playerid]);
@@ -1178,7 +1186,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 {33CCFF}Tiempo jugado: {FFFFFF}%d horas
 {33CCFF}Prox nivel en: {FFFFFF}%dh %dm
 {33CCFF}Pago por hora: {00FF00}$%d
-{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/3 + %d Rumpo", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid), ContarCampersJugador(playerid));
+{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/3", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -1346,7 +1354,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/tirarbasura", true)) {
+    if(!strcmp(cmd, "/tirarbasura", true) || (!strcmp(cmd, "/tirar", true) && !strcmp(strtok(cmdtext, idx), "basura", true))) {
         if(TrabajandoBasurero[playerid] == 0) return SendClientMessage(playerid, -1, "No estas trabajando de basurero.");
         if(BasureroTieneBolsa[playerid]) return SendClientMessage(playerid, -1, "Primero sube la bolsa a la Rumpo con H.");
         if(BasureroRecolectado[playerid] <= 0) return SendClientMessage(playerid, -1, "No has recolectado bolsas aun.");
@@ -1357,7 +1365,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}KameTienda\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano\n{FFFF66}Restaurar vehiculos ocultos\n{00FFFFFF}Localizar uno de mis vehiculos", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}KameTienda\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano\n{FFFF66}Restaurar vehiculos ocultos\n{00FFFF}Localizar uno de mis vehiculos", "Ir", "Cerrar");
         return 1;
     }
 
@@ -1990,7 +1998,7 @@ public OnPlayerConnect(playerid) {
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
     InvFlor[playerid] = 0;
-    ArmeroNivel[playerid] = 1;
+                        ArmeroNivel[playerid] = 1;
     PlantasColocadas[playerid] = 0;
     if(CultivoTimer[playerid] != -1) { KillTimer(CultivoTimer[playerid]); CultivoTimer[playerid] = -1; }
     for(new c = 0; c < MAX_PLANTAS_POR_JUGADOR; c++) {
@@ -2043,7 +2051,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "[Minero]\n-Informacion del trabajo: extrae piedra/cobre/hierro en minas.\n-Comandos: H en mina, /inventario, /dejartrabajo.\n-Niveles: mejora por tiempo jugado general.\n-Paga: recursos para vender/craftear.\n\n[Basurero]\n-Informacion del trabajo: recoge bolsas y cargalas en la Rumpo con H.\n-Comandos: H en bolsa/camion, /dejartrabajo.\n-Niveles: 1 a 10 por rutas completadas.\n-Paga: dinero + chance de flores.\n\n[Pizzero]\n-Informacion del trabajo: entrega pizzas en moto por checkpoints.\n-Comandos: H para tomar trabajo, /dejartrabajo.\n-Niveles: 1 a 10 por entregas.\n-Paga: dinero por entrega + bonus por nivel.\n\n[Camionero]\n-Informacion del trabajo: rutas de carga y entrega.\n-Comandos: H para iniciar, /dejartrabajo.\n-Niveles: 1 a 10 por viajes.\n-Paga: pago alto por ruta.\n\n[Armero]\n-Informacion del trabajo: crea armas y municion en armeria.\n-Comandos: H en armeria, /armero, /inventario.\n-Niveles: 1 a 10 por crafteo.\n-Paga: venta/utilidad de armas para combate.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "[Minero]\n-Informacion del trabajo: extrae piedra/cobre/hierro en minas.\n-Comandos: H en mina, /inventario, /dejartrabajo.\n-Niveles: mejora por tiempo jugado general.\n-Paga: recursos para vender/craftear.\n\n[Basurero]\n-Informacion del trabajo: recoge bolsas y cargalas en la Rumpo con H.\n-Comandos: H en bolsa/camion, /tirar basura, /dejartrabajo.\n-Niveles: 1 a 10 por rutas completadas.\n-Paga: dinero + chance de flores.\n\n[Pizzero]\n-Informacion del trabajo: entrega pizzas en moto por checkpoints.\n-Comandos: H para tomar trabajo, /dejartrabajo.\n-Niveles: 1 a 10 por entregas.\n-Paga: dinero por entrega + bonus por nivel.\n\n[Camionero]\n-Informacion del trabajo: rutas de carga y entrega.\n-Comandos: H para iniciar, /dejartrabajo.\n-Niveles: 1 a 10 por viajes.\n-Paga: pago alto por ruta.\n\n[Armero]\n-Informacion del trabajo: crea armas y municion en armeria.\n-Comandos: H en armeria, /armero, /inventario.\n-Niveles: 1 a 10 por crafteo.\n-Paga: venta/utilidad de armas para combate.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /cosehar /inventario\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
         if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
@@ -2228,9 +2236,16 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 3) {
             if(!HornoData[h][hornoEnUso] || !HornoData[h][hornoListoRetiro]) return SendClientMessage(playerid, -1, "No hay coccion lista para retirar.");
             if(HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Solo el dueño puede retirar la coccion.");
-            if(HornoData[h][hornoTipo] == 1) InvPolvora[playerid] += HornoData[h][hornoCantidadSalida];
-            else InvCarbon[playerid] += HornoData[h][hornoCantidadSalida];
-            SendClientMessage(playerid, 0x66FF66FF, "Retiraste lo cocinado del horno.");
+            new obtenido = HornoData[h][hornoCantidadSalida];
+            new msgHorno[144];
+            if(HornoData[h][hornoTipo] == 1) {
+                InvPolvora[playerid] += obtenido;
+                format(msgHorno, sizeof(msgHorno), "[Horno] Obtuviste %d de polvora.", obtenido);
+            } else {
+                InvCarbon[playerid] += obtenido;
+                format(msgHorno, sizeof(msgHorno), "[Horno] Obtuviste %d de carbon.", obtenido);
+            }
+            SendClientMessage(playerid, 0x66FF66FF, msgHorno);
             HornoData[h][hornoEnUso] = false;
             HornoData[h][hornoOwner] = INVALID_PLAYER_ID;
             HornoData[h][hornoTipo] = 0;
@@ -2595,7 +2610,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new item = GetVentaAutoByListIndex(listitem);
         if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         if(ContarAutosJugador(playerid) >= MAX_AUTOS_NORMALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 3 autos por jugador.");
-        if(ContarVehiculosTotalesJugador(playerid) >= MAX_VEHICULOS_TOTALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite total alcanzado: 3 autos normales + 1 camper.");
         if(GetPlayerMoney(playerid) < VentaAutosData[item][vaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
 
         new Float:px, Float:py, Float:pz, Float:pa;
@@ -2640,7 +2654,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         if(tipoSel == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         if(ContarCampersJugador(playerid) >= MAX_CAMPERS_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 1 camper.");
-        if(ContarVehiculosTotalesJugador(playerid) >= MAX_VEHICULOS_TOTALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite total alcanzado: 3 autos normales + 1 camper.");
         if(GetPlayerMoney(playerid) < CamperTipos[tipoSel][ctPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
         new Float:px, Float:py, Float:pz, Float:pa;
         GetPlayerPos(playerid, px, py, pz);
@@ -2866,7 +2879,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     InvSemillaFlor[playerid] = 0;
                     InvHierba[playerid] = 0;
                     InvFlor[playerid] = 0;
-    ArmeroNivel[playerid] = 1;
+                    ArmeroNivel[playerid] = 1;
                     PlayerTiempoJugadoMin[playerid] = 0;
                     v[0] = floatstr(line);
                     fread(h, line); v[1] = floatstr(line);
@@ -2881,7 +2894,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         InvSemillaFlor[playerid] = 0;
                         InvHierba[playerid] = 0;
                         InvFlor[playerid] = 0;
-    ArmeroNivel[playerid] = 1;
+                        ArmeroNivel[playerid] = 1;
                         PlayerTiempoJugadoMin[playerid] = 0;
                         v[0] = floatstr(line);
                         fread(h, line); v[1] = floatstr(line);
@@ -2894,7 +2907,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             InvSemillaFlor[playerid] = 0;
                             InvHierba[playerid] = 0;
                             InvFlor[playerid] = 0;
-    ArmeroNivel[playerid] = 1;
+                            ArmeroNivel[playerid] = 1;
                             PlayerTiempoJugadoMin[playerid] = 0;
                             v[0] = floatstr(line);
                             fread(h, line); v[1] = floatstr(line);
@@ -3634,7 +3647,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
+    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosehar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
