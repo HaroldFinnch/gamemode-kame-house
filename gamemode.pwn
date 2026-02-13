@@ -450,6 +450,8 @@ stock GuardarCajasLoot();
 stock CargarPrepiezaPoints();
 stock GuardarPrepiezaPoints();
 stock MostrarDialogoAdmin(playerid);
+stock AplicarTexturaMinaEstatica(objectid);
+stock ObtenerDatosCrafteoArmero(tier, listitem, &weaponid, weaponName[], weaponNameLen, &needM, &needH, &needP, &needPr, &needC);
 stock GetHornoMasCercano(playerid);
 stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
@@ -1596,6 +1598,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
         MinaData[TotalMinas][minaObj] = CreateObject(2936, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
         MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
         TotalMinas++; GuardarMinas();
         return SendClientMessage(playerid, 0x00FF00FF, "Mina creada.");
@@ -2201,11 +2204,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ARMERO_MENU) {
         if(!response) return 1;
-        new list[1024];
-        if(listitem == 0) format(list, sizeof(list), "Colt 45\nSilenced Pistol\nDesert Eagle");
-        else if(listitem == 1) format(list, sizeof(list), "Tec-9\nUzi\nMP5");
-        else if(listitem == 2) format(list, sizeof(list), "Shotgun\nSawn-Off\nSPAS-12");
-        else format(list, sizeof(list), "Country Rifle\nSniper Rifle");
+        new list[1024], line[160], weaponid, needM, needH, needP, needPr, needC, arma[32];
+        list[0] = EOS;
+        for(new i = 0; i < ((listitem == 3) ? 2 : 3); i++) {
+            if(!ObtenerDatosCrafteoArmero(listitem, i, weaponid, arma, sizeof(arma), needM, needH, needP, needPr, needC)) continue;
+            if(needC > 0) format(line, sizeof(line), "%s [Mad:%d Hier:%d Pol:%d Pre:%d Cob:%d]", arma, needM, needH, needP, needPr, needC);
+            else format(line, sizeof(line), "%s [Mad:%d Hier:%d Pol:%d Pre:%d]", arma, needM, needH, needP, needPr);
+            strcat(list, line);
+            if(i < (((listitem == 3) ? 2 : 3) - 1)) strcat(list, "\n");
+        }
         ShowPlayerDialog(playerid, DIALOG_MINERO_MINAR, DIALOG_STYLE_LIST, "Armero - Selecciona arma", list, "Crear", "Atras");
         SetPVarInt(playerid, "ArmeroTier", listitem);
         return 1;
@@ -2216,22 +2223,16 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new tier = GetPVarInt(playerid, "ArmeroTier");
         new reqLvl = (tier == 0) ? 1 : ((tier == 1) ? 3 : ((tier == 2) ? 6 : 10));
         if(ArmeroNivel[playerid] < reqLvl) return SendClientMessage(playerid, -1, "Tu nivel de armero es insuficiente para este tier.");
-        new needM = 12, needH = 22, needP = 50, needPr = 20, needC = 0;
-        if(tier == 0 && listitem == 1) { needM = 14; needH = 24; needP = 60; needPr = 25; needC = 6; }
-        if(tier == 0 && listitem == 2) { needM = 20; needH = 38; needP = 95; needPr = 35; needC = 12; }
-        if(tier == 1 && listitem == 0) { needM = 18; needH = 22; needP = 85; needPr = 40; needC = 0; }
-        if(tier == 1 && listitem == 1) { needM = 20; needH = 24; needP = 90; needPr = 45; needC = 0; }
-        if(tier == 1 && listitem == 2) { needM = 22; needH = 32; needP = 120; needPr = 55; needC = 12; }
-        if(tier == 2 && listitem == 0) { needM = 28; needH = 38; needP = 130; needPr = 50; needC = 0; }
-        if(tier == 2 && listitem == 1) { needM = 24; needH = 34; needP = 120; needPr = 45; needC = 0; }
-        if(tier == 2 && listitem == 2) { needM = 34; needH = 48; needP = 160; needPr = 65; needC = 18; }
-        if(tier == 3 && listitem == 0) { needM = 38; needH = 45; needP = 150; needPr = 60; needC = 0; }
-        if(tier == 3 && listitem == 1) { needM = 48; needH = 65; needP = 230; needPr = 95; needC = 28; }
+        new weaponid, arma[32], needM, needH, needP, needPr, needC;
+        if(!ObtenerDatosCrafteoArmero(tier, listitem, weaponid, arma, sizeof(arma), needM, needH, needP, needPr, needC)) return 1;
         if(InvMadera[playerid] < needM || InvHierroMineral[playerid] < needH || InvPolvora[playerid] < needP || InvPrepieza[playerid] < needPr || InvCobre[playerid] < needC) return SendClientMessage(playerid, -1, "No tienes materiales suficientes.");
         InvMadera[playerid] -= needM; InvHierroMineral[playerid] -= needH; InvPolvora[playerid] -= needP; InvPrepieza[playerid] -= needPr; InvCobre[playerid] -= needC;
+        PlayerArmaComprada[playerid][weaponid] = true;
+        if(PlayerAmmoInventario[playerid][weaponid] < 9999) PlayerAmmoInventario[playerid][weaponid] = 9999;
+        GivePlayerWeapon(playerid, WEAPON:weaponid, PlayerAmmoInventario[playerid][weaponid]);
         ArmeroExp[playerid]++;
         if(ArmeroExp[playerid] >= 3 && ArmeroNivel[playerid] < NIVEL_MAX_TRABAJO) { ArmeroExp[playerid] = 0; ArmeroNivel[playerid]++; }
-        SendClientMessage(playerid, 0x66FF66FF, "Arma creada con exito. Subes armero creando armas.");
+        SendClientMessage(playerid, 0x66FF66FF, "Arma creada con exito y equipada. Subes armero creando armas.");
         return 1;
     }
 
@@ -2239,9 +2240,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
-        if(listitem == 1) return OnPlayerCommandText(playerid, "/mover");
-        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_MINERAL_TIPO, DIALOG_STYLE_INPUT, "Admin - Dar minerales", "Tipo mineral (piedra/cobre/hierro/madera/polvora/prepieza/carbon)", "Siguiente", "Atras");
+        if(listitem == 2) return OnPlayerCommandText(playerid, "/mover");
+        if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
+        if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly", "Cerrar", "");
         return 1;
     }
 
@@ -3433,7 +3435,7 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
-    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000) [ID 19631]");
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)");
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "KameTienda", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -3689,7 +3691,7 @@ stock ShowCamperBuyMenu(playerid) {
         strcat(body, line); count++;
     }
     if(count == 0) return SendClientMessage(playerid, -1, "No hay campers disponibles por ahora.");
-    ShowPlayerDialog(playerid, DIALOG_CAMPER_MENU, DIALOG_STYLE_LIST, "Campers (ID 483)", body, "Comprar", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_CAMPER_MENU, DIALOG_STYLE_LIST, "Campers", body, "Comprar", "Cerrar");
     return 1;
 }
 
@@ -4105,11 +4107,45 @@ stock CargarMinas() {
         new idx, Float:x = floatstr(strtok(line, idx)), Float:y = floatstr(strtok(line, idx)), Float:z = floatstr(strtok(line, idx));
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
         MinaData[TotalMinas][minaObj] = CreateObject(2936, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
         MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
         TotalMinas++;
     }
     fclose(h);
     return 1;
+}
+
+stock AplicarTexturaMinaEstatica(objectid) {
+    if(objectid == 0) return 0;
+    SetObjectMaterial(objectid, 0, 2936, "kmb_rhymesbook", "kmb_wall", 0xFFFFFFFF);
+    return 1;
+}
+
+stock ObtenerDatosCrafteoArmero(tier, listitem, &weaponid, weaponName[], weaponNameLen, &needM, &needH, &needP, &needPr, &needC) {
+    weaponid = 0;
+    needM = 0; needH = 0; needP = 0; needPr = 0; needC = 0;
+    switch(tier) {
+        case 0: {
+            if(listitem == 0) { weaponid = 22; format(weaponName, weaponNameLen, "Colt 45"); needM = 12; needH = 22; needP = 50; needPr = 20; }
+            else if(listitem == 1) { weaponid = 23; format(weaponName, weaponNameLen, "Silenced Pistol"); needM = 14; needH = 24; needP = 60; needPr = 25; needC = 6; }
+            else if(listitem == 2) { weaponid = 24; format(weaponName, weaponNameLen, "Desert Eagle"); needM = 20; needH = 38; needP = 95; needPr = 35; needC = 12; }
+        }
+        case 1: {
+            if(listitem == 0) { weaponid = 32; format(weaponName, weaponNameLen, "Tec-9"); needM = 18; needH = 22; needP = 85; needPr = 40; }
+            else if(listitem == 1) { weaponid = 28; format(weaponName, weaponNameLen, "Uzi"); needM = 20; needH = 24; needP = 90; needPr = 45; }
+            else if(listitem == 2) { weaponid = 29; format(weaponName, weaponNameLen, "MP5"); needM = 22; needH = 32; needP = 120; needPr = 55; needC = 12; }
+        }
+        case 2: {
+            if(listitem == 0) { weaponid = 25; format(weaponName, weaponNameLen, "Shotgun"); needM = 28; needH = 38; needP = 130; needPr = 50; }
+            else if(listitem == 1) { weaponid = 26; format(weaponName, weaponNameLen, "Sawn-Off"); needM = 24; needH = 34; needP = 120; needPr = 45; }
+            else if(listitem == 2) { weaponid = 27; format(weaponName, weaponNameLen, "SPAS-12"); needM = 34; needH = 48; needP = 160; needPr = 65; needC = 18; }
+        }
+        case 3: {
+            if(listitem == 0) { weaponid = 33; format(weaponName, weaponNameLen, "Country Rifle"); needM = 38; needH = 45; needP = 150; needPr = 60; }
+            else if(listitem == 1) { weaponid = 34; format(weaponName, weaponNameLen, "Sniper Rifle"); needM = 48; needH = 65; needP = 230; needPr = 95; needC = 28; }
+        }
+    }
+    return (weaponid > 0);
 }
 stock GuardarHornos() {
     new File:h = fopen(PATH_HORNOS, io_write); if(!h) return 0; new line[96];
