@@ -392,7 +392,8 @@ enum eHornoData {
     hornoTipo,
     hornoCantidadEntrada,
     hornoCantidadSalida,
-    hornoReadyTick
+    hornoReadyTick,
+    bool:hornoListoRetiro
 }
 new HornoData[MAX_HORNOS][eHornoData];
 new TotalHornos;
@@ -441,6 +442,7 @@ forward RestaurarVehiculoTemporal(slot);
 forward FinalizarMinado(playerid);
 forward FinalizarCajaBusqueda(playerid, cajaidx);
 forward FinalizarHorno(hornoidx);
+forward ActualizarTextosHornos();
 stock CargarMinas();
 stock GuardarMinas();
 stock CargarHornos();
@@ -460,6 +462,7 @@ stock EntrarCasa(playerid, casa);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
 stock FormatTiempoRestante(ms, dest[], len);
+stock ActualizarLabelHorno(hornoidx);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -654,6 +657,7 @@ public OnGameModeInit() {
     SetTimer("ChequearLimitesMapa", 1000, true);
     SetTimer("SubirTiempoJugado", 60000, true);
     SetTimer("CheckInactiveVehicles", 10000, true);
+    SetTimer("ActualizarTextosHornos", 1000, true);
 
     InitCamperSystem();
     InitGasSystem();
@@ -668,7 +672,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     if((newkeys & KEY_YES) && PlayerAdmin[playerid] >= 1) { // Tecla Y (solo admin)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
-        if(IsNearCamperPoint(playerid)) return ShowCamperAdminMenu(playerid);
+        if(IsNearCamperPoint(playerid)) return SendClientMessage(playerid, 0xFFAA00FF, "Sistema de campers deshabilitado.");
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
     }
 
@@ -716,8 +720,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     if(IsNearCamperPoint(playerid)) {
-        ShowAdminEditHint(playerid, "campers");
-        return ShowCamperBuyMenu(playerid);
+        return SendClientMessage(playerid, 0xFFAA00FF, "El sistema de campers fue eliminado. Usa /maletero en cualquier vehiculo propio.");
     }
 
     if(IsNearVentaAutos(playerid)) {
@@ -776,7 +779,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, HornoData[h][hornoX], HornoData[h][hornoY], HornoData[h][hornoZ])) continue;
         if(HornoData[h][hornoEnUso] && HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Este horno esta en uso por otro jugador.");
         HornoActivoJugador[playerid] = h;
-        ShowPlayerDialog(playerid, DIALOG_HORNO_MENU, DIALOG_STYLE_LIST, "Horno", "20 Piedra => 5 Polvora (5 min)\n20 Madera => 5 Carbon (2 min)\nAgregar 1 Carbon (-30s)", "Seleccionar", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_HORNO_MENU, DIALOG_STYLE_LIST, "Horno", "20 Piedra => 5 Polvora (5 min)\n20 Madera => 5 Carbon (2 min)\nAgregar 1 Carbon (-30s)\nRetirar coccion lista", "Seleccionar", "Cerrar");
         return 1;
     }
 
@@ -795,7 +798,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!PrepiezaPoints[pp][ppActivo]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, PrepiezaPoints[pp][ppX], PrepiezaPoints[pp][ppY], PrepiezaPoints[pp][ppZ])) continue;
         if(ArmeroNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes ser armero (minimo nivel 1).");
-        if(GetTickCount() < PrepiezaCooldownTick[playerid][pp]) return SendClientMessage(playerid, -1, "Debes esperar 5 minutos para volver a comprar aqui.");
+        if(GetTickCount() < PrepiezaCooldownTick[playerid][pp]) {
+            new leftPP[24], msgPP[128];
+            FormatTiempoRestante(PrepiezaCooldownTick[playerid][pp] - GetTickCount(), leftPP, sizeof(leftPP));
+            format(msgPP, sizeof(msgPP), "Debes esperar para volver a comprar aqui: %s", leftPP);
+            return SendClientMessage(playerid, 0xFFAA00FF, msgPP);
+        }
         if(GetPlayerMoney(playerid) < 100) return SendClientMessage(playerid, -1, "Necesitas $100.");
         GivePlayerMoney(playerid, -100);
         InvPrepieza[playerid] += 2;
@@ -1081,7 +1089,7 @@ public AsignarRutaPizzero(playerid) {
     PizzeroDestino[playerid][2] = rz;
     SetPlayerCheckpoint(playerid, rx, ry, rz, 4.0);
     TrabajandoPizzero[playerid] = 1;
-    SendClientMessage(playerid, 0xFF8C00FF, "[Pizzero] Nueva entrega asignada. Ve al checkpoint y entrega la pizza.");
+    SendClientMessage(playerid, 0xFF8C00FF, "[Trabajo Pizzero] Nueva entrega asignada. Ve al checkpoint y entrega la pizza.");
     return 1;
 }
 
@@ -1105,7 +1113,7 @@ public FinalizarEntregaPizza(playerid) {
     if(PizzeroEntregas[playerid] >= PROGRESO_PIZZERO_POR_NIVEL) {
         PizzeroEntregas[playerid] = 0;
         if(PizzeroNivel[playerid] < NIVEL_MAX_TRABAJO) PizzeroNivel[playerid]++;
-        SendClientMessage(playerid, 0xFFFF00FF, "Subiste de nivel en el trabajo de pizzero.");
+        SendClientMessage(playerid, 0xFFFF00FF, "Subiste de nivel en el trabajo Pizzero.");
     }
 
     new info[160];
@@ -1259,7 +1267,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/inventario", true)) {
         new inv[256];
-        format(inv, sizeof(inv), "Dinero:$%d\nBanco:$%d\nPiedra:%d\nCobre:%d\nHierro:%d\nMadera:%d\nPolvora:%d\nPrepiezas:%d\nCarbon:%d\nMazo:%s\nDurabilidad:%d\nArmero:%d/10", GetPlayerMoney(playerid), PlayerBankMoney[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvMadera[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid], ArmeroNivel[playerid]);
+        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF}%d\n{FFFFFFFF}Flor:{FFFFFF}%d\n{A9A9A9}Hierro:{FFFFFF}%d\n{B87333}Cobre:{FFFFFF}%d\n{C0C0C0}Piedra:{FFFFFF}%d\n{8B4513}Madera:{FFFFFF}%d\n{FFD700}Polvora:{FFFFFF}%d\n{555555}Carbon:{FFFFFF}%d\nPrepiezas:%d\nDinero:$%d\nBanco:$%d\nMazo:%s\nDurabilidad:%d", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? "Si" : "No", MazoDurabilidad[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -1349,7 +1357,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "Trabajo Camionero\nTrabajo Minero\nTrabajo Armero\nPizzeria Los Santos\nTrabajo Basurero\nDeposito de Carga\nBanco KameHouse\nKameTienda\nArmeria\nConcesionario\nVenta de campers\nTaller de pintura\nHorno mas cercano\nRestaurar vehiculos ocultos\nLocalizar uno de mis vehiculos", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}KameTienda\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano\n{FFFF66}Restaurar vehiculos ocultos\n{00FFFFFF}Localizar uno de mis vehiculos", "Ir", "Cerrar");
         return 1;
     }
 
@@ -1376,18 +1384,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/maletero", true)) {
         new vehid = GetNearbyOwnedVehicle(playerid);
-        if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Debes estar junto a tu camper para usar /maletero.");
+        if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Debes estar junto a un vehiculo propio para usar /maletero.");
         return ShowCamperMaletero(playerid, vehid);
     }
 
 
     if(!strcmp(cmd, "/ga", true)) {
-        new vehid = GetNearbyOwnedCamper(playerid);
-        if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Debes estar junto a tu camper.");
+        new vehid = GetNearbyOwnedVehicle(playerid);
+        if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Debes estar junto a un vehiculo propio.");
         new WEAPON:arma = GetPlayerWeapon(playerid);
         if(_:arma <= 0 || _:arma >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "Debes tener un arma en mano.");
-        new ammo = PlayerAmmoInventario[playerid][_:arma];
+        new ammo = GetPlayerAmmo(playerid);
+        if(ammo <= 0) ammo = PlayerAmmoInventario[playerid][_:arma];
         if(ammo <= 0) return SendClientMessage(playerid, -1, "No tienes municion en esa arma.");
+        PlayerAmmoInventario[playerid][_:arma] = ammo;
         new usados = CuentaArmasCamper(vehid);
         if(usados >= CamperSlotsVeh[vehid]) return SendClientMessage(playerid, -1, "Maletero lleno.");
         CamperArmasVeh[vehid][_:arma] += ammo;
@@ -1430,7 +1440,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
     if(!strcmp(cmd, "/editarcamper", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        return SendClientMessage(playerid, -1, "Acercate a venta de campers y usa la tecla Y para editar.");
+        return SendClientMessage(playerid, -1, "Sistema de campers deshabilitado.");
     }
 
     if(!strcmp(cmd, "/comprar", true)) {
@@ -1610,7 +1620,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         HornoData[TotalHornos][hornoActivo] = true; HornoData[TotalHornos][hornoX] = x; HornoData[TotalHornos][hornoY] = y; HornoData[TotalHornos][hornoZ] = z;
         HornoData[TotalHornos][hornoObj] = CreateObject(19831, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
+        HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0); HornoData[TotalHornos][hornoListoRetiro] = false; HornoData[TotalHornos][hornoEnUso] = false; HornoData[TotalHornos][hornoOwner] = INVALID_PLAYER_ID;
         TotalHornos++; GuardarHornos();
         return SendClientMessage(playerid, 0x00FF00FF, "Horno creado.");
     }
@@ -2033,7 +2043,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "Camionero: checkpoints\nPizzero: entrega en moto\nBasurero: bolsas con H\nMinero: mina con cooldown 3 min\nArmero: armeria nivel 1 a 10", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "[Minero]\n-Informacion del trabajo: extrae piedra/cobre/hierro en minas.\n-Comandos: H en mina, /inventario, /dejartrabajo.\n-Niveles: mejora por tiempo jugado general.\n-Paga: recursos para vender/craftear.\n\n[Basurero]\n-Informacion del trabajo: recoge bolsas y cargalas en la Rumpo con H.\n-Comandos: H en bolsa/camion, /dejartrabajo.\n-Niveles: 1 a 10 por rutas completadas.\n-Paga: dinero + chance de flores.\n\n[Pizzero]\n-Informacion del trabajo: entrega pizzas en moto por checkpoints.\n-Comandos: H para tomar trabajo, /dejartrabajo.\n-Niveles: 1 a 10 por entregas.\n-Paga: dinero por entrega + bonus por nivel.\n\n[Camionero]\n-Informacion del trabajo: rutas de carga y entrega.\n-Comandos: H para iniciar, /dejartrabajo.\n-Niveles: 1 a 10 por viajes.\n-Paga: pago alto por ruta.\n\n[Armero]\n-Informacion del trabajo: crea armas y municion en armeria.\n-Comandos: H en armeria, /armero, /inventario.\n-Niveles: 1 a 10 por crafteo.\n-Paga: venta/utilidad de armas para combate.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /cosehar /inventario\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
         if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
@@ -2051,21 +2061,20 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         else if(listitem == 7) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
         else if(listitem == 8) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
         else if(listitem == 9) SetPlayerCheckpoint(playerid, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2], 6.0);
-        else if(listitem == 10) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamper][0], PuntoPos[puntoCamper][1], PuntoPos[puntoCamper][2], 6.0);
-        else if(listitem == 11) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
-        else if(listitem == 12) {
+        else if(listitem == 10) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
+        else if(listitem == 11) {
             new horno = GetHornoMasCercano(playerid);
             if(horno == -1) return SendClientMessage(playerid, -1, "No hay hornos disponibles en el mapa.");
             SetPlayerCheckpoint(playerid, HornoData[horno][hornoX], HornoData[horno][hornoY], HornoData[horno][hornoZ], 4.0);
         }
-        else if(listitem == 13) {
+        else if(listitem == 12) {
             new restaurados = RestaurarVehiculosJugador(playerid);
             new msg[96];
             format(msg, sizeof(msg), "GPS: %d vehiculo(s) restaurado(s) en su ultima posicion.", restaurados);
             SendClientMessage(playerid, 0x00FF00FF, msg);
             return 1;
         }
-        else if(listitem == 14) {
+        else if(listitem == 13) {
             return ShowGPSVehiculosMenu(playerid);
         }
         GPSCheckpointActivo[playerid] = true;
@@ -2175,29 +2184,62 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         new h = HornoActivoJugador[playerid];
         if(h < 0 || h >= TotalHornos || !HornoData[h][hornoActivo]) return SendClientMessage(playerid, -1, "Horno invalido.");
-        if(listitem == 0) {
-            if(InvPiedra[playerid] < 20) return SendClientMessage(playerid, -1, "Necesitas 20 piedra.");
-            InvPiedra[playerid] -= 20;
-            HornoData[h][hornoEnUso] = true; HornoData[h][hornoOwner] = playerid; HornoData[h][hornoTipo] = 1; HornoData[h][hornoCantidadEntrada] = 20; HornoData[h][hornoCantidadSalida] = 5;
-            HornoData[h][hornoReadyTick] = GetTickCount() + 300000;
-            SetTimerEx("FinalizarHorno", 300000, false, "d", h);
-            return SendClientMessage(playerid, 0xFFAA00FF, "Horno encendido: polvora lista en 5 minutos.");
+
+        if(HornoData[h][hornoEnUso] && HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Este horno esta en uso por otro jugador.");
+
+        if(listitem == 0 || listitem == 1) {
+            if(HornoData[h][hornoEnUso]) return SendClientMessage(playerid, -1, "Este horno ya esta en uso. Espera a terminar y retirar.");
+            if(listitem == 0) {
+                if(InvPiedra[playerid] < 20) return SendClientMessage(playerid, -1, "Necesitas 20 piedra.");
+                InvPiedra[playerid] -= 20;
+                HornoData[h][hornoTipo] = 1;
+                HornoData[h][hornoCantidadSalida] = 5;
+                HornoData[h][hornoReadyTick] = GetTickCount() + 300000;
+                SetTimerEx("FinalizarHorno", 300000, false, "d", h);
+                SendClientMessage(playerid, 0xFFAA00FF, "Horno encendido: polvora lista en 5 minutos.");
+            } else {
+                if(InvMadera[playerid] < 20) return SendClientMessage(playerid, -1, "Necesitas 20 madera.");
+                InvMadera[playerid] -= 20;
+                HornoData[h][hornoTipo] = 2;
+                HornoData[h][hornoCantidadSalida] = 5;
+                HornoData[h][hornoReadyTick] = GetTickCount() + 120000;
+                SetTimerEx("FinalizarHorno", 120000, false, "d", h);
+                SendClientMessage(playerid, 0xFFAA00FF, "Horno encendido: carbon listo en 2 minutos.");
+            }
+            HornoData[h][hornoEnUso] = true;
+            HornoData[h][hornoOwner] = playerid;
+            HornoData[h][hornoCantidadEntrada] = 20;
+            HornoData[h][hornoListoRetiro] = false;
+            ActualizarLabelHorno(h);
+            return 1;
         }
-        if(listitem == 1) {
-            if(InvMadera[playerid] < 20) return SendClientMessage(playerid, -1, "Necesitas 20 madera.");
-            InvMadera[playerid] -= 20;
-            HornoData[h][hornoEnUso] = true; HornoData[h][hornoOwner] = playerid; HornoData[h][hornoTipo] = 2; HornoData[h][hornoCantidadEntrada] = 20; HornoData[h][hornoCantidadSalida] = 5;
-            HornoData[h][hornoReadyTick] = GetTickCount() + 120000;
-            SetTimerEx("FinalizarHorno", 120000, false, "d", h);
-            return SendClientMessage(playerid, 0xFFAA00FF, "Horno encendido: carbon listo en 2 minutos.");
-        }
+
         if(listitem == 2) {
-            if(!HornoData[h][hornoEnUso]) return SendClientMessage(playerid, -1, "El horno no esta cocinando.");
+            if(!HornoData[h][hornoEnUso] || HornoData[h][hornoListoRetiro]) return SendClientMessage(playerid, -1, "El horno no esta cocinando.");
             if(HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Solo el dueño puede acelerar.");
             if(InvCarbon[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes carbon.");
             InvCarbon[playerid]--;
             HornoData[h][hornoReadyTick] -= 30000;
+            if(HornoData[h][hornoReadyTick] < GetTickCount() + 1000) HornoData[h][hornoReadyTick] = GetTickCount() + 1000;
+            ActualizarLabelHorno(h);
             return SendClientMessage(playerid, 0x66FF66FF, "Agregaste carbon: -30 segundos.");
+        }
+
+        if(listitem == 3) {
+            if(!HornoData[h][hornoEnUso] || !HornoData[h][hornoListoRetiro]) return SendClientMessage(playerid, -1, "No hay coccion lista para retirar.");
+            if(HornoData[h][hornoOwner] != playerid) return SendClientMessage(playerid, -1, "Solo el dueño puede retirar la coccion.");
+            if(HornoData[h][hornoTipo] == 1) InvPolvora[playerid] += HornoData[h][hornoCantidadSalida];
+            else InvCarbon[playerid] += HornoData[h][hornoCantidadSalida];
+            SendClientMessage(playerid, 0x66FF66FF, "Retiraste lo cocinado del horno.");
+            HornoData[h][hornoEnUso] = false;
+            HornoData[h][hornoOwner] = INVALID_PLAYER_ID;
+            HornoData[h][hornoTipo] = 0;
+            HornoData[h][hornoCantidadEntrada] = 0;
+            HornoData[h][hornoCantidadSalida] = 0;
+            HornoData[h][hornoReadyTick] = 0;
+            HornoData[h][hornoListoRetiro] = false;
+            ActualizarLabelHorno(h);
+            return 1;
         }
         return 1;
     }
@@ -2673,7 +2715,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_MALETERO_MENU) {
         if(!response) return 1;
         new veh = GetPVarInt(playerid, "CamperMaleteroVeh");
-        if(!IsCamperDeJugador(playerid, veh)) return SendClientMessage(playerid, -1, "No puedes abrir este maletero.");
+        if(!PlayerTieneAccesoVehiculo(playerid, veh)) return SendClientMessage(playerid, -1, "No puedes abrir este maletero.");
 
         new armas = CuentaArmasCamper(veh);
         if(listitem >= armas) return 1; // cerrar
@@ -3238,7 +3280,7 @@ stock ShowAdminEditHint(playerid, const nombreSistema[]) {
 }
 
 stock ShowArmeriaMenu(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ARMERIA_CATEGORIA, DIALOG_STYLE_LIST, "Armeria KameHouse", "Obtener trabajo de armero\nArmas disponibles (municion infinita)", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ARMERIA_CATEGORIA, DIALOG_STYLE_LIST, "Armeria KameHouse", "Obtener trabajo de armero\nArmas disponibles (municion alta)", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -3564,7 +3606,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoCamper: {
             PuntoPickup[punto] = CreatePickup(1318, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{FF0000}Venta de campers\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("{FF0000}Punto deshabilitado\n{FFFFFF}Sistema de campers eliminado", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
         }
         case puntoPintura: {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -3667,7 +3709,7 @@ stock InitCamperSystem() {
     CamperTipos[0][ctActiva] = true; CamperTipos[0][ctPrecio] = 35000; CamperTipos[0][ctStock] = 5; CamperTipos[0][ctColor1] = 3; CamperTipos[0][ctColor2] = 3; CamperTipos[0][ctSlots] = 10; format(CamperTipos[0][ctNombre], 24, "Rojo");
     CamperTipos[1][ctActiva] = true; CamperTipos[1][ctPrecio] = 50000; CamperTipos[1][ctStock] = 4; CamperTipos[1][ctColor1] = 79; CamperTipos[1][ctColor2] = 79; CamperTipos[1][ctSlots] = 15; format(CamperTipos[1][ctNombre], 24, "Azul");
     CamperTipos[2][ctActiva] = true; CamperTipos[2][ctPrecio] = 110000; CamperTipos[2][ctStock] = 2; CamperTipos[2][ctColor1] = 0; CamperTipos[2][ctColor2] = 0; CamperTipos[2][ctSlots] = 40; format(CamperTipos[2][ctNombre], 24, "Negro");
-    for(new v = 0; v < MAX_VEHICLES; v++) { CamperOwner[v] = -1; CamperSlotsVeh[v] = 0; CamperHierbaVeh[v] = 0; CamperFloresVeh[v] = 0; CamperSemillaHierbaVeh[v] = 0; CamperSemillaFlorVeh[v] = 0; VehOwner[v] = -1; VehLocked[v] = false; VehOculto[v] = false; VehLastUseTick[v] = 0; VehModelData[v] = 0; VehColor1Data[v] = -1; VehColor2Data[v] = -1; for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[v][w] = 0; }
+    for(new v = 0; v < MAX_VEHICLES; v++) { CamperOwner[v] = -1; CamperSlotsVeh[v] = 4; CamperHierbaVeh[v] = 0; CamperFloresVeh[v] = 0; CamperSemillaHierbaVeh[v] = 0; CamperSemillaFlorVeh[v] = 0; VehOwner[v] = -1; VehLocked[v] = false; VehOculto[v] = false; VehLastUseTick[v] = 0; VehModelData[v] = 0; VehColor1Data[v] = -1; VehColor2Data[v] = -1; for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[v][w] = 0; }
     return 1;
 }
 
@@ -3723,7 +3765,7 @@ stock GetNearbyOwnedCamper(playerid) {
 }
 
 stock ShowCamperMaletero(playerid, vehid) {
-    if(!IsCamperDeJugador(playerid, vehid)) return SendClientMessage(playerid, -1, "Ese camper no te pertenece.");
+    if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
     new info[128], body[768], line[64], totalArmas = CuentaArmasCamper(vehid);
     new usados = totalArmas;
     format(info, sizeof(info), "Armas guardadas: %d/%d slots usados", usados, CamperSlotsVeh[vehid]);
@@ -3740,7 +3782,7 @@ stock ShowCamperMaletero(playerid, vehid) {
     strcat(body, "Cerrar maletero");
 
     SetPVarInt(playerid, "CamperMaleteroVeh", vehid);
-    ShowPlayerDialog(playerid, DIALOG_MALETERO_MENU, DIALOG_STYLE_LIST, "Maletero del camper", body, "Elegir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_MALETERO_MENU, DIALOG_STYLE_LIST, "Maletero del vehiculo", body, "Elegir", "Cerrar");
     return 1;
 }
 
@@ -4057,16 +4099,50 @@ public FinalizarHorno(hornoidx) {
         if(cidx >= 0 && cidx < TotalCajas && CajaDataLoot[cidx][cajaActiva]) { if(CajaDataLoot[cidx][cajaObj] != 0) DestroyObject(CajaDataLoot[cidx][cajaObj]); CajaDataLoot[cidx][cajaObj] = CreateObject(2358, CajaDataLoot[cidx][cajaX], CajaDataLoot[cidx][cajaY], CajaDataLoot[cidx][cajaZ] - 1.0, 0.0, 0.0, 0.0); }
         return 1;
     }
-    if(hornoidx < 0 || hornoidx >= TotalHornos || !HornoData[hornoidx][hornoActivo] || !HornoData[hornoidx][hornoEnUso]) return 1;
+    if(hornoidx < 0 || hornoidx >= TotalHornos || !HornoData[hornoidx][hornoActivo] || !HornoData[hornoidx][hornoEnUso] || HornoData[hornoidx][hornoListoRetiro]) return 1;
+    HornoData[hornoidx][hornoReadyTick] = 0;
+    HornoData[hornoidx][hornoListoRetiro] = true;
     new owner = HornoData[hornoidx][hornoOwner];
     if(IsPlayerConnected(owner)) {
-        if(HornoData[hornoidx][hornoTipo] == 1) InvPolvora[owner] += HornoData[hornoidx][hornoCantidadSalida];
-        else InvCarbon[owner] += HornoData[hornoidx][hornoCantidadSalida];
-        SendClientMessage(owner, 0x66FF66FF, "Tu horno termino la coccion.");
+        SendClientMessage(owner, 0x66FF66FF, "Tu horno termino la coccion. Presiona H y elige 'Retirar coccion lista'.");
     }
-    HornoData[hornoidx][hornoEnUso] = false;
-    HornoData[hornoidx][hornoOwner] = INVALID_PLAYER_ID;
-    HornoData[hornoidx][hornoTipo] = 0;
+    ActualizarLabelHorno(hornoidx);
+    return 1;
+}
+
+public ActualizarTextosHornos() {
+    for(new h = 0; h < TotalHornos; h++) {
+        if(!HornoData[h][hornoActivo]) continue;
+        ActualizarLabelHorno(h);
+    }
+    return 1;
+}
+
+stock ActualizarLabelHorno(hornoidx) {
+    if(hornoidx < 0 || hornoidx >= TotalHornos || !HornoData[hornoidx][hornoActivo]) return 0;
+    new txt[144];
+    if(!HornoData[hornoidx][hornoEnUso]) {
+        format(txt, sizeof(txt), "Horno\nUsa H");
+        Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
+        return 1;
+    }
+
+    new owner = HornoData[hornoidx][hornoOwner];
+    new ownerName[MAX_PLAYER_NAME] = "Jugador";
+    if(IsPlayerConnected(owner)) GetPlayerName(owner, ownerName, sizeof(ownerName));
+
+    if(HornoData[hornoidx][hornoListoRetiro]) {
+        format(txt, sizeof(txt), "Horno en uso\nDueno: %s\n{66FF66}LISTO: presiona H para retirar", ownerName);
+        Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0x66FF66FF, txt);
+        return 1;
+    }
+
+    new restante = HornoData[hornoidx][hornoReadyTick] - GetTickCount();
+    if(restante < 0) restante = 0;
+    new left[24];
+    FormatTiempoRestante(restante, left, sizeof(left));
+    format(txt, sizeof(txt), "Horno en uso\nDueno: %s\nTiempo: %s", ownerName, left);
+    Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
     return 1;
 }
 
@@ -4117,7 +4193,7 @@ stock CargarMinas() {
 
 stock AplicarTexturaMinaEstatica(objectid) {
     if(objectid == 0) return 0;
-    SetObjectMaterial(objectid, 0, 2936, "kmb_rhymesbook", "kmb_wall", 0xFFFFFFFF);
+    SetObjectMaterial(objectid, 0, 16131, "des_rockgp2_", "des_rockgp2_", 0xFFFFFFFF);
     return 1;
 }
 
@@ -4153,7 +4229,7 @@ stock GuardarHornos() {
 }
 stock CargarHornos() {
     new File:h = fopen(PATH_HORNOS, io_read), line[96]; if(!h) return 0; TotalHornos = 0;
-    while(fread(h, line) && TotalHornos < MAX_HORNOS) { new idx, Float:x=floatstr(strtok(line, idx)), Float:y=floatstr(strtok(line, idx)), Float:z=floatstr(strtok(line, idx)); HornoData[TotalHornos][hornoActivo]=true; HornoData[TotalHornos][hornoX]=x; HornoData[TotalHornos][hornoY]=y; HornoData[TotalHornos][hornoZ]=z; HornoData[TotalHornos][hornoObj]=CreateObject(19831, x, y, z-1.0, 0.0,0.0,0.0); HornoData[TotalHornos][hornoLabel]=Create3DTextLabel("Horno\nUsa H",0xFFAA00FF,x,y,z+0.8,12.0,0); TotalHornos++; } fclose(h); return 1;
+    while(fread(h, line) && TotalHornos < MAX_HORNOS) { new idx, Float:x=floatstr(strtok(line, idx)), Float:y=floatstr(strtok(line, idx)), Float:z=floatstr(strtok(line, idx)); HornoData[TotalHornos][hornoActivo]=true; HornoData[TotalHornos][hornoX]=x; HornoData[TotalHornos][hornoY]=y; HornoData[TotalHornos][hornoZ]=z; HornoData[TotalHornos][hornoObj]=CreateObject(19831, x, y, z-1.0, 0.0,0.0,0.0); HornoData[TotalHornos][hornoLabel]=Create3DTextLabel("Horno\nUsa H",0xFFAA00FF,x,y,z+0.8,12.0,0); HornoData[TotalHornos][hornoListoRetiro]=false; HornoData[TotalHornos][hornoEnUso]=false; HornoData[TotalHornos][hornoOwner]=INVALID_PLAYER_ID; TotalHornos++; } fclose(h); return 1;
 }
 stock GuardarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalCajas;i++){ if(!CajaDataLoot[i][cajaActiva]) continue; format(line,sizeof(line),"%f %f %f\n",CajaDataLoot[i][cajaX],CajaDataLoot[i][cajaY],CajaDataLoot[i][cajaZ]); fwrite(h,line);} fclose(h); return 1; }
 stock CargarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_read), line[96]; if(!h) return 0; TotalCajas=0; while(fread(h,line) && TotalCajas<MAX_CAJAS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); CajaDataLoot[TotalCajas][cajaActiva]=true; CajaDataLoot[TotalCajas][cajaX]=x; CajaDataLoot[TotalCajas][cajaY]=y; CajaDataLoot[TotalCajas][cajaZ]=z; CajaDataLoot[TotalCajas][cajaObj]=CreateObject(2358,x,y,z-1.0,0.0,0.0,0.0); CajaDataLoot[TotalCajas][cajaLabel]=Create3DTextLabel("Caja de busqueda\nUsa H",0xFFFFFFFF,x,y,z+0.7,10.0,0); TotalCajas++; } fclose(h); return 1; }
