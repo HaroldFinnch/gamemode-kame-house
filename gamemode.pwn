@@ -2454,7 +2454,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_MINERAL_TIPO, DIALOG_STYLE_INPUT, "Admin - Dar minerales", "Tipo mineral (piedra/cobre/hierro/madera/polvora/prepieza/carbon)", "Siguiente", "Atras");
         if(listitem == 2) return OnPlayerCommandText(playerid, "/mover");
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
-        if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly", "Cerrar", "");
+        if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly /admprendas", "Cerrar", "");
+        if(listitem == 5) return OnPlayerCommandText(playerid, "/admprendas");
         return 1;
     }
 
@@ -4340,7 +4341,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -4550,7 +4551,7 @@ stock GetPrendaBoneName(bone, dest[], len) {
     return 1;
 }
 
-public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Float:fOffsetX, Float:fOffsetY, Float:fOffsetZ, Float:fRotX, Float:fRotY, Float:fRotZ, Float:fScaleX, Float:fScaleY, Float:fScaleZ) {
+public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, modelid, boneid, Float:fOffsetX, Float:fOffsetY, Float:fOffsetZ, Float:fRotX, Float:fRotY, Float:fRotZ, Float:fScaleX, Float:fScaleY, Float:fScaleZ) {
     #pragma unused modelid
     #pragma unused boneid
     if(response == EDIT_RESPONSE_FINAL && PrendaMoveIndex[playerid] == index && index >= 0 && index < MAX_PRENDAS) {
