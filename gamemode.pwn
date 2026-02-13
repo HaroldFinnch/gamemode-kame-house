@@ -591,6 +591,7 @@ stock ShowPrendasAdminEditar(playerid, idx);
 stock ShowPrendasAdminMenu(playerid);
 stock ShowPrendaUsuarioMenu(playerid);
 stock ShowPrendaUsuarioEditar(playerid, idx);
+stock IsPrendaSlotEnUsoPorJugadores(idx);
 stock ContarPrendasJugador(playerid);
 stock GetPrendaBoneName(bone, dest[], len);
 stock IsNearPrendas(playerid);
@@ -1716,11 +1717,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/prendas", true)) {
+        PrendaEditIndex[playerid] = -1;
         ShowPrendaUsuarioMenu(playerid);
         return 1;
     }
 
     if(!strcmp(cmd, "/prenda", true)) {
+        PrendaEditIndex[playerid] = -1;
         ShowPrendaUsuarioMenu(playerid);
         return 1;
     }
@@ -1733,7 +1736,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nZona de maletero\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nCamper (eliminado)\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2098,8 +2101,8 @@ public OnPlayerConnect(playerid) {
     new name[MAX_PLAYER_NAME], path[64];
     GetPlayerName(playerid, name, sizeof(name));
     format(path, sizeof(path), PATH_USUARIOS, name);
-    if(fexist(path)) ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Login", "Clave:", "Entrar", "Salir");
-    else ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "Registro", "Crea clave:", "Registrar", "Salir");
+    if(fexist(path)) ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "{33CCFF}Kame House - Login", "{FFFFFF}Bienvenido de nuevo a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Ingresa tu clave para continuar:", "Entrar", "Salir");
+    else ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FFFFFF}Bienvenido a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Crea una clave para tu cuenta:", "Registrar", "Salir");
     ActualizarNivelPJ(playerid);
     return 1;
 }
@@ -2271,7 +2274,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_PRENDAS_MENU) {
         if(!response) return 1;
-        new idxPrenda = -1, cur;
+        new idxPrenda = -1, cur = 0;
         for(new i = 0; i < MAX_PRENDAS; i++) {
             if(!PrendasData[i][prendaActiva]) continue;
             if(cur == listitem) { idxPrenda = i; break; }
@@ -2411,7 +2414,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         new freeIdx = -1;
         for(new i = 0; i < MAX_PRENDAS; i++) {
-            if(!PrendasData[i][prendaActiva]) { freeIdx = i; break; }
+            if(!PrendasData[i][prendaActiva] && !IsPrendaSlotEnUsoPorJugadores(i)) { freeIdx = i; break; }
         }
         if(freeIdx == -1) return SendClientMessage(playerid, -1, "No hay slots libres para nuevas prendas.");
 
@@ -2443,7 +2446,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_PRENDAS_REMOVE_LIST) {
         if(PlayerAdmin[playerid] < 1) return 1;
         if(!response) return ShowPrendasAdminMenu(playerid);
-        new idxp = -1, cur;
+        new idxp = -1, cur = 0;
         for(new i = 0; i < MAX_PRENDAS; i++) {
             if(!PrendasData[i][prendaActiva]) continue;
             if(cur == listitem) { idxp = i; break; }
@@ -2451,13 +2454,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         if(idxp == -1) return SendClientMessage(playerid, -1, "Prenda invalida.");
         PrendasData[idxp][prendaActiva] = false;
-        PrendasData[idxp][prendaModelo] = 0;
-        PrendasData[idxp][prendaPrecio] = 0;
         PrendasData[idxp][prendaStock] = 0;
-        PrendasData[idxp][prendaBone] = 2;
-        format(PrendasData[idxp][prendaNombre], 32, "");
         GuardarPrendasConfig();
-        SendClientMessage(playerid, 0xFFAA00FF, "Prenda eliminada de la tienda.");
+        SendClientMessage(playerid, 0xFFAA00FF, "Prenda eliminada de la tienda. Los jugadores que la compraron la conservan.");
         return ShowPrendasAdminMenu(playerid);
     }
 
@@ -2465,12 +2464,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new idxp = PrendaBonePendiente[playerid];
         if(idxp < 0 || idxp >= MAX_PRENDAS) return 1;
         if(!response) {
-            if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
+            if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
             return ShowPrendaUsuarioEditar(playerid, idxp);
         }
         new bones[] = {1,2,3,4,5,6,7,8,9,10,11};
         if(listitem < 0 || listitem >= sizeof(bones)) return 1;
-        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1) {
+        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) {
             PrendasData[idxp][prendaBone] = bones[listitem];
             GuardarPrendasConfig();
             return ShowPrendasAdminEditar(playerid, idxp);
@@ -2483,7 +2482,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_PRENDA_USUARIO_MENU) {
         if(!response) return 1;
-        new idxp = -1, cur;
+        new idxp = -1, cur = 0;
         for(new i = 0; i < MAX_PRENDAS; i++) {
             if(!PlayerPrendaComprada[playerid][i]) continue;
             if(cur == listitem) { idxp = i; break; }
@@ -3184,7 +3183,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     format(path, sizeof(path), PATH_USUARIOS, name);
     if(dialogid == DIALOG_REGISTRO) {
         if(!response) return Kick(playerid);
-        if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "Registro", "La clave debe tener al menos 3 caracteres.", "Registrar", "Salir");
+        if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}La clave debe tener al menos 3 caracteres.\n{AAAAAA}Ingresa una clave valida:", "Registrar", "Salir");
         strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
         new File:h = fopen(path, io_write);
         if(h) {
@@ -3194,6 +3193,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             GivePlayerMoney(playerid, DINERO_INICIAL);
             ActualizarNivelPJ(playerid);
             GuardarCuenta(playerid);
+            SendClientMessage(playerid, 0x66CCFFFF, "{66FF99}Bienvenido a Kame House.");
             SpawnPlayer(playerid);
         }
     }
@@ -3317,6 +3317,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 }
 
                 ActualizarNivelPJ(playerid);
+                SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
                 fclose(h); SpawnPlayer(playerid);
             } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
         }
@@ -3970,7 +3971,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
-        case puntoMaletero: format(dest, len, "Punto deshabilitado");
+        case puntoMaletero: format(dest, len, "Camper eliminado");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
@@ -4024,8 +4025,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
         }
         case puntoMaletero: {
-            PuntoPickup[punto] = CreatePickup(1318, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{FF0000}Punto deshabilitado\n{FFFFFF}Sistema de maletero eliminado", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+            // Sistema camper eliminado: no crear pickup ni label.
         }
         case puntoPintura: {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -4960,7 +4960,17 @@ stock ContarPrendasJugador(playerid) {
     return total;
 }
 
+
+stock IsPrendaSlotEnUsoPorJugadores(idx) {
+    if(idx < 0 || idx >= MAX_PRENDAS) return 0;
+    for(new p = 0; p < MAX_PLAYERS; p++) {
+        if(PlayerPrendaComprada[p][idx]) return 1;
+    }
+    return 0;
+}
+
 stock ShowPrendaUsuarioMenu(playerid) {
+    PrendaEditIndex[playerid] = -1;
     new list[1024], line[128], count;
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
@@ -4975,6 +4985,7 @@ stock ShowPrendaUsuarioMenu(playerid) {
 }
 
 stock ShowPrendaUsuarioEditar(playerid, idx) {
+    PrendaEditIndex[playerid] = -1;
     PrendaUsuarioEditando[playerid] = idx;
     return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_EDITAR, DIALOG_STYLE_LIST, "Editar prenda", "Editar posicion/rotacion\nCambiar parte del cuerpo\nMostrar/Ocultar\nEliminar permanentemente", "Elegir", "Atras");
 }
@@ -4983,7 +4994,7 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
     #pragma unused modelid
     #pragma unused boneid
     if(response == EDIT_RESPONSE_FINAL && PrendaMoveIndex[playerid] == index && index >= 0 && index < MAX_PRENDAS) {
-        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] == index) {
+        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] == index && !PlayerPrendaComprada[playerid][index]) {
             PrendasData[index][prendaOffX] = fOffsetX;
             PrendasData[index][prendaOffY] = fOffsetY;
             PrendasData[index][prendaOffZ] = fOffsetZ;
