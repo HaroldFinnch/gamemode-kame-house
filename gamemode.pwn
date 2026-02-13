@@ -150,6 +150,13 @@
 #define DIALOG_PRENDAS_ADD_PRECIO 70
 #define DIALOG_PRENDAS_ADD_STOCK 71
 #define DIALOG_PRENDAS_REMOVE_LIST 72
+#define DIALOG_TELEFONO_MENU 73
+#define DIALOG_TELEFONO_MENSAJE_ID 74
+#define DIALOG_TELEFONO_MENSAJE_TEXTO 75
+#define DIALOG_TELEFONO_CALC_VALOR1 76
+#define DIALOG_TELEFONO_CALC_OPERACION 77
+#define DIALOG_TELEFONO_CALC_VALOR2 78
+#define DIALOG_TELEFONO_LLAMAR_VEHICULO 79
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -161,6 +168,9 @@
 #define MAX_PRENDAS 10
 #define MAX_PRENDAS_USUARIO 5
 #define PRECIO_MAZO 10000
+#define PRECIO_TELEFONO 10000
+#define COSTO_SMS 100
+#define COSTO_LLAMAR_VEHICULO 5000
 
 #define MAX_PLANTAS_POR_JUGADOR 5
 #define BOLSA_OBJ_MODEL 1264
@@ -388,6 +398,11 @@ new GasRefuelCost[MAX_PLAYERS];
 new BidonGasolina[MAX_PLAYERS];
 new KameTiendaTipoPendiente[MAX_PLAYERS];
 new KameTiendaCantidadPendiente[MAX_PLAYERS];
+new bool:PlayerTieneTelefono[MAX_PLAYERS];
+new TelefonoMensajeDestino[MAX_PLAYERS] = {-1, ...};
+new Float:CalcValor1Pendiente[MAX_PLAYERS];
+new CalcOperacionPendiente[MAX_PLAYERS];
+new TelefonoVehiculoSeleccionado[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new bool:AdminFlyActivo[MAX_PLAYERS];
 new GPSVehiculoSeleccionado[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 
@@ -486,6 +501,7 @@ forward FinalizarMinado(playerid);
 forward FinalizarCajaBusqueda(playerid, cajaidx);
 forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
+forward TeleportVehiculoLlamado(playerid);
 stock CargarMinas();
 stock GuardarMinas();
 stock CargarHornos();
@@ -609,6 +625,9 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh);
 stock ContarCasasJugador(playerid);
 stock GuardarPuntosMovibles();
 stock CargarPuntosMovibles();
+stock ShowTelefonoMenu(playerid);
+stock ShowTelefonoVehiculosMenu(playerid);
+stock GetTelefonoVehiculoByListIndex(playerid, listindex);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -1221,6 +1240,35 @@ public OnPlayerCommandText(playerid, cmdtext[])
         format(string, sizeof(string), "[GLOBAL] %s: %s", name, cmdtext[idx]);
         SendClientMessageToAll(0x00FFFFFF, string);
         return 1;
+    }
+
+    if(!strcmp(cmd, "/m", true)) {
+        if(!cmdtext[idx]) return SendClientMessage(playerid, -1, "Uso: /m [accion]");
+        new string[170], name[MAX_PLAYER_NAME], Float:p[3];
+        GetPlayerName(playerid, name, sizeof(name));
+        GetPlayerPos(playerid, p[0], p[1], p[2]);
+        format(string, sizeof(string), "* %s %s", name, cmdtext[idx]);
+        for(new i = 0; i < MAX_PLAYERS; i++) {
+            if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL, p[0], p[1], p[2])) SendClientMessage(i, 0xC2A2DAFF, string);
+        }
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/d", true)) {
+        if(!cmdtext[idx]) return SendClientMessage(playerid, -1, "Uso: /d [entorno]");
+        new string[180], name[MAX_PLAYER_NAME], Float:p[3];
+        GetPlayerName(playerid, name, sizeof(name));
+        GetPlayerPos(playerid, p[0], p[1], p[2]);
+        format(string, sizeof(string), "[ENTORNO] %s (%d): %s", name, playerid, cmdtext[idx]);
+        for(new i = 0; i < MAX_PLAYERS; i++) {
+            if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, p[0], p[1], p[2])) SendClientMessage(i, 0x77DD77FF, string);
+        }
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/telefono", true)) {
+        if(!PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "No tienes un telefono. Compralo en Tienda Kame House por $10000.");
+        return ShowTelefonoMenu(playerid);
     }
 
     if(!strcmp(cmd, "/skills", true)) {
@@ -2066,6 +2114,11 @@ public OnPlayerConnect(playerid) {
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
     GasRefuelCost[playerid] = 0;
     BidonGasolina[playerid] = 0;
+    PlayerTieneTelefono[playerid] = false;
+    TelefonoMensajeDestino[playerid] = -1;
+    CalcValor1Pendiente[playerid] = 0.0;
+    CalcOperacionPendiente[playerid] = 0;
+    TelefonoVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
     AdminFlyActivo[playerid] = false;
     GPSVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
     InvSemillaHierba[playerid] = 0;
@@ -2222,7 +2275,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_SEMILLERIA) {
         if(!response) return 1;
-        if(listitem < 0 || listitem > 2) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(listitem < 0 || listitem > 3) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         KameTiendaTipoPendiente[playerid] = listitem;
         if(listitem == 2) {
             if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
@@ -2230,6 +2283,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             PlayerTieneMazo[playerid] = true;
             MazoDurabilidad[playerid] = 120 + random(61);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
+        }
+        if(listitem == 3) {
+            if(PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "Ya tienes telefono.");
+            if(GetPlayerMoney(playerid) < PRECIO_TELEFONO) return SendClientMessage(playerid, -1, "No tienes dinero para el telefono.");
+            GivePlayerMoney(playerid, -PRECIO_TELEFONO);
+            PlayerTieneTelefono[playerid] = true;
+            return SendClientMessage(playerid, 0x66FF66FF, "Compraste un telefono. Usa /telefono para abrirlo.");
         }
         ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "Tienda Kame House - Cantidad", "Ingresa la cantidad de productos que deseas comprar:", "Continuar", "Atras");
         return 1;
@@ -2269,6 +2329,100 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         format(msg, sizeof(msg), "Tienda Kame House: compraste %d semillas de %s por $%d.", cantidad, tipo, total);
         SendClientMessage(playerid, 0x00FF00FF, msg);
         KameTiendaCantidadPendiente[playerid] = 0;
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_MENU) {
+        if(!response) return 1;
+        if(!PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "No tienes telefono.");
+
+        if(listitem == 0) {
+            new hh, mm, ss;
+            gettime(hh, mm, ss);
+            new msg[64];
+            format(msg, sizeof(msg), "Hora actual: %02d:%02d:%02d", hh, mm, ss);
+            return SendClientMessage(playerid, 0x66CCFFFF, msg);
+        }
+        if(listitem == 1) {
+            new yy, mo, dd;
+            getdate(yy, mo, dd);
+            new msg[64];
+            format(msg, sizeof(msg), "Fecha actual: %02d/%02d/%04d", dd, mo, yy);
+            return SendClientMessage(playerid, 0x66CCFFFF, msg);
+        }
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_ID, DIALOG_STYLE_INPUT, "Telefono - Enviar mensaje", "Ingresa el ID del jugador:", "Siguiente", "Atras");
+        if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR1, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el primer valor:", "Siguiente", "Atras");
+        if(listitem == 4) return ShowTelefonoVehiculosMenu(playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_MENSAJE_ID) {
+        if(!response) return ShowTelefonoMenu(playerid);
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido o desconectado.");
+        if(id == playerid) return SendClientMessage(playerid, -1, "No puedes enviarte mensajes a ti mismo.");
+        TelefonoMensajeDestino[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_TEXTO, DIALOG_STYLE_INPUT, "Telefono - Mensaje", "Escribe tu mensaje (costo $100):", "Enviar", "Atras");
+    }
+
+    if(dialogid == DIALOG_TELEFONO_MENSAJE_TEXTO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_ID, DIALOG_STYLE_INPUT, "Telefono - Enviar mensaje", "Ingresa el ID del jugador:", "Siguiente", "Atras");
+        new target = TelefonoMensajeDestino[playerid];
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "El jugador se desconecto.");
+        if(strlen(inputtext) < 1) return SendClientMessage(playerid, -1, "Mensaje vacio.");
+        if(GetPlayerMoney(playerid) < COSTO_SMS) return SendClientMessage(playerid, -1, "No tienes $100 para enviar el mensaje.");
+
+        GivePlayerMoney(playerid, -COSTO_SMS);
+        new msgTo[180], msgFrom[120], sender[MAX_PLAYER_NAME];
+        GetPlayerName(playerid, sender, sizeof(sender));
+        format(msgTo, sizeof(msgTo), "[SMS] %s(%d): %s", sender, playerid, inputtext);
+        format(msgFrom, sizeof(msgFrom), "[SMS] Mensaje enviado a %d. Costo: $%d", target, COSTO_SMS);
+        SendClientMessage(target, 0xFFE680FF, msgTo);
+        SendClientMessage(playerid, 0x66FF66FF, msgFrom);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CALC_VALOR1) {
+        if(!response) return ShowTelefonoMenu(playerid);
+        CalcValor1Pendiente[playerid] = floatstr(inputtext);
+        return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_OPERACION, DIALOG_STYLE_LIST, "Telefono - Calculadora", "Sumar (+)\nRestar (-)\nDividir (/)\nMultiplicar (*)", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CALC_OPERACION) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR1, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el primer valor:", "Siguiente", "Atras");
+        if(listitem < 0 || listitem > 3) return SendClientMessage(playerid, -1, "Operacion invalida.");
+        CalcOperacionPendiente[playerid] = listitem;
+        return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR2, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el segundo valor:", "Calcular", "Atras");
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CALC_VALOR2) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_OPERACION, DIALOG_STYLE_LIST, "Telefono - Calculadora", "Sumar (+)\nRestar (-)\nDividir (/)\nMultiplicar (*)", "Siguiente", "Atras");
+        new Float:v1 = CalcValor1Pendiente[playerid];
+        new Float:v2 = floatstr(inputtext);
+        new Float:res;
+        if(CalcOperacionPendiente[playerid] == 0) res = v1 + v2;
+        else if(CalcOperacionPendiente[playerid] == 1) res = v1 - v2;
+        else if(CalcOperacionPendiente[playerid] == 2) {
+            if(v2 == 0.0) return SendClientMessage(playerid, -1, "No se puede dividir entre 0.");
+            res = v1 / v2;
+        }
+        else res = v1 * v2;
+
+        new body[128];
+        format(body, sizeof(body), "Resultado: %.2f", res);
+        ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Telefono - Resultado", body, "Aceptar", "");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_LLAMAR_VEHICULO) {
+        if(!response) return ShowTelefonoMenu(playerid);
+        new veh = GetTelefonoVehiculoByListIndex(playerid, listitem);
+        if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(GetPlayerMoney(playerid) < COSTO_LLAMAR_VEHICULO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para llamar tu vehiculo.");
+        GivePlayerMoney(playerid, -COSTO_LLAMAR_VEHICULO);
+        TelefonoVehiculoSeleccionado[playerid] = veh;
+        SendClientMessage(playerid, 0x66CCFFFF, "Llamada procesada. Tu vehiculo llegara en 5 segundos.");
+        SetTimerEx("TeleportVehiculoLlamado", 5000, false, "d", playerid);
         return 1;
     }
 
@@ -3294,6 +3448,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         fread(h, line); BasureroNivel[playerid] = strval(line);
                         fread(h, line); BasureroRecorridos[playerid] = strval(line);
                         fread(h, line); BidonGasolina[playerid] = strval(line);
+                        PlayerTieneTelefono[playerid] = false;
+                        if(dataVersion >= 3) {
+                            if(fread(h, line)) PlayerTieneTelefono[playerid] = strval(line) != 0;
+                        }
 
                         for(new pi = 0; pi < MAX_PRENDAS; pi++) {
                             if(!fread(h, line)) break;
@@ -3332,14 +3490,14 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n2",
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n3",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
                 CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], p[0], p[1], p[2]);
             fwrite(h, line);
 
-            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
+            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
-                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid]);
+                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);
             fwrite(h, line);
 
             for(new pi = 0; pi < MAX_PRENDAS; pi++) {
@@ -3894,9 +4052,38 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
     return 1;
 }
 
+stock ShowTelefonoMenu(playerid) {
+    ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENU, DIALOG_STYLE_LIST, "Telefono celular", "Hora\nFecha\nEnviar mensaje ($100)\nCalculadora\nLlamar vehiculo ($5000)", "Abrir", "Cerrar");
+    return 1;
+}
+
+stock ShowTelefonoVehiculosMenu(playerid) {
+    new body[1024], line[96], count;
+    body[0] = EOS;
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != playerid) continue;
+        format(line, sizeof(line), "ID:%d | Modelo:%d\n", v, VehModelData[v]);
+        strcat(body, line);
+        count++;
+    }
+    if(count == 0) return SendClientMessage(playerid, -1, "No tienes vehiculos registrados.");
+    ShowPlayerDialog(playerid, DIALOG_TELEFONO_LLAMAR_VEHICULO, DIALOG_STYLE_LIST, "Telefono - Llamar vehiculo", body, "Llamar", "Atras");
+    return 1;
+}
+
+stock GetTelefonoVehiculoByListIndex(playerid, listindex) {
+    new current;
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != playerid) continue;
+        if(current == listindex) return v;
+        current++;
+    }
+    return INVALID_VEHICLE_ID;
+}
+
 stock ShowSemilleriaMenu(playerid) {
     new body[192];
-    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)");
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)\nTelefono celular ($10000)");
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Tienda Kame House", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -4057,7 +4244,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosechar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
+    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /m /d /telefono /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosechar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -4190,6 +4377,26 @@ stock EncontrarGasCercano(playerid) {
         if(IsPlayerInRangeOfPoint(playerid, 6.0, GasPos[i][0], GasPos[i][1], GasPos[i][2])) return i;
     }
     return -1;
+}
+
+public TeleportVehiculoLlamado(playerid) {
+    if(!IsPlayerConnected(playerid)) return 1;
+    new veh = TelefonoVehiculoSeleccionado[playerid];
+    TelefonoVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
+    if(veh == INVALID_VEHICLE_ID || !IsValidVehicle(veh)) return 1;
+    if(VehOwner[veh] != playerid) return 1;
+
+    new Float:px, Float:py, Float:pz, Float:ang;
+    GetPlayerPos(playerid, px, py, pz);
+    GetPlayerFacingAngle(playerid, ang);
+    new Float:tx = px + (2.5 * floatsin(-ang, degrees));
+    new Float:ty = py + (2.5 * floatcos(-ang, degrees));
+    SetVehiclePos(veh, tx, ty, pz);
+    SetVehicleZAngle(veh, ang);
+    SetVehicleVirtualWorld(veh, GetPlayerVirtualWorld(playerid));
+    LinkVehicleToInterior(veh, GetPlayerInterior(playerid));
+    SendClientMessage(playerid, 0x66FF66FF, "Tu vehiculo ha llegado a tu posicion.");
+    return 1;
 }
 
 public FinalizarRepostaje(playerid) {
