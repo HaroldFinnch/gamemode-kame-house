@@ -1796,10 +1796,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GetVehiclePos(vid, TempVehPos[vid][0], TempVehPos[vid][1], TempVehPos[vid][2]);
         GetVehicleZAngle(vid, TempVehPos[vid][3]);
         TempVehModel[vid] = GetVehicleModel(vid);
-        GetVehicleVirtualWorld(vid, TempVehVW[vid]);
-        GetVehicleInterior(vid, TempVehInterior[vid]);
+        TempVehVW[vid] = GetVehicleVirtualWorld(vid);
+        TempVehInterior[vid] = GetVehicleInterior(vid);
         new c1, c2;
-        GetVehicleColor(vid, c1, c2);
+        GetVehicleColours(vid, c1, c2);
         TempVehColor1[vid] = c1;
         TempVehColor2[vid] = c2;
         for(new i = 0; i < MAX_PLAYERS; i++) { if(IsPlayerConnected(i) && IsPlayerInVehicle(i, vid)) RemovePlayerFromVehicle(i); }
@@ -1855,7 +1855,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-        if(!strcmp(cmd, "/salir", true)) {
+    if(!strcmp(cmd, "/salir", true)) {
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "No estas en una casa.");
         new casa = PlayerInCasa[playerid];
         PlayerInCasa[playerid] = -1;
@@ -2406,8 +2406,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return ShowPrendasAdminEditar(playerid, stockIdx);
         }
         if(!response) return ShowPrendasAdminMenu(playerid);
-        new stock = strval(inputtext);
-        if(stock < 0) return SendClientMessage(playerid, -1, "Stock invalido.");
+        new stockValue = strval(inputtext);
+        if(stockValue < 0) return SendClientMessage(playerid, -1, "Stock invalido.");
 
         new freeIdx = -1;
         for(new i = 0; i < MAX_PRENDAS; i++) {
@@ -2418,7 +2418,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         PrendasData[freeIdx][prendaActiva] = true;
         PrendasData[freeIdx][prendaModelo] = PrendaAdminModeloPendiente[playerid];
         PrendasData[freeIdx][prendaPrecio] = PrendaAdminPrecioPendiente[playerid];
-        PrendasData[freeIdx][prendaStock] = stock;
+        PrendasData[freeIdx][prendaStock] = stockValue;
         PrendasData[freeIdx][prendaBone] = 2;
         PrendasData[freeIdx][prendaOffX] = 0.0;
         PrendasData[freeIdx][prendaOffY] = 0.0;
@@ -2655,24 +2655,54 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
         if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_MINERAL_TIPO, DIALOG_STYLE_INPUT, "Admin - Dar minerales", "Tipo mineral (piedra/cobre/hierro/madera/polvora/prepieza/carbon)", "Siguiente", "Atras");
-        if(listitem == 2) return OnPlayerCommandText(playerid, "/mover");
+        if(listitem == 2) {
+            new cmdMover[] = "/mover";
+            return OnPlayerCommandText(playerid, cmdMover);
+        }
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
         if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly /admprendas", "Cerrar", "");
-        if(listitem == 5) return OnPlayerCommandText(playerid, "/admprendas");
+        if(listitem == 5) {
+            new cmdAdmPrendas[] = "/admprendas";
+            return OnPlayerCommandText(playerid, cmdAdmPrendas);
+        }
         return 1;
     }
 
     if(dialogid == DIALOG_ADMIN_CREAR_MENU) {
         if(!response) return MostrarDialogoAdmin(playerid);
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        if(listitem == 0) return OnPlayerCommandText(playerid, "/crearparada");
-        if(listitem == 1) return OnPlayerCommandText(playerid, "/crearparadapizza");
-        if(listitem == 2) return OnPlayerCommandText(playerid, "/crearparadabasura");
-        if(listitem == 3) return OnPlayerCommandText(playerid, "/crearmina");
-        if(listitem == 4) return OnPlayerCommandText(playerid, "/crearhorno");
-        if(listitem == 5) return OnPlayerCommandText(playerid, "/crearcaja");
-        if(listitem == 6) return OnPlayerCommandText(playerid, "/crearprepiezas");
-        if(listitem == 7) return OnPlayerCommandText(playerid, "/ventagas");
+        if(listitem == 0) {
+            new cmdCrearParada[] = "/crearparada";
+            return OnPlayerCommandText(playerid, cmdCrearParada);
+        }
+        if(listitem == 1) {
+            new cmdCrearParadaPizza[] = "/crearparadapizza";
+            return OnPlayerCommandText(playerid, cmdCrearParadaPizza);
+        }
+        if(listitem == 2) {
+            new cmdCrearParadaBasura[] = "/crearparadabasura";
+            return OnPlayerCommandText(playerid, cmdCrearParadaBasura);
+        }
+        if(listitem == 3) {
+            new cmdCrearMina[] = "/crearmina";
+            return OnPlayerCommandText(playerid, cmdCrearMina);
+        }
+        if(listitem == 4) {
+            new cmdCrearHorno[] = "/crearhorno";
+            return OnPlayerCommandText(playerid, cmdCrearHorno);
+        }
+        if(listitem == 5) {
+            new cmdCrearCaja[] = "/crearcaja";
+            return OnPlayerCommandText(playerid, cmdCrearCaja);
+        }
+        if(listitem == 6) {
+            new cmdCrearPrepiezas[] = "/crearprepiezas";
+            return OnPlayerCommandText(playerid, cmdCrearPrepiezas);
+        }
+        if(listitem == 7) {
+            new cmdVentagas[] = "/ventagas";
+            return OnPlayerCommandText(playerid, cmdVentagas);
+        }
         return 1;
     }
 
@@ -3078,7 +3108,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 4: color = 1;
             case 5: color = 6;
         }
-        ChangeVehicleColor(veh, color, color);
+        ChangeVehicleColours(veh, color, color);
         VehColor1Data[veh] = color;
         VehColor2Data[veh] = color;
         GivePlayerMoney(playerid, -10000);
@@ -4663,17 +4693,119 @@ stock ObtenerDatosCrafteoArmero(tier, listitem, &weaponid, weaponName[], weaponN
     return (weaponid > 0);
 }
 stock GuardarHornos() {
-    new File:h = fopen(PATH_HORNOS, io_write); if(!h) return 0; new line[96];
-    for(new i = 0; i < TotalHornos; i++) { if(!HornoData[i][hornoActivo]) continue; format(line, sizeof(line), "%f %f %f\n", HornoData[i][hornoX], HornoData[i][hornoY], HornoData[i][hornoZ]); fwrite(h, line); } fclose(h); return 1;
+    new File:h = fopen(PATH_HORNOS, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    for(new i = 0; i < TotalHornos; i++) {
+        if(!HornoData[i][hornoActivo]) continue;
+        format(line, sizeof(line), "%f %f %f\n", HornoData[i][hornoX], HornoData[i][hornoY], HornoData[i][hornoZ]);
+        fwrite(h, line);
+    }
+
+    fclose(h);
+    return 1;
 }
 stock CargarHornos() {
-    new File:h = fopen(PATH_HORNOS, io_read), line[96]; if(!h) return 0; TotalHornos = 0;
-    while(fread(h, line) && TotalHornos < MAX_HORNOS) { new idx, Float:x=floatstr(strtok(line, idx)), Float:y=floatstr(strtok(line, idx)), Float:z=floatstr(strtok(line, idx)); HornoData[TotalHornos][hornoActivo]=true; HornoData[TotalHornos][hornoX]=x; HornoData[TotalHornos][hornoY]=y; HornoData[TotalHornos][hornoZ]=z; HornoData[TotalHornos][hornoObj]=CreateObject(19831, x, y, z-1.0, 0.0,0.0,0.0); HornoData[TotalHornos][hornoLabel]=Create3DTextLabel("Horno\nUsa H",0xFFAA00FF,x,y,z+0.8,12.0,0); HornoData[TotalHornos][hornoListoRetiro]=false; HornoData[TotalHornos][hornoEnUso]=false; HornoData[TotalHornos][hornoOwner]=INVALID_PLAYER_ID; TotalHornos++; } fclose(h); return 1;
+    new File:h = fopen(PATH_HORNOS, io_read), line[96];
+    if(!h) return 0;
+
+    TotalHornos = 0;
+    while(fread(h, line) && TotalHornos < MAX_HORNOS) {
+        new idx;
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+
+        HornoData[TotalHornos][hornoActivo] = true;
+        HornoData[TotalHornos][hornoX] = x;
+        HornoData[TotalHornos][hornoY] = y;
+        HornoData[TotalHornos][hornoZ] = z;
+        HornoData[TotalHornos][hornoObj] = CreateObject(19831, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
+        HornoData[TotalHornos][hornoListoRetiro] = false;
+        HornoData[TotalHornos][hornoEnUso] = false;
+        HornoData[TotalHornos][hornoOwner] = INVALID_PLAYER_ID;
+        TotalHornos++;
+    }
+
+    fclose(h);
+    return 1;
 }
-stock GuardarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalCajas;i++){ if(!CajaDataLoot[i][cajaActiva]) continue; format(line,sizeof(line),"%f %f %f\n",CajaDataLoot[i][cajaX],CajaDataLoot[i][cajaY],CajaDataLoot[i][cajaZ]); fwrite(h,line);} fclose(h); return 1; }
-stock CargarCajasLoot() { new File:h=fopen(PATH_CAJAS, io_read), line[96]; if(!h) return 0; TotalCajas=0; while(fread(h,line) && TotalCajas<MAX_CAJAS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); CajaDataLoot[TotalCajas][cajaActiva]=true; CajaDataLoot[TotalCajas][cajaX]=x; CajaDataLoot[TotalCajas][cajaY]=y; CajaDataLoot[TotalCajas][cajaZ]=z; CajaDataLoot[TotalCajas][cajaObj]=CreateObject(2358,x,y,z-1.0,0.0,0.0,0.0); CajaDataLoot[TotalCajas][cajaLabel]=Create3DTextLabel("Caja de busqueda\nUsa H",0xFFFFFFFF,x,y,z+0.7,10.0,0); TotalCajas++; } fclose(h); return 1; }
-stock GuardarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_write); if(!h) return 0; new line[96]; for(new i=0;i<TotalPrepiezaPoints;i++){ if(!PrepiezaPoints[i][ppActivo]) continue; format(line,sizeof(line),"%f %f %f\n",PrepiezaPoints[i][ppX],PrepiezaPoints[i][ppY],PrepiezaPoints[i][ppZ]); fwrite(h,line);} fclose(h); return 1;}
-stock CargarPrepiezaPoints() { new File:h=fopen(PATH_PREPIEZAS, io_read),line[96]; if(!h) return 0; TotalPrepiezaPoints=0; while(fread(h,line) && TotalPrepiezaPoints<MAX_PREPIEZA_POINTS){ new idx, Float:x=floatstr(strtok(line,idx)), Float:y=floatstr(strtok(line,idx)), Float:z=floatstr(strtok(line,idx)); PrepiezaPoints[TotalPrepiezaPoints][ppActivo]=true; PrepiezaPoints[TotalPrepiezaPoints][ppX]=x; PrepiezaPoints[TotalPrepiezaPoints][ppY]=y; PrepiezaPoints[TotalPrepiezaPoints][ppZ]=z; PrepiezaPoints[TotalPrepiezaPoints][ppObj]=CreateObject(1279,x,y,z-1.0,0.0,0.0,0.0); PrepiezaPoints[TotalPrepiezaPoints][ppLabel]=Create3DTextLabel("Punto de prepiezas ($100/2)\nUsa H",0x99CCFFFF,x,y,z+0.6,10.0,0); TotalPrepiezaPoints++; } fclose(h); return 1; }
+stock GuardarCajasLoot() {
+    new File:h = fopen(PATH_CAJAS, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    for(new i = 0; i < TotalCajas; i++) {
+        if(!CajaDataLoot[i][cajaActiva]) continue;
+        format(line, sizeof(line), "%f %f %f\n", CajaDataLoot[i][cajaX], CajaDataLoot[i][cajaY], CajaDataLoot[i][cajaZ]);
+        fwrite(h, line);
+    }
+
+    fclose(h);
+    return 1;
+}
+stock CargarCajasLoot() {
+    new File:h = fopen(PATH_CAJAS, io_read), line[96];
+    if(!h) return 0;
+
+    TotalCajas = 0;
+    while(fread(h, line) && TotalCajas < MAX_CAJAS) {
+        new idx;
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+
+        CajaDataLoot[TotalCajas][cajaActiva] = true;
+        CajaDataLoot[TotalCajas][cajaX] = x;
+        CajaDataLoot[TotalCajas][cajaY] = y;
+        CajaDataLoot[TotalCajas][cajaZ] = z;
+        CajaDataLoot[TotalCajas][cajaObj] = CreateObject(2358, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        CajaDataLoot[TotalCajas][cajaLabel] = Create3DTextLabel("Caja de busqueda\nUsa H", 0xFFFFFFFF, x, y, z + 0.7, 10.0, 0);
+        TotalCajas++;
+    }
+
+    fclose(h);
+    return 1;
+}
+stock GuardarPrepiezaPoints() {
+    new File:h = fopen(PATH_PREPIEZAS, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    for(new i = 0; i < TotalPrepiezaPoints; i++) {
+        if(!PrepiezaPoints[i][ppActivo]) continue;
+        format(line, sizeof(line), "%f %f %f\n", PrepiezaPoints[i][ppX], PrepiezaPoints[i][ppY], PrepiezaPoints[i][ppZ]);
+        fwrite(h, line);
+    }
+
+    fclose(h);
+    return 1;
+}
+stock CargarPrepiezaPoints() {
+    new File:h = fopen(PATH_PREPIEZAS, io_read), line[96];
+    if(!h) return 0;
+
+    TotalPrepiezaPoints = 0;
+    while(fread(h, line) && TotalPrepiezaPoints < MAX_PREPIEZA_POINTS) {
+        new idx;
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+
+        PrepiezaPoints[TotalPrepiezaPoints][ppActivo] = true;
+        PrepiezaPoints[TotalPrepiezaPoints][ppX] = x;
+        PrepiezaPoints[TotalPrepiezaPoints][ppY] = y;
+        PrepiezaPoints[TotalPrepiezaPoints][ppZ] = z;
+        PrepiezaPoints[TotalPrepiezaPoints][ppObj] = CreateObject(1279, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        PrepiezaPoints[TotalPrepiezaPoints][ppLabel] = Create3DTextLabel("Punto de prepiezas ($100/2)\nUsa H", 0x99CCFFFF, x, y, z + 0.6, 10.0, 0);
+        TotalPrepiezaPoints++;
+    }
+
+    fclose(h);
+    return 1;
+}
 
 stock CrearPrendasDefault() {
     for(new i = 0; i < MAX_PRENDAS; i++) {
