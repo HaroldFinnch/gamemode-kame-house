@@ -234,6 +234,7 @@ new ArmeroExp[MAX_PLAYERS];
 new bool:MineroTrabajando[MAX_PLAYERS];
 new MineroMinaIndex[MAX_PLAYERS] = {-1, ...};
 new MineroTimer[MAX_PLAYERS] = {-1, ...};
+new MineroDuracionActual[MAX_PLAYERS];
 new HornoActivoJugador[MAX_PLAYERS] = {-1, ...};
 new bool:GPSCheckpointActivo[MAX_PLAYERS];
 new AdminTargetIdPendiente[MAX_PLAYERS] = {-1, ...};
@@ -626,7 +627,7 @@ main() {
 public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
-    EnableStuntBonusForAll(0);
+    EnableStuntBonusForAll(false);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
     PuntoPos[puntoCamionero][0] = POS_TRABAJO_X;
@@ -3590,8 +3591,7 @@ stock ShowArmeriaMunicionDisponible(playerid) {
 }
 
 stock ShowAdminArmasMenu(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma (ID + stock)
-Editar precio/disponibilidad", "Seleccionar", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma (ID + stock)\nEditar precio/disponibilidad", "Seleccionar", "Cerrar");
     return 1;
 }
 
@@ -4537,14 +4537,34 @@ stock CrearPrendasDefault() {
         format(PrendasData[i][prendaNombre], 32, "Prenda %d", i + 1);
     }
     PrendasData[0][prendaActiva] = true;
-    format(PrendasData[0][prendaNombre], 32, "[ADMIN] Editar prendas");
-    PrendasData[0][prendaModelo] = 2704;
-    PrendasData[0][prendaPrecio] = 0;
+    format(PrendasData[0][prendaNombre], 32, "Lentes Verdes");
+    PrendasData[0][prendaModelo] = 19008;
+    PrendasData[0][prendaPrecio] = 50000;
+    PrendasData[0][prendaBone] = 2;
+
     PrendasData[1][prendaActiva] = true;
-    format(PrendasData[1][prendaNombre], 32, "Cadena Kame");
-    PrendasData[1][prendaModelo] = 19488;
-    PrendasData[1][prendaPrecio] = 1500;
+    format(PrendasData[1][prendaNombre], 32, "Sombrero De Bruja");
+    PrendasData[1][prendaModelo] = 19528;
+    PrendasData[1][prendaPrecio] = 100000;
     PrendasData[1][prendaBone] = 2;
+
+    PrendasData[2][prendaActiva] = true;
+    format(PrendasData[2][prendaNombre], 32, "Chaleco De Policia Negro");
+    PrendasData[2][prendaModelo] = 19142;
+    PrendasData[2][prendaPrecio] = 180000;
+    PrendasData[2][prendaBone] = 1;
+
+    PrendasData[3][prendaActiva] = true;
+    format(PrendasData[3][prendaNombre], 32, "Pasamontañas Negro");
+    PrendasData[3][prendaModelo] = 19801;
+    PrendasData[3][prendaPrecio] = 250000;
+    PrendasData[3][prendaBone] = 2;
+
+    PrendasData[4][prendaActiva] = true;
+    format(PrendasData[4][prendaNombre], 32, "Hamburguesa");
+    PrendasData[4][prendaModelo] = 19801;
+    PrendasData[4][prendaPrecio] = 300000;
+    PrendasData[4][prendaBone] = 2;
 }
 
 stock GuardarPrendasConfig() {
