@@ -144,6 +144,12 @@
 #define DIALOG_PRENDA_USUARIO_EDITAR 64
 #define DIALOG_ADMIN_ARMAS_EDITAR 65
 #define DIALOG_ADMIN_ARMAS_PRECIO 66
+#define DIALOG_PRENDAS_ADMIN_MENU 67
+#define DIALOG_PRENDAS_ADD_MODELO 68
+#define DIALOG_PRENDAS_ADD_NOMBRE 69
+#define DIALOG_PRENDAS_ADD_PRECIO 70
+#define DIALOG_PRENDAS_ADD_STOCK 71
+#define DIALOG_PRENDAS_REMOVE_LIST 72
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -308,6 +314,7 @@ enum ePrendaData {
     bool:prendaActiva,
     prendaModelo,
     prendaPrecio,
+    prendaStock,
     prendaBone,
     Float:prendaOffX,
     Float:prendaOffY,
@@ -325,6 +332,11 @@ new PrendaEditIndex[MAX_PLAYERS] = {-1, ...};
 new PrendaMoveIndex[MAX_PLAYERS] = {-1, ...};
 new PrendaBonePendiente[MAX_PLAYERS] = {-1, ...};
 new PrendaPrecioPendiente[MAX_PLAYERS] = {-1, ...};
+new PrendaStockPendiente[MAX_PLAYERS] = {-1, ...};
+new PrendaAdminSlotPendiente[MAX_PLAYERS] = {-1, ...};
+new PrendaAdminModeloPendiente[MAX_PLAYERS];
+new PrendaAdminNombrePendiente[MAX_PLAYERS][32];
+new PrendaAdminPrecioPendiente[MAX_PLAYERS];
 new PrendaUsuarioEditando[MAX_PLAYERS] = {-1, ...};
 new ArmeriaAdminItemEditando[MAX_PLAYERS] = {-1, ...};
 new PlayerPrendaActiva[MAX_PLAYERS][MAX_PRENDAS];
@@ -576,6 +588,7 @@ stock ShowPrendasMenu(playerid);
 stock AplicarPrendaJugador(playerid, idx);
 stock QuitarPrendaJugador(playerid, idx);
 stock ShowPrendasAdminEditar(playerid, idx);
+stock ShowPrendasAdminMenu(playerid);
 stock ShowPrendaUsuarioMenu(playerid);
 stock ShowPrendaUsuarioEditar(playerid, idx);
 stock ContarPrendasJugador(playerid);
@@ -710,6 +723,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if((newkeys & KEY_YES) && PlayerAdmin[playerid] >= 1) { // Tecla Y (solo admin)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
+        if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
     }
 
     if((newkeys & KEY_LOOK_BEHIND)) { // Tecla B
@@ -1713,7 +1727,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/admprendas", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        ShowPrendasAdminEditar(playerid, -1);
+        ShowPrendasAdminMenu(playerid);
         return 1;
     }
 
@@ -2266,9 +2280,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(idxPrenda == -1) return SendClientMessage(playerid, -1, "Prenda invalida.");
 
         if(!PlayerPrendaComprada[playerid][idxPrenda]) {
+            if(PrendasData[idxPrenda][prendaStock] <= 0) return SendClientMessage(playerid, -1, "Esta prenda esta agotada.");
             if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
             if(GetPlayerMoney(playerid) < PrendasData[idxPrenda][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
             GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
+            PrendasData[idxPrenda][prendaStock]--;
+            GuardarPrendasConfig();
             PlayerPrendaComprada[playerid][idxPrenda] = 1;
             PlayerPrendaActiva[playerid][idxPrenda] = 1;
             AplicarPrendaJugador(playerid, idxPrenda);
@@ -2290,6 +2307,72 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_PRENDAS_EDITAR) {
         if(PlayerAdmin[playerid] < 1) return 1;
+        if(!response) return ShowPrendasAdminMenu(playerid);
+        new idxp = PrendaEditIndex[playerid];
+        if(idxp < 0 || idxp >= MAX_PRENDAS) return ShowPrendasAdminMenu(playerid);
+        if(listitem == 0) {
+            PrendasData[idxp][prendaActiva] = !PrendasData[idxp][prendaActiva];
+            GuardarPrendasConfig();
+            return ShowPrendasAdminEditar(playerid, idxp);
+        }
+        if(listitem == 1) {
+            PrendaPrecioPendiente[playerid] = idxp;
+            return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADD_PRECIO, DIALOG_STYLE_INPUT, "Prendas Admin - Precio", "Ingresa el nuevo precio de la prenda:", "Guardar", "Atras");
+        }
+        if(listitem == 2) {
+            new txt[64];
+            format(txt, sizeof(txt), "Stock actual: %d\nIngresa el nuevo stock:", PrendasData[idxp][prendaStock]);
+            PrendaStockPendiente[playerid] = idxp;
+            return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADD_STOCK, DIALOG_STYLE_INPUT, "Prendas Admin - Stock", txt, "Guardar", "Atras");
+        }
+        return ShowPrendasAdminMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_PRENDAS_ADMIN_MENU) {
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!response) return 1;
+        if(listitem == 0) {
+            PrendaAdminSlotPendiente[playerid] = -1;
+            PrendaAdminModeloPendiente[playerid] = 0;
+            PrendaAdminPrecioPendiente[playerid] = 0;
+            format(PrendaAdminNombrePendiente[playerid], 32, "");
+            return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADD_MODELO, DIALOG_STYLE_INPUT, "Prendas Admin - Modelo", "Ingresa el ID del modelo:", "Siguiente", "Cancelar");
+        }
+        if(listitem == 1) {
+            new list[1024], line[96], count;
+            list[0] = EOS;
+            for(new i = 0; i < MAX_PRENDAS; i++) {
+                if(!PrendasData[i][prendaActiva]) continue;
+                format(line, sizeof(line), "%d) %s (Stock: %d)", i, PrendasData[i][prendaNombre], PrendasData[i][prendaStock]);
+                if(strlen(list) > 0) strcat(list, "\n");
+                strcat(list, line);
+                count++;
+            }
+            if(!count) return SendClientMessage(playerid, -1, "No hay prendas activas para eliminar.");
+            return ShowPlayerDialog(playerid, DIALOG_PRENDAS_REMOVE_LIST, DIALOG_STYLE_LIST, "Prendas Admin - Eliminar", list, "Eliminar", "Atras");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_PRENDAS_ADD_MODELO) {
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!response) return ShowPrendasAdminMenu(playerid);
+        new modelid = strval(inputtext);
+        if(modelid <= 0) return SendClientMessage(playerid, -1, "ID de modelo invalido.");
+        PrendaAdminModeloPendiente[playerid] = modelid;
+        return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADD_NOMBRE, DIALOG_STYLE_INPUT, "Prendas Admin - Nombre", "Ingresa el nombre de la prenda:", "Siguiente", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_PRENDAS_ADD_NOMBRE) {
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!response) return ShowPrendasAdminMenu(playerid);
+        if(!strlen(inputtext)) return SendClientMessage(playerid, -1, "Nombre invalido.");
+        format(PrendaAdminNombrePendiente[playerid], 32, "%s", inputtext);
+        return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADD_PRECIO, DIALOG_STYLE_INPUT, "Prendas Admin - Precio", "Ingresa el precio de la prenda:", "Siguiente", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_PRENDAS_ADD_PRECIO) {
+        if(PlayerAdmin[playerid] < 1) return 1;
         if(PrendaPrecioPendiente[playerid] != -1) {
             if(!response) {
                 PrendaPrecioPendiente[playerid] = -1;
@@ -2303,27 +2386,79 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             GuardarPrendasConfig();
             return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
         }
+        if(!response) return ShowPrendasAdminMenu(playerid);
+        new precio = strval(inputtext);
+        if(precio < 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        PrendaAdminPrecioPendiente[playerid] = precio;
+        return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADD_STOCK, DIALOG_STYLE_INPUT, "Prendas Admin - Stock", "Ingresa el stock inicial:", "Guardar", "Cancelar");
+    }
 
-        if(!response) return 1;
-        if(PrendaEditIndex[playerid] == -1) {
-            if(listitem < 0 || listitem >= MAX_PRENDAS) return 1;
-            PrendaEditIndex[playerid] = listitem;
-            ShowPrendasAdminEditar(playerid, listitem);
-            return 1;
-        }
-
-        new idxp = PrendaEditIndex[playerid];
-        if(idxp < 0 || idxp >= MAX_PRENDAS) return 1;
-        if(listitem == 0) {
-            PrendasData[idxp][prendaActiva] = !PrendasData[idxp][prendaActiva];
+    if(dialogid == DIALOG_PRENDAS_ADD_STOCK) {
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(PrendaStockPendiente[playerid] != -1) {
+            new stockIdx = PrendaStockPendiente[playerid];
+            if(!response) { PrendaStockPendiente[playerid] = -1; return ShowPrendasAdminEditar(playerid, stockIdx); }
+            new st = strval(inputtext);
+            if(st < 0) return SendClientMessage(playerid, -1, "Stock invalido.");
+            PrendasData[stockIdx][prendaStock] = st;
+            PrendaStockPendiente[playerid] = -1;
             GuardarPrendasConfig();
-            return ShowPrendasAdminEditar(playerid, idxp);
+            return ShowPrendasAdminEditar(playerid, stockIdx);
         }
-        if(listitem == 1) {
-            ShowPrendasAdminEditar(playerid, -1);
-            return 1;
+        if(!response) return ShowPrendasAdminMenu(playerid);
+        new stock = strval(inputtext);
+        if(stock < 0) return SendClientMessage(playerid, -1, "Stock invalido.");
+
+        new freeIdx = -1;
+        for(new i = 0; i < MAX_PRENDAS; i++) {
+            if(!PrendasData[i][prendaActiva]) { freeIdx = i; break; }
         }
-        return 1;
+        if(freeIdx == -1) return SendClientMessage(playerid, -1, "No hay slots libres para nuevas prendas.");
+
+        PrendasData[freeIdx][prendaActiva] = true;
+        PrendasData[freeIdx][prendaModelo] = PrendaAdminModeloPendiente[playerid];
+        PrendasData[freeIdx][prendaPrecio] = PrendaAdminPrecioPendiente[playerid];
+        PrendasData[freeIdx][prendaStock] = stock;
+        PrendasData[freeIdx][prendaBone] = 2;
+        PrendasData[freeIdx][prendaOffX] = 0.0;
+        PrendasData[freeIdx][prendaOffY] = 0.0;
+        PrendasData[freeIdx][prendaOffZ] = 0.0;
+        PrendasData[freeIdx][prendaRotX] = 0.0;
+        PrendasData[freeIdx][prendaRotY] = 0.0;
+        PrendasData[freeIdx][prendaRotZ] = 0.0;
+        PrendasData[freeIdx][prendaScaleX] = 1.0;
+        PrendasData[freeIdx][prendaScaleY] = 1.0;
+        PrendasData[freeIdx][prendaScaleZ] = 1.0;
+        format(PrendasData[freeIdx][prendaNombre], 32, "%s", PrendaAdminNombrePendiente[playerid]);
+
+        PrendaAdminModeloPendiente[playerid] = 0;
+        PrendaAdminPrecioPendiente[playerid] = 0;
+        format(PrendaAdminNombrePendiente[playerid], 32, "");
+
+        GuardarPrendasConfig();
+        SendClientMessage(playerid, 0x66FF66FF, "Prenda agregada correctamente.");
+        return ShowPrendasAdminEditar(playerid, freeIdx);
+    }
+
+    if(dialogid == DIALOG_PRENDAS_REMOVE_LIST) {
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!response) return ShowPrendasAdminMenu(playerid);
+        new idxp = -1, cur;
+        for(new i = 0; i < MAX_PRENDAS; i++) {
+            if(!PrendasData[i][prendaActiva]) continue;
+            if(cur == listitem) { idxp = i; break; }
+            cur++;
+        }
+        if(idxp == -1) return SendClientMessage(playerid, -1, "Prenda invalida.");
+        PrendasData[idxp][prendaActiva] = false;
+        PrendasData[idxp][prendaModelo] = 0;
+        PrendasData[idxp][prendaPrecio] = 0;
+        PrendasData[idxp][prendaStock] = 0;
+        PrendasData[idxp][prendaBone] = 2;
+        format(PrendasData[idxp][prendaNombre], 32, "");
+        GuardarPrendasConfig();
+        SendClientMessage(playerid, 0xFFAA00FF, "Prenda eliminada de la tienda.");
+        return ShowPrendasAdminMenu(playerid);
     }
 
     if(dialogid == DIALOG_PRENDAS_BONE) {
@@ -4545,6 +4680,7 @@ stock CrearPrendasDefault() {
         PrendasData[i][prendaActiva] = false;
         PrendasData[i][prendaModelo] = 0;
         PrendasData[i][prendaPrecio] = 0;
+        PrendasData[i][prendaStock] = 0;
         PrendasData[i][prendaBone] = 2;
         PrendasData[i][prendaOffX] = 0.0;
         PrendasData[i][prendaOffY] = 0.0;
@@ -4557,65 +4693,6 @@ stock CrearPrendasDefault() {
         PrendasData[i][prendaScaleZ] = 1.0;
         format(PrendasData[i][prendaNombre], 32, "");
     }
-    PrendasData[0][prendaActiva] = true;
-    format(PrendasData[0][prendaNombre], 32, "Lentes Verdes");
-    PrendasData[0][prendaModelo] = 19008;
-    PrendasData[0][prendaPrecio] = 50000;
-    PrendasData[0][prendaBone] = 2;
-
-    PrendasData[1][prendaActiva] = true;
-    format(PrendasData[1][prendaNombre], 32, "Sombrero De Bruja");
-    PrendasData[1][prendaModelo] = 19528;
-    PrendasData[1][prendaPrecio] = 100000;
-    PrendasData[1][prendaBone] = 2;
-
-    PrendasData[2][prendaActiva] = true;
-    format(PrendasData[2][prendaNombre], 32, "Chaleco De Policia Negro");
-    PrendasData[2][prendaModelo] = 19142;
-    PrendasData[2][prendaPrecio] = 180000;
-    PrendasData[2][prendaBone] = 1;
-
-    PrendasData[3][prendaActiva] = true;
-    format(PrendasData[3][prendaNombre], 32, "Pasamontañas Negro");
-    PrendasData[3][prendaModelo] = 19801;
-    PrendasData[3][prendaPrecio] = 250000;
-    PrendasData[3][prendaBone] = 2;
-
-    PrendasData[4][prendaActiva] = true;
-    format(PrendasData[4][prendaNombre], 32, "Hamburguesa");
-    PrendasData[4][prendaModelo] = 19801;
-    PrendasData[4][prendaPrecio] = 300000;
-    PrendasData[4][prendaBone] = 2;
-
-    PrendasData[5][prendaActiva] = true;
-    format(PrendasData[5][prendaNombre], 32, "Reloj de lujo");
-    PrendasData[5][prendaModelo] = 19039;
-    PrendasData[5][prendaPrecio] = 125000;
-    PrendasData[5][prendaBone] = 6;
-
-    PrendasData[6][prendaActiva] = true;
-    format(PrendasData[6][prendaNombre], 32, "Gorra Azul");
-    PrendasData[6][prendaModelo] = 18939;
-    PrendasData[6][prendaPrecio] = 70000;
-    PrendasData[6][prendaBone] = 2;
-
-    PrendasData[7][prendaActiva] = true;
-    format(PrendasData[7][prendaNombre], 32, "Mascara Roja");
-    PrendasData[7][prendaModelo] = 19036;
-    PrendasData[7][prendaPrecio] = 150000;
-    PrendasData[7][prendaBone] = 2;
-
-    PrendasData[8][prendaActiva] = true;
-    format(PrendasData[8][prendaNombre], 32, "Mochila Urbana");
-    PrendasData[8][prendaModelo] = 3026;
-    PrendasData[8][prendaPrecio] = 135000;
-    PrendasData[8][prendaBone] = 1;
-
-    PrendasData[9][prendaActiva] = true;
-    format(PrendasData[9][prendaNombre], 32, "Auriculares");
-    PrendasData[9][prendaModelo] = 19421;
-    PrendasData[9][prendaPrecio] = 90000;
-    PrendasData[9][prendaBone] = 2;
 }
 
 stock GuardarPrendasConfig() {
@@ -4623,8 +4700,8 @@ stock GuardarPrendasConfig() {
     if(!h) return 0;
     new line[256];
     for(new i = 0; i < MAX_PRENDAS; i++) {
-        format(line, sizeof(line), "%d %d %d %d %f %f %f %f %f %f %f %f %f %s\n",
-            PrendasData[i][prendaActiva], PrendasData[i][prendaModelo], PrendasData[i][prendaPrecio], PrendasData[i][prendaBone],
+        format(line, sizeof(line), "%d %d %d %d %d %f %f %f %f %f %f %f %f %f %s\n",
+            PrendasData[i][prendaActiva], PrendasData[i][prendaModelo], PrendasData[i][prendaPrecio], PrendasData[i][prendaStock], PrendasData[i][prendaBone],
             PrendasData[i][prendaOffX], PrendasData[i][prendaOffY], PrendasData[i][prendaOffZ],
             PrendasData[i][prendaRotX], PrendasData[i][prendaRotY], PrendasData[i][prendaRotZ],
             PrendasData[i][prendaScaleX], PrendasData[i][prendaScaleY], PrendasData[i][prendaScaleZ], PrendasData[i][prendaNombre]);
@@ -4647,6 +4724,7 @@ stock CargarPrendasConfig() {
         PrendasData[i][prendaActiva] = strval(strtok(line, idx)) != 0;
         PrendasData[i][prendaModelo] = strval(strtok(line, idx));
         PrendasData[i][prendaPrecio] = strval(strtok(line, idx));
+        PrendasData[i][prendaStock] = strval(strtok(line, idx));
         PrendasData[i][prendaBone] = strval(strtok(line, idx));
         PrendasData[i][prendaOffX] = floatstr(strtok(line, idx));
         PrendasData[i][prendaOffY] = floatstr(strtok(line, idx));
@@ -4665,6 +4743,7 @@ stock CargarPrendasConfig() {
         PrendasData[j][prendaActiva] = false;
         PrendasData[j][prendaModelo] = 0;
         PrendasData[j][prendaPrecio] = 0;
+        PrendasData[j][prendaStock] = 0;
         format(PrendasData[j][prendaNombre], 32, "");
     }
     return 1;
@@ -4675,7 +4754,7 @@ stock ShowPrendasMenu(playerid) {
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
         if(!PrendasData[i][prendaActiva]) continue;
-        format(line, sizeof(line), "%s - $%d", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio]);
+        format(line, sizeof(line), "%s - $%d (Stock: %d)", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio], PrendasData[i][prendaStock]);
         if(PlayerPrendaComprada[playerid][i]) {
             if(PlayerPrendaActiva[playerid][i]) strcat(line, " {66FF66}(EQUIPADA)");
             else strcat(line, " {FFAA00}(COMPRADA)");
@@ -4688,22 +4767,16 @@ stock ShowPrendasMenu(playerid) {
     return 1;
 }
 
+stock ShowPrendasAdminMenu(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_PRENDAS_ADMIN_MENU, DIALOG_STYLE_LIST, "Prendas Admin", "Agregar prenda\nEliminar prenda", "Seleccionar", "Cerrar");
+}
+
 stock ShowPrendasAdminEditar(playerid, idx) {
-    if(idx == -1) {
-        new list[1024], line[96];
-        list[0] = EOS;
-        for(new i = 0; i < MAX_PRENDAS; i++) {
-            format(line, sizeof(line), "%d) %s | $%d | %s", i, PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio], PrendasData[i][prendaActiva] ? "ON" : "OFF");
-            if(strlen(list) > 0) strcat(list, "\n");
-            strcat(list, line);
-        }
-        PrendaEditIndex[playerid] = -1;
-        return ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_LIST, "Prendas Admin - Lista", list, "Editar", "Cerrar");
-    }
-    new body[256], boneName[32];
-    GetPrendaBoneName(PrendasData[idx][prendaBone], boneName, sizeof(boneName));
-    format(body, sizeof(body), "Activar/Desactivar (actual: %s)\nVolver", PrendasData[idx][prendaActiva] ? "ON" : "OFF");
-    return ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_LIST, "Prendas Admin - Editar", body, "Seleccionar", "Cerrar");
+    if(idx < 0 || idx >= MAX_PRENDAS) return ShowPrendasAdminMenu(playerid);
+    PrendaEditIndex[playerid] = idx;
+    new body[256];
+    format(body, sizeof(body), "Activar/Desactivar (actual: %s)\nEditar precio (actual: $%d)\nEditar stock (actual: %d)", PrendasData[idx][prendaActiva] ? "ON" : "OFF", PrendasData[idx][prendaPrecio], PrendasData[idx][prendaStock]);
+    return ShowPlayerDialog(playerid, DIALOG_PRENDAS_EDITAR, DIALOG_STYLE_LIST, "Prendas Admin - Editar", body, "Seleccionar", "Atras");
 }
 
 stock AplicarPrendaJugador(playerid, idx) {
