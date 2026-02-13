@@ -117,11 +117,7 @@
 #define DIALOG_VENTA_AUTOS_ADMIN_MENU 33
 #define DIALOG_VENTA_AUTOS_BUY 34
 #define DIALOG_AYUDA_CATEGORIA 35
-#define DIALOG_CAMPER_MENU 36
-#define DIALOG_CAMPER_ADMIN_MENU 37
-#define DIALOG_CAMPER_ADMIN_EDIT 38
 #define DIALOG_MALETERO_MENU 39
-#define DIALOG_CAMPER_POINT 40
 #define DIALOG_VENTA_AUTOS_ADD_ID 41
 #define DIALOG_VENTA_AUTOS_ADD_PRECIO 42
 #define DIALOG_VENTA_AUTOS_ADD_STOCK 43
@@ -151,8 +147,6 @@
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
-#define MODELO_CAMPER 483
-#define MAX_CAMPER_TIPOS 3
 #define MAX_GAS_POINTS 64
 #define MAX_MINAS 128
 #define MAX_HORNOS 64
@@ -170,7 +164,6 @@
 #define GAS_CONSUMO_POR_MINUTO 5
 
 #define MAX_AUTOS_NORMALES_JUGADOR 3
-#define MAX_CAMPERS_JUGADOR 1
 #define MAX_VEHICULOS_TOTALES_JUGADOR 4
 
 #if !defined WEAPON_NONE
@@ -300,7 +293,7 @@ enum ePuntoMovible {
     puntoSemilleria,
     puntoArmeria,
     puntoVentaAutos,
-    puntoCamper,
+    puntoMaletero,
     puntoPintura,
     puntoMinero,
     puntoPrendas,
@@ -362,25 +355,13 @@ new VentaAutosData[MAX_AUTOS_VENTA][eVentaAuto];
 new VentaAutosAdminModeloPendiente[MAX_PLAYERS];
 new VentaAutosAdminPrecioPendiente[MAX_PLAYERS];
 
-enum eCamperTipo {
-    bool:ctActiva,
-    ctPrecio,
-    ctStock,
-    ctColor1,
-    ctColor2,
-    ctSlots,
-    ctNombre[24]
-}
-new CamperTipos[MAX_CAMPER_TIPOS][eCamperTipo];
-new CamperEditTipo[MAX_PLAYERS] = {-1, ...};
-
-new CamperOwner[MAX_VEHICLES] = {-1, ...};
-new CamperSlotsVeh[MAX_VEHICLES];
-new CamperHierbaVeh[MAX_VEHICLES];
-new CamperFloresVeh[MAX_VEHICLES];
-new CamperSemillaHierbaVeh[MAX_VEHICLES];
-new CamperSemillaFlorVeh[MAX_VEHICLES];
-new CamperArmasVeh[MAX_VEHICLES][MAX_WEAPON_ID_GM];
+new MaleteroOwner[MAX_VEHICLES] = {-1, ...};
+new MaleteroSlotsVeh[MAX_VEHICLES];
+new MaleteroHierbaVeh[MAX_VEHICLES];
+new MaleteroFloresVeh[MAX_VEHICLES];
+new MaleteroSemillaHierbaVeh[MAX_VEHICLES];
+new MaleteroSemillaFlorVeh[MAX_VEHICLES];
+new MaleteroArmasVeh[MAX_VEHICLES][MAX_WEAPON_ID_GM];
 
 new VehOwner[MAX_VEHICLES] = {-1, ...};
 new bool:VehLocked[MAX_VEHICLES];
@@ -574,16 +555,10 @@ stock FinalizarTodosLosCultivos(playerid);
 stock GetPrimerSlotCultivoLibre(playerid);
 stock GetCultivoCosechableCercano(playerid);
 stock CrearPuntosFijos();
-stock IsNearCamperPoint(playerid);
-stock ShowCamperBuyMenu(playerid);
-stock ShowCamperAdminMenu(playerid);
-stock ShowCamperMaletero(playerid, vehid);
-stock GetNearbyOwnedCamper(playerid);
-stock IsCamperDeJugador(playerid, vehid);
+stock ShowMaleteroMaletero(playerid, vehid);
 stock PlayerTieneAccesoVehiculo(playerid, vehid);
-stock InitCamperSystem();
 stock GetNearbyOwnedVehicle(playerid);
-stock CuentaArmasCamper(vehid);
+stock CuentaArmasMaletero(vehid);
 stock InitGasSystem();
 stock ActualizarGasTextoVehiculo(playerid);
 stock EncontrarGasCercano(playerid);
@@ -612,7 +587,6 @@ stock ShowAdminEditHint(playerid, const nombreSistema[]);
 stock GetNivelPJ(playerid);
 stock ActualizarNivelPJ(playerid);
 stock ContarAutosJugador(playerid);
-stock ContarCampersJugador(playerid);
 stock ContarVehiculosTotalesJugador(playerid);
 stock ShowGPSVehiculosMenu(playerid);
 stock GetOwnedVehicleByListIndex(playerid, listindex);
@@ -664,7 +638,7 @@ public OnGameModeInit() {
     PuntoPos[puntoVentaAutos][0] = POS_BANCO_X + 12.0;
     PuntoPos[puntoVentaAutos][1] = POS_BANCO_Y + 4.0;
     PuntoPos[puntoVentaAutos][2] = POS_BANCO_Z;
-    PuntoPos[puntoCamper][0] = 2490.0; PuntoPos[puntoCamper][1] = -1648.0; PuntoPos[puntoCamper][2] = 13.3;
+    PuntoPos[puntoMaletero][0] = 2490.0; PuntoPos[puntoMaletero][1] = -1648.0; PuntoPos[puntoMaletero][2] = 13.3;
     PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
     PuntoPos[puntoMinero][0] = PuntoPos[puntoCamionero][0] + 6.0; PuntoPos[puntoMinero][1] = PuntoPos[puntoCamionero][1]; PuntoPos[puntoMinero][2] = PuntoPos[puntoCamionero][2];
     PuntoPos[puntoPrendas][0] = PuntoPos[puntoSemilleria][0] + 6.0; PuntoPos[puntoPrendas][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoPrendas][2] = PuntoPos[puntoSemilleria][2];
@@ -723,7 +697,6 @@ public OnGameModeInit() {
     SetTimer("CheckInactiveVehicles", 10000, true);
     SetTimer("ActualizarTextosHornos", 1000, true);
 
-    InitCamperSystem();
     InitGasSystem();
     return 1;
 }
@@ -736,14 +709,13 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     if((newkeys & KEY_YES) && PlayerAdmin[playerid] >= 1) { // Tecla Y (solo admin)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
-        if(IsNearCamperPoint(playerid)) return SendClientMessage(playerid, 0xFFAA00FF, "Sistema de maletero independiente activo (campers eliminados).");
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
     }
 
     if((newkeys & KEY_LOOK_BEHIND)) { // Tecla B
         new vehMaletero = GetNearbyOwnedVehicle(playerid);
         if(vehMaletero != INVALID_VEHICLE_ID) {
-            ShowCamperMaletero(playerid, vehMaletero);
+            ShowMaleteroMaletero(playerid, vehMaletero);
             return 1;
         }
     }
@@ -789,10 +761,6 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             IniciarRutaBasurero(playerid);
         }
         return 1;
-    }
-
-    if(IsNearCamperPoint(playerid)) {
-        return SendClientMessage(playerid, 0xFFAA00FF, "Sistema antiguo de campers eliminado. Usa /maletero en cualquier vehiculo propio.");
     }
 
     if(IsNearVentaAutos(playerid)) {
@@ -1470,7 +1438,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/maletero", true)) {
         new vehid = GetNearbyOwnedVehicle(playerid);
         if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Debes estar junto a un vehiculo propio para usar /maletero.");
-        return ShowCamperMaletero(playerid, vehid);
+        return ShowMaleteroMaletero(playerid, vehid);
     }
 
 
@@ -1483,9 +1451,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(ammo <= 0) ammo = PlayerAmmoInventario[playerid][_:arma];
         if(ammo <= 0) return SendClientMessage(playerid, -1, "No tienes municion en esa arma.");
         PlayerAmmoInventario[playerid][_:arma] = ammo;
-        new usados = CuentaArmasCamper(vehid);
-        if(usados >= CamperSlotsVeh[vehid]) return SendClientMessage(playerid, -1, "Maletero lleno.");
-        CamperArmasVeh[vehid][_:arma] += ammo;
+        new usados = CuentaArmasMaletero(vehid);
+        if(usados >= MaleteroSlotsVeh[vehid]) return SendClientMessage(playerid, -1, "Maletero lleno.");
+        MaleteroArmasVeh[vehid][_:arma] += ammo;
         ResetPlayerWeapons(playerid);
         for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
             if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0 && w != _:arma) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
@@ -1516,16 +1484,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!IsPlayerConnected(id) || mins <= 0) return SendClientMessage(playerid, -1, "Datos invalidos.");
         new vehid = IsPlayerInAnyVehicle(playerid) ? GetPlayerVehicleID(playerid) : GetNearbyOwnedVehicle(playerid);
         if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No hay vehiculo valido cerca.");
-        if(VehOwner[vehid] != playerid && !IsCamperDeJugador(playerid, vehid)) return SendClientMessage(playerid, -1, "Solo el dueno puede compartir llaves.");
+        if(VehOwner[vehid] != playerid) return SendClientMessage(playerid, -1, "Solo el dueno puede compartir llaves.");
         VehSharedTo[id] = vehid;
         VehSharedUntil[id] = GetTickCount() + (mins * 60000);
         SendClientMessage(playerid, 0x00FF00FF, "Acceso temporal compartido.");
         SendClientMessage(id, 0x00FF00FF, "Recibiste acceso temporal a un vehiculo con /llave.");
         return 1;
-    }
-    if(!strcmp(cmd, "/editarcamper", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        return SendClientMessage(playerid, -1, "Sistema de maletero independiente activo (campers eliminados).");
     }
 
     if(!strcmp(cmd, "/comprar", true)) {
@@ -2938,114 +2902,24 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. El concesionario te entrega las llaves de tu nuevo auto.");
         return 1;
     }
-
-
-    if(dialogid == DIALOG_CAMPER_POINT) {
-        if(!response) return 1;
-        if(listitem == 0) return ShowCamperBuyMenu(playerid);
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        return ShowCamperAdminMenu(playerid);
-    }
-
-    if(dialogid == DIALOG_CAMPER_MENU) {
-        if(!response) return 1;
-        new tipoSel = -1, current;
-        for(new i = 0; i < MAX_CAMPER_TIPOS; i++) {
-            if(!CamperTipos[i][ctActiva] || CamperTipos[i][ctStock] <= 0) continue;
-            if(current == listitem) { tipoSel = i; break; }
-            current++;
-        }
-        if(tipoSel == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
-        if(ContarCampersJugador(playerid) >= MAX_CAMPERS_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 1 camper.");
-        if(GetPlayerMoney(playerid) < CamperTipos[tipoSel][ctPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        new Float:px, Float:py, Float:pz, Float:pa;
-        GetPlayerPos(playerid, px, py, pz);
-        GetPlayerFacingAngle(playerid, pa);
-        new veh = CreateVehicle(MODELO_CAMPER, px + 4.0, py, pz, pa, CamperTipos[tipoSel][ctColor1], CamperTipos[tipoSel][ctColor2], 120);
-        if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo crear el camper.");
-        GivePlayerMoney(playerid, -CamperTipos[tipoSel][ctPrecio]);
-        CamperTipos[tipoSel][ctStock]--;
-        CamperOwner[veh] = playerid;
-        VehOwner[veh] = playerid;
-        VehLocked[veh] = false;
-        VehOculto[veh] = false;
-        VehLastUseTick[veh] = GetTickCount();
-        VehModelData[veh] = MODELO_CAMPER;
-        VehColor1Data[veh] = CamperTipos[tipoSel][ctColor1];
-        VehColor2Data[veh] = CamperTipos[tipoSel][ctColor2];
-        VehPosData[veh][0] = px + 4.0;
-        VehPosData[veh][1] = py;
-        VehPosData[veh][2] = pz;
-        VehPosData[veh][3] = pa;
-        CamperSlotsVeh[veh] = CamperTipos[tipoSel][ctSlots];
-        CamperHierbaVeh[veh] = 0;
-        CamperFloresVeh[veh] = 0;
-        GasInitVehiculo[veh] = true;
-        GasVehiculo[veh] = 100;
-        PutPlayerInVehicle(playerid, veh, 0);
-        SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. Tu camper quedo registrado y listo para viajar.");
-        return 1;
-    }
-
-    if(dialogid == DIALOG_CAMPER_ADMIN_MENU) {
-        if(!response) return 1;
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        if(listitem < 0 || listitem >= MAX_CAMPER_TIPOS) return SendClientMessage(playerid, -1, "Tipo invalido.");
-        CamperEditTipo[playerid] = listitem;
-        new body[192];
-        format(body, sizeof(body), "Tipo: %s\n1 [0/1] activar/desactivar\n2 [precio]\n3 [stock]\n\nEjemplos:\n1 1\n2 65000\n3 8", CamperTipos[listitem][ctNombre]);
-        ShowPlayerDialog(playerid, DIALOG_CAMPER_ADMIN_EDIT, DIALOG_STYLE_INPUT, "Editar camper", body, "Guardar", "Cancelar");
-        return 1;
-    }
-
-    if(dialogid == DIALOG_CAMPER_ADMIN_EDIT) {
-        if(!response) return 1;
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new tipoSel = CamperEditTipo[playerid];
-        if(tipoSel < 0 || tipoSel >= MAX_CAMPER_TIPOS) return SendClientMessage(playerid, -1, "No hay tipo seleccionado.");
-        new ix, p1[32], p2[32];
-        format(p1, sizeof(p1), "%s", strtok(inputtext, ix));
-        format(p2, sizeof(p2), "%s", strtok(inputtext, ix));
-        if(!p1[0] || !p2[0]) return SendClientMessage(playerid, -1, "Usa: 1 [0/1], 2 [precio] o 3 [stock].");
-        new accion = strval(p1), valor = strval(p2);
-        if(accion == 1) {
-            CamperTipos[tipoSel][ctActiva] = (valor != 0);
-            SendClientMessage(playerid, 0x00FF00FF, "Disponibilidad actualizada.");
-            return ShowCamperAdminMenu(playerid);
-        }
-        if(accion == 2) {
-            if(valor <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
-            CamperTipos[tipoSel][ctPrecio] = valor;
-            SendClientMessage(playerid, 0x00FF00FF, "Precio actualizado.");
-            return ShowCamperAdminMenu(playerid);
-        }
-        if(accion == 3) {
-            if(valor < 0) return SendClientMessage(playerid, -1, "Stock invalido.");
-            CamperTipos[tipoSel][ctStock] = valor;
-            SendClientMessage(playerid, 0x00FF00FF, "Stock actualizado.");
-            return ShowCamperAdminMenu(playerid);
-        }
-        return SendClientMessage(playerid, -1, "Accion invalida.");
-    }
-
     if(dialogid == DIALOG_MALETERO_MENU) {
         if(!response) return 1;
-        new veh = GetPVarInt(playerid, "CamperMaleteroVeh");
+        new veh = GetPVarInt(playerid, "MaleteroMaleteroVeh");
         if(!PlayerTieneAccesoVehiculo(playerid, veh)) return SendClientMessage(playerid, -1, "No puedes abrir este maletero.");
 
-        new armas = CuentaArmasCamper(veh);
+        new armas = CuentaArmasMaletero(veh);
         if(listitem >= armas) return 1; // cerrar
 
         new idx;
         for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-            if(CamperArmasVeh[veh][w] <= 0) continue;
+            if(MaleteroArmasVeh[veh][w] <= 0) continue;
             if(idx == listitem) {
-                GivePlayerWeapon(playerid, WEAPON:w, CamperArmasVeh[veh][w]);
+                GivePlayerWeapon(playerid, WEAPON:w, MaleteroArmasVeh[veh][w]);
                 PlayerArmaComprada[playerid][w] = true;
-                PlayerAmmoInventario[playerid][w] += CamperArmasVeh[veh][w];
-                CamperArmasVeh[veh][w] = 0;
+                PlayerAmmoInventario[playerid][w] += MaleteroArmasVeh[veh][w];
+                MaleteroArmasVeh[veh][w] = 0;
                 SendClientMessage(playerid, 0x00FF00FF, "Sacaste el arma del maletero.");
-                return ShowCamperMaletero(playerid, veh);
+                return ShowMaleteroMaletero(playerid, veh);
             }
             idx++;
         }
@@ -3471,12 +3345,12 @@ public OnPlayerDisconnect(playerid, reason) {
     BankTransferTarget[playerid] = -1;
     FinalizarTodosLosCultivos(playerid);
     for(new v = 1; v < MAX_VEHICLES; v++) {
-        if(CamperOwner[v] == playerid) {
+        if(MaleteroOwner[v] == playerid) {
             DestroyVehicle(v);
-            CamperOwner[v] = -1;
-            CamperSlotsVeh[v] = 0;
-            CamperHierbaVeh[v] = 0;
-            CamperFloresVeh[v] = 0;
+            MaleteroOwner[v] = -1;
+            MaleteroSlotsVeh[v] = 0;
+            MaleteroHierbaVeh[v] = 0;
+            MaleteroFloresVeh[v] = 0;
         }
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
@@ -3931,7 +3805,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
-        case puntoCamper: format(dest, len, "Zona de maletero");
+        case puntoMaletero: format(dest, len, "Punto deshabilitado");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
@@ -3984,9 +3858,9 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoVentaAutos: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
         }
-        case puntoCamper: {
+        case puntoMaletero: {
             PuntoPickup[punto] = CreatePickup(1318, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{FF0000}Punto deshabilitado\n{FFFFFF}Sistema de campers eliminado", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("{FF0000}Punto deshabilitado\n{FFFFFF}Sistema de maletero eliminado", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
         }
         case puntoPintura: {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -4068,7 +3942,6 @@ stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Flo
 stock PlayerTieneAccesoVehiculo(playerid, vehid) {
     if(vehid == INVALID_VEHICLE_ID) return 0;
     if(VehOwner[vehid] == playerid) return 1;
-    if(IsCamperDeJugador(playerid, vehid)) return 1;
     if(VehSharedTo[playerid] == vehid && GetTickCount() <= VehSharedUntil[playerid]) return 1;
     return 0;
 }
@@ -4083,89 +3956,54 @@ stock GetNearbyOwnedVehicle(playerid) {
     return INVALID_VEHICLE_ID;
 }
 
-stock CuentaArmasCamper(vehid) {
+stock CuentaArmasMaletero(vehid) {
     new total;
-    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) if(CamperArmasVeh[vehid][w] > 0) total++;
+    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) if(MaleteroArmasVeh[vehid][w] > 0) total++;
     return total;
-}
-
-stock InitCamperSystem() {
-    CamperTipos[0][ctActiva] = true; CamperTipos[0][ctPrecio] = 35000; CamperTipos[0][ctStock] = 5; CamperTipos[0][ctColor1] = 3; CamperTipos[0][ctColor2] = 3; CamperTipos[0][ctSlots] = 10; format(CamperTipos[0][ctNombre], 24, "Rojo");
-    CamperTipos[1][ctActiva] = true; CamperTipos[1][ctPrecio] = 50000; CamperTipos[1][ctStock] = 4; CamperTipos[1][ctColor1] = 79; CamperTipos[1][ctColor2] = 79; CamperTipos[1][ctSlots] = 15; format(CamperTipos[1][ctNombre], 24, "Azul");
-    CamperTipos[2][ctActiva] = true; CamperTipos[2][ctPrecio] = 110000; CamperTipos[2][ctStock] = 2; CamperTipos[2][ctColor1] = 0; CamperTipos[2][ctColor2] = 0; CamperTipos[2][ctSlots] = 40; format(CamperTipos[2][ctNombre], 24, "Negro");
-    for(new v = 0; v < MAX_VEHICLES; v++) { CamperOwner[v] = -1; CamperSlotsVeh[v] = 4; CamperHierbaVeh[v] = 0; CamperFloresVeh[v] = 0; CamperSemillaHierbaVeh[v] = 0; CamperSemillaFlorVeh[v] = 0; VehOwner[v] = -1; VehLocked[v] = false; VehOculto[v] = false; VehLastUseTick[v] = 0; VehModelData[v] = 0; VehColor1Data[v] = -1; VehColor2Data[v] = -1; for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[v][w] = 0; }
-    return 1;
 }
 
 stock InitGasSystem() {
     GasTotalPuntos = 0;
-    for(new v = 0; v < MAX_VEHICLES; v++) { GasVehiculo[v] = 100; GasInitVehiculo[v] = false; }
+    for(new v = 0; v < MAX_VEHICLES; v++) {
+        GasVehiculo[v] = 100;
+        GasInitVehiculo[v] = false;
+        VehOwner[v] = -1;
+        VehLocked[v] = false;
+        VehOculto[v] = false;
+        VehLastUseTick[v] = 0;
+        VehModelData[v] = 0;
+        VehColor1Data[v] = -1;
+        VehColor2Data[v] = -1;
+        MaleteroOwner[v] = -1;
+        MaleteroSlotsVeh[v] = 4;
+        MaleteroHierbaVeh[v] = 0;
+        MaleteroFloresVeh[v] = 0;
+        MaleteroSemillaHierbaVeh[v] = 0;
+        MaleteroSemillaFlorVeh[v] = 0;
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[v][w] = 0;
+    }
     for(new i = 0; i < MAX_PLAYERS; i++) { VehSharedTo[i] = INVALID_VEHICLE_ID; VehSharedUntil[i] = 0; }
     return 1;
 }
 
-stock IsNearCamperPoint(playerid) {
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamper][0], PuntoPos[puntoCamper][1], PuntoPos[puntoCamper][2])) return 1;
-    return 0;
-}
-
-stock ShowCamperBuyMenu(playerid) {
-    new body[512], line[128], count; body[0] = EOS;
-    for(new i = 0; i < MAX_CAMPER_TIPOS; i++) {
-        if(!CamperTipos[i][ctActiva] || CamperTipos[i][ctStock] <= 0) continue;
-        format(line, sizeof(line), "%s | Slots:%d | Precio:$%d | Stock:%d\n", CamperTipos[i][ctNombre], CamperTipos[i][ctSlots], CamperTipos[i][ctPrecio], CamperTipos[i][ctStock]);
-        strcat(body, line); count++;
-    }
-    if(count == 0) return SendClientMessage(playerid, -1, "Sistema eliminado: usa maletero de vehiculos propios.");
-    ShowPlayerDialog(playerid, DIALOG_CAMPER_MENU, DIALOG_STYLE_LIST, "Maleteros", body, "Comprar", "Cerrar");
-    return 1;
-}
-
-stock ShowCamperAdminMenu(playerid) {
-    new body[512], line[128]; body[0] = EOS;
-    for(new i = 0; i < MAX_CAMPER_TIPOS; i++) {
-        format(line, sizeof(line), "%s | Activa:%s | Precio:$%d | Stock:%d\n", CamperTipos[i][ctNombre], CamperTipos[i][ctActiva] ? "Si" : "No", CamperTipos[i][ctPrecio], CamperTipos[i][ctStock]);
-        strcat(body, line);
-    }
-    ShowPlayerDialog(playerid, DIALOG_CAMPER_ADMIN_MENU, DIALOG_STYLE_LIST, "Editar maleteros", body, "Editar", "Cerrar");
-    return 1;
-}
-
-stock IsCamperDeJugador(playerid, vehid) {
-    if(vehid == INVALID_VEHICLE_ID) return 0;
-    if(GetVehicleModel(vehid) != MODELO_CAMPER) return 0;
-    if(CamperOwner[vehid] != playerid) return 0;
-    return 1;
-}
-
-stock GetNearbyOwnedCamper(playerid) {
-    for(new v = 1; v < MAX_VEHICLES; v++) {
-        if(!IsCamperDeJugador(playerid, v)) continue;
-        new Float:vx, Float:vy, Float:vz;
-        GetVehiclePos(v, vx, vy, vz);
-        if(IsPlayerInRangeOfPoint(playerid, 4.0, vx, vy, vz)) return v;
-    }
-    return INVALID_VEHICLE_ID;
-}
-
-stock ShowCamperMaletero(playerid, vehid) {
+stock ShowMaleteroMaletero(playerid, vehid) {
     if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
-    new info[128], body[768], line[64], totalArmas = CuentaArmasCamper(vehid);
+    new info[128], body[768], line[64], totalArmas = CuentaArmasMaletero(vehid);
     new usados = totalArmas;
-    format(info, sizeof(info), "Armas guardadas: %d/%d slots usados", usados, CamperSlotsVeh[vehid]);
+    format(info, sizeof(info), "Armas guardadas: %d/%d slots usados", usados, MaleteroSlotsVeh[vehid]);
     SendClientMessage(playerid, 0x99FFFFFF, info);
 
     body[0] = EOS;
     for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-        if(CamperArmasVeh[vehid][w] <= 0) continue;
+        if(MaleteroArmasVeh[vehid][w] <= 0) continue;
         new wn[32];
         GetWeaponNameGM(w, wn, sizeof(wn));
-        format(line, sizeof(line), "Sacar %s (%d)\n", wn, CamperArmasVeh[vehid][w]);
+        format(line, sizeof(line), "Sacar %s (%d)\n", wn, MaleteroArmasVeh[vehid][w]);
         strcat(body, line);
     }
     strcat(body, "Cerrar maletero");
 
-    SetPVarInt(playerid, "CamperMaleteroVeh", vehid);
+    SetPVarInt(playerid, "MaleteroMaleteroVeh", vehid);
     ShowPlayerDialog(playerid, DIALOG_MALETERO_MENU, DIALOG_STYLE_LIST, "Maletero del vehiculo", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -4232,20 +4070,13 @@ stock ContarAutosJugador(playerid) {
     new count;
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(VehOwner[v] != playerid) continue;
-        if(VehModelData[v] == MODELO_CAMPER) continue;
         count++;
     }
     return count;
 }
 
-stock ContarCampersJugador(playerid) {
-    new count;
-    for(new v = 1; v < MAX_VEHICLES; v++) if(CamperOwner[v] == playerid) count++;
-    return count;
-}
-
 stock ContarVehiculosTotalesJugador(playerid) {
-    return ContarAutosJugador(playerid) + ContarCampersJugador(playerid);
+    return ContarAutosJugador(playerid);
 }
 
 stock ShowGPSVehiculosMenu(playerid) {
@@ -4294,21 +4125,21 @@ stock RestaurarVehiculosJugador(playerid) {
         GasInitVehiculo[nv] = GasInitVehiculo[v];
         GasVehiculo[nv] = GasVehiculo[v];
 
-        if(CamperOwner[v] == playerid) {
-            CamperOwner[nv] = CamperOwner[v];
-            CamperSlotsVeh[nv] = CamperSlotsVeh[v];
-            CamperHierbaVeh[nv] = CamperHierbaVeh[v];
-            CamperFloresVeh[nv] = CamperFloresVeh[v];
-            CamperSemillaHierbaVeh[nv] = CamperSemillaHierbaVeh[v];
-            CamperSemillaFlorVeh[nv] = CamperSemillaFlorVeh[v];
-            for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[nv][w] = CamperArmasVeh[v][w];
-            CamperOwner[v] = -1;
-            CamperSlotsVeh[v] = 0;
-            CamperHierbaVeh[v] = 0;
-            CamperFloresVeh[v] = 0;
-            CamperSemillaHierbaVeh[v] = 0;
-            CamperSemillaFlorVeh[v] = 0;
-            for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[v][w] = 0;
+        if(MaleteroOwner[v] == playerid) {
+            MaleteroOwner[nv] = MaleteroOwner[v];
+            MaleteroSlotsVeh[nv] = MaleteroSlotsVeh[v];
+            MaleteroHierbaVeh[nv] = MaleteroHierbaVeh[v];
+            MaleteroFloresVeh[nv] = MaleteroFloresVeh[v];
+            MaleteroSemillaHierbaVeh[nv] = MaleteroSemillaHierbaVeh[v];
+            MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[v];
+            for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[v][w];
+            MaleteroOwner[v] = -1;
+            MaleteroSlotsVeh[v] = 0;
+            MaleteroHierbaVeh[v] = 0;
+            MaleteroFloresVeh[v] = 0;
+            MaleteroSemillaHierbaVeh[v] = 0;
+            MaleteroSemillaFlorVeh[v] = 0;
+            for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[v][w] = 0;
         }
 
         VehOwner[v] = -1;
@@ -4343,21 +4174,21 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
     GasInitVehiculo[nv] = GasInitVehiculo[veh];
     GasVehiculo[nv] = GasVehiculo[veh];
 
-    if(CamperOwner[veh] == playerid) {
-        CamperOwner[nv] = CamperOwner[veh];
-        CamperSlotsVeh[nv] = CamperSlotsVeh[veh];
-        CamperHierbaVeh[nv] = CamperHierbaVeh[veh];
-        CamperFloresVeh[nv] = CamperFloresVeh[veh];
-        CamperSemillaHierbaVeh[nv] = CamperSemillaHierbaVeh[veh];
-        CamperSemillaFlorVeh[nv] = CamperSemillaFlorVeh[veh];
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[nv][w] = CamperArmasVeh[veh][w];
-        CamperOwner[veh] = -1;
-        CamperSlotsVeh[veh] = 0;
-        CamperHierbaVeh[veh] = 0;
-        CamperFloresVeh[veh] = 0;
-        CamperSemillaHierbaVeh[veh] = 0;
-        CamperSemillaFlorVeh[veh] = 0;
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[veh][w] = 0;
+    if(MaleteroOwner[veh] == playerid) {
+        MaleteroOwner[nv] = MaleteroOwner[veh];
+        MaleteroSlotsVeh[nv] = MaleteroSlotsVeh[veh];
+        MaleteroHierbaVeh[nv] = MaleteroHierbaVeh[veh];
+        MaleteroFloresVeh[nv] = MaleteroFloresVeh[veh];
+        MaleteroSemillaHierbaVeh[nv] = MaleteroSemillaHierbaVeh[veh];
+        MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[veh];
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[veh][w];
+        MaleteroOwner[veh] = -1;
+        MaleteroSlotsVeh[veh] = 0;
+        MaleteroHierbaVeh[veh] = 0;
+        MaleteroFloresVeh[veh] = 0;
+        MaleteroSemillaHierbaVeh[veh] = 0;
+        MaleteroSemillaFlorVeh[veh] = 0;
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[veh][w] = 0;
     }
 
     VehOwner[veh] = -1;
@@ -4388,12 +4219,12 @@ stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
         new Float:a = floatstr(strtok(line, idx));
         new locked = strval(strtok(line, idx));
         new gas = strval(strtok(line, idx));
-        new isCamper = strval(strtok(line, idx));
-        new camperSlots = strval(strtok(line, idx));
-        new camperHierba = strval(strtok(line, idx));
-        new camperFlores = strval(strtok(line, idx));
-        new camperSemHierba = strval(strtok(line, idx));
-        new camperSemFlor = strval(strtok(line, idx));
+        new isMaletero = strval(strtok(line, idx));
+        new maleteroSlots = strval(strtok(line, idx));
+        new maleteroHierba = strval(strtok(line, idx));
+        new maleteroFlores = strval(strtok(line, idx));
+        new maleteroSemHierba = strval(strtok(line, idx));
+        new maleteroSemFlor = strval(strtok(line, idx));
 
         new veh = CreateVehicle(model, x, y, z, a, color1, color2, 120);
         if(veh == INVALID_VEHICLE_ID) continue;
@@ -4412,13 +4243,13 @@ stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
         GasInitVehiculo[veh] = true;
         GasVehiculo[veh] = gas;
 
-        if(isCamper) {
-            CamperOwner[veh] = playerid;
-            CamperSlotsVeh[veh] = camperSlots;
-            CamperHierbaVeh[veh] = camperHierba;
-            CamperFloresVeh[veh] = camperFlores;
-            CamperSemillaHierbaVeh[veh] = camperSemHierba;
-            CamperSemillaFlorVeh[veh] = camperSemFlor;
+        if(isMaletero) {
+            MaleteroOwner[veh] = playerid;
+            MaleteroSlotsVeh[veh] = maleteroSlots;
+            MaleteroHierbaVeh[veh] = maleteroHierba;
+            MaleteroFloresVeh[veh] = maleteroFlores;
+            MaleteroSemillaHierbaVeh[veh] = maleteroSemHierba;
+            MaleteroSemillaFlorVeh[veh] = maleteroSemFlor;
         }
     }
     return 1;
@@ -4444,7 +4275,7 @@ stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
         format(line, sizeof(line), "\n%d %d %d %f %f %f %f %d %d %d %d %d %d %d %d",
             VehModelData[v], VehColor1Data[v], VehColor2Data[v], x, y, z, a,
             VehLocked[v] ? 1 : 0, GasVehiculo[v],
-            CamperOwner[v] == playerid ? 1 : 0, CamperSlotsVeh[v], CamperHierbaVeh[v], CamperFloresVeh[v], CamperSemillaHierbaVeh[v], CamperSemillaFlorVeh[v]);
+            MaleteroOwner[v] == playerid ? 1 : 0, MaleteroSlotsVeh[v], MaleteroHierbaVeh[v], MaleteroFloresVeh[v], MaleteroSemillaHierbaVeh[v], MaleteroSemillaFlorVeh[v]);
         fwrite(h, line);
         guardados++;
     }
@@ -4484,21 +4315,21 @@ public RestaurarVehiculoTemporal(slot) {
     GasInitVehiculo[nv] = GasInitVehiculo[slot];
     GasVehiculo[nv] = GasVehiculo[slot];
 
-    if(CamperOwner[slot] != -1) {
-        CamperOwner[nv] = CamperOwner[slot];
-        CamperSlotsVeh[nv] = CamperSlotsVeh[slot];
-        CamperHierbaVeh[nv] = CamperHierbaVeh[slot];
-        CamperFloresVeh[nv] = CamperFloresVeh[slot];
-        CamperSemillaHierbaVeh[nv] = CamperSemillaHierbaVeh[slot];
-        CamperSemillaFlorVeh[nv] = CamperSemillaFlorVeh[slot];
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[nv][w] = CamperArmasVeh[slot][w];
-        CamperOwner[slot] = -1;
-        CamperSlotsVeh[slot] = 0;
-        CamperHierbaVeh[slot] = 0;
-        CamperFloresVeh[slot] = 0;
-        CamperSemillaHierbaVeh[slot] = 0;
-        CamperSemillaFlorVeh[slot] = 0;
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) CamperArmasVeh[slot][w] = 0;
+    if(MaleteroOwner[slot] != -1) {
+        MaleteroOwner[nv] = MaleteroOwner[slot];
+        MaleteroSlotsVeh[nv] = MaleteroSlotsVeh[slot];
+        MaleteroHierbaVeh[nv] = MaleteroHierbaVeh[slot];
+        MaleteroFloresVeh[nv] = MaleteroFloresVeh[slot];
+        MaleteroSemillaHierbaVeh[nv] = MaleteroSemillaHierbaVeh[slot];
+        MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[slot];
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[slot][w];
+        MaleteroOwner[slot] = -1;
+        MaleteroSlotsVeh[slot] = 0;
+        MaleteroHierbaVeh[slot] = 0;
+        MaleteroFloresVeh[slot] = 0;
+        MaleteroSemillaHierbaVeh[slot] = 0;
+        MaleteroSemillaFlorVeh[slot] = 0;
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[slot][w] = 0;
     }
 
     VehOwner[slot] = -1;
