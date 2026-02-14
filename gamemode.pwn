@@ -169,6 +169,7 @@
 #define DIALOG_EDITMAP_EDIT_LIST 90
 #define DIALOG_EDITMAP_DELETE_LIST 91
 #define DIALOG_EDITMAP_LISTA 92
+#define DIALOG_EDITMAP_LISTA_ACCION 93
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -194,7 +195,7 @@
 
 #define MAX_AUTOS_NORMALES_JUGADOR 3
 #define MAX_VEHICULOS_TOTALES_JUGADOR 4
-#define CUENTA_DATA_VERSION 3
+#define CUENTA_DATA_VERSION 4
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 
@@ -412,6 +413,8 @@ enum eEditMapData {
 new EditMapData[MAX_EDITMAP_OBJECTS][eEditMapData];
 new TotalEditMap;
 new EditMapEditandoSlot[MAX_PLAYERS] = {-1, ...};
+new EditMapListaSlotSeleccionado[MAX_PLAYERS] = {-1, ...};
+new PlayerSkinGuardada[MAX_PLAYERS];
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -2232,6 +2235,9 @@ public OnPlayerConnect(playerid) {
     TelefonoVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
     AdminFlyActivo[playerid] = false;
     GPSVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
+    EditMapEditandoSlot[playerid] = -1;
+    EditMapListaSlotSeleccionado[playerid] = -1;
+    PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
     InvSemillaHierba[playerid] = 0;
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
@@ -2273,7 +2279,7 @@ public OnPlayerConnect(playerid) {
 
 public OnPlayerSpawn(playerid) {
     if(!IsPlayerLoggedIn[playerid]) return Kick(playerid);
-    SetPlayerSkin(playerid, SKIN_POR_DEFECTO);
+    SetPlayerSkin(playerid, PlayerSkinGuardada[playerid]);
     SetPlayerHealth(playerid, VIDA_AL_LOGUEAR);
     SetPlayerArmour(playerid, CHALECO_AL_LOGUEAR);
 
@@ -3076,6 +3082,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
         if(skin < 0 || skin > 311) return SendClientMessage(playerid, -1, "Skin invalida (0-311).");
         SetPlayerSkin(target, skin);
+        PlayerSkinGuardada[target] = skin;
         SendClientMessage(playerid, 0x66FF66FF, "Skin cambiada correctamente.");
         SendClientMessage(target, 0x66FF66FF, "Un admin cambio tu skin.");
         return 1;
@@ -3161,7 +3168,41 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_EDITMAP_LISTA) {
         if(!response) return ShowEditMapMenu(playerid);
-        return ShowEditMapMenu(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new slot = GetEditMapSlotByListIndex(listitem);
+        if(slot == -1) return SendClientMessage(playerid, -1, "Objeto invalido.");
+        EditMapListaSlotSeleccionado[playerid] = slot;
+        return ShowPlayerDialog(playerid, DIALOG_EDITMAP_LISTA_ACCION, DIALOG_STYLE_LIST, "EditMap - Accion", "Editar objeto\nEliminar objeto", "Elegir", "Atras");
+    }
+
+    if(dialogid == DIALOG_EDITMAP_LISTA_ACCION) {
+        if(!response) return ShowEditMapViewList(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new slot = EditMapListaSlotSeleccionado[playerid];
+        if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo]) {
+            EditMapListaSlotSeleccionado[playerid] = -1;
+            return SendClientMessage(playerid, -1, "Objeto invalido.");
+        }
+
+        if(listitem == 0) {
+            EditMapEditandoSlot[playerid] = slot;
+            EditObject(playerid, EditMapData[slot][emObj]);
+            SendClientMessage(playerid, 0x66FF66FF, "Editando objeto seleccionado. Confirma para guardar.");
+            EditMapListaSlotSeleccionado[playerid] = -1;
+            return 1;
+        }
+
+        if(listitem == 1) {
+            if(EditMapData[slot][emObj] != 0) DestroyObject(EditMapData[slot][emObj]);
+            EditMapData[slot][emActivo] = false;
+            EditMapData[slot][emObj] = 0;
+            GuardarEditMap();
+            EditMapListaSlotSeleccionado[playerid] = -1;
+            SendClientMessage(playerid, 0xFFAA00FF, "Objeto eliminado del editmap.");
+            return ShowEditMapViewList(playerid);
+        }
+
+        return 1;
     }
 
     if(dialogid == DIALOG_ADMIN_VIDA_CHALECO_VALOR) {
@@ -3682,6 +3723,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                     InvFlor[playerid] = 0;
                     ArmeroNivel[playerid] = 1;
                     PlayerTiempoJugadoMin[playerid] = 0;
+                    PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
                     v[0] = floatstr(line);
                     fread(h, line); v[1] = floatstr(line);
                     fread(h, line); v[2] = floatstr(line);
@@ -3697,6 +3739,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         InvFlor[playerid] = 0;
                         ArmeroNivel[playerid] = 1;
                         PlayerTiempoJugadoMin[playerid] = 0;
+                        PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
                         v[0] = floatstr(line);
                         fread(h, line); v[1] = floatstr(line);
                         fread(h, line); v[2] = floatstr(line);
@@ -3710,6 +3753,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             InvFlor[playerid] = 0;
                             ArmeroNivel[playerid] = 1;
                             PlayerTiempoJugadoMin[playerid] = 0;
+                            PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
                             v[0] = floatstr(line);
                             fread(h, line); v[1] = floatstr(line);
                             fread(h, line); v[2] = floatstr(line);
@@ -3721,14 +3765,25 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             fread(h, line);
                             if(strfind(line, ".") != -1) {
                                 PlayerTiempoJugadoMin[playerid] = 0;
+                                PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
                                 v[0] = floatstr(line);
                                 fread(h, line); v[1] = floatstr(line);
                                 fread(h, line); v[2] = floatstr(line);
                             } else {
                                 PlayerTiempoJugadoMin[playerid] = strval(line);
-                                fread(h, line); v[0] = floatstr(line);
-                                fread(h, line); v[1] = floatstr(line);
-                                fread(h, line); v[2] = floatstr(line);
+                                fread(h, line);
+                                if(strfind(line, ".") != -1) {
+                                    PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
+                                    v[0] = floatstr(line);
+                                    fread(h, line); v[1] = floatstr(line);
+                                    fread(h, line); v[2] = floatstr(line);
+                                } else {
+                                    PlayerSkinGuardada[playerid] = strval(line);
+                                    if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
+                                    fread(h, line); v[0] = floatstr(line);
+                                    fread(h, line); v[1] = floatstr(line);
+                                    fread(h, line); v[2] = floatstr(line);
+                                }
                             }
                         }
                     }
@@ -3840,9 +3895,10 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n%d",
+            if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n%d",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
-                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
+                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
@@ -5721,7 +5777,7 @@ stock ShowEditMapViewList(playerid) {
         count++;
     }
     if(!count) return SendClientMessage(playerid, -1, "No hay objetos cargados.");
-    return ShowPlayerDialog(playerid, DIALOG_EDITMAP_LISTA, DIALOG_STYLE_LIST, "EditMap - Lista", list, "Volver", "Atras");
+    return ShowPlayerDialog(playerid, DIALOG_EDITMAP_LISTA, DIALOG_STYLE_LIST, "EditMap - Lista", list, "Opciones", "Atras");
 }
 
 stock GuardarEditMap() {
