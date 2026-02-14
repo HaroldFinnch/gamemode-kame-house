@@ -1,6 +1,10 @@
-#include <open.mp>
-#include <string>
-#include <file>
+// Compatibilidad: compila tanto en Qawno/open.mp como en Pawno clasico
+#if defined _inc_open_mp
+    #include <open.mp>
+#else
+    #include <a_samp>
+#endif
+
 #include "a_mysql"
 
 // ================= [ CONFIGURACION EDITABLE ] =================
