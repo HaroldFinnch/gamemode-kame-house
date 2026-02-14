@@ -13,14 +13,15 @@
 #define HAMBRE_POR_COMIDA   15
 #define DISTANCIA_PAGO_MULT  3.0
 #define DISTANCIA_PAGO_PIZZA 2.2
-#define HORAS_POR_NIVEL_PJ   2
+#define HORAS_POR_NIVEL_PJ   4
+#define COBRO_DIARIO_POR_VEHICULO 750
 
 #define PAGO_MAX_PIZZERO     2600
 #define PAGO_MAX_CAMIONERO   6800
 #define PAGO_MAX_BASURERO    4500
 
 #define PAGO_BASE_CAMIONERO   1700
-#define PAGO_BASE_PIZZERO      750
+#define PAGO_BASE_PIZZERO       50
 #define PAGO_BASE_BASURERO     650
 
 #define NIVEL_MAX_TRABAJO    10
@@ -28,8 +29,8 @@
 #define PROGRESO_PIZZERO_POR_NIVEL   25
 #define PROGRESO_BASURERO_POR_NIVEL  28
 
-#define TIEMPO_CULTIVO_MIN   240
-#define TIEMPO_CULTIVO_MAX   300
+#define TIEMPO_CULTIVO_MIN   4
+#define TIEMPO_CULTIVO_MAX   5
 
 #define SEMILLA_HIERBA_PRECIO 45
 #define SEMILLA_FLOR_PRECIO   65
@@ -296,19 +297,19 @@ new Float:CamioneroDestino[MAX_PLAYERS][3];
 static const CasaInteriorNombre[5][] = {
     "Safe House 1",
     "Safe House 4",
-    "Katie's house",
-    "Burglary house 1",
-    "Burglary house 6"
+    "Willowfield safehouse",
+    "Vank Hoff Hotel",
+    "Safe House 3"
 };
 
-static const CasaInteriorJuegoID[5] = {10, 1, 2, 3, 2};
+static const CasaInteriorJuegoID[5] = {10, 1, 11, 5, 6};
 
 static const Float:CasaInteriorPos[5][3] = {
     {2262.83, -1137.71, 1050.63},
     {2217.28, -1076.27, 1050.48},
-    {225.756989, 1240.00, 1082.14},
-    {-42.5819, 1405.6208, 1084.43},
-    {-68.0244, 1351.59, 1080.21}
+    {1240.39, -2036.88, 59.96},
+    {227.76, 1114.39, 1080.99},
+    {2233.80, -1115.36, 1050.88}
 };
 
 // Sistema de armeria
@@ -701,6 +702,8 @@ stock ShowEditMapEditList(playerid);
 stock ShowEditMapDeleteList(playerid);
 stock ShowEditMapViewList(playerid);
 stock GetEditMapSlotByListIndex(listindex);
+stock GetEditMapSlotLibre();
+stock CosecharCultivoCercano(playerid);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -887,6 +890,10 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             IniciarRutaBasurero(playerid);
         }
         return 1;
+    }
+
+    if(PlayerInCasa[playerid] != -1) {
+        if(CosecharCultivoCercano(playerid)) return 1;
     }
 
     if(IsNearVentaAutos(playerid)) {
@@ -1277,12 +1284,11 @@ public FinalizarEntregaPizza(playerid) {
     if(nivelPizzero > NIVEL_MAX_TRABAJO) nivelPizzero = NIVEL_MAX_TRABAJO;
 
     new pagoBase = PAGO_BASE_PIZZERO;
-    new pagoDistancia = floatround(distancia * 1.95);
-    if(pagoDistancia < 260) pagoDistancia = 260;
-    if(pagoDistancia > 1800) pagoDistancia = 1800;
-    new pagoNivel = nivelPizzero * 170;
+    new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_PIZZA);
+    if(pagoDistancia < 25) pagoDistancia = 25;
+    new pagoNivel = nivelPizzero * 40;
     new pago = pagoBase + pagoDistancia + pagoNivel;
-    if(pago > PAGO_MAX_PIZZERO) pago = PAGO_MAX_PIZZERO;
+    if(pago > 1000) pago = 1000;
     GivePlayerMoney(playerid, pago);
 
     PizzeroEntregas[playerid]++;
@@ -1371,19 +1377,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/lvl", true) || !strcmp(cmd, "/nivel", true)) {
-        new nivel = GetNivelPJ(playerid);
-        new progreso = PlayerTiempoJugadoMin[playerid] % (HORAS_POR_NIVEL_PJ * 60);
-        new faltanMin = (HORAS_POR_NIVEL_PJ * 60) - progreso;
-        if(progreso == 0 && PlayerTiempoJugadoMin[playerid] > 0) faltanMin = HORAS_POR_NIVEL_PJ * 60;
+        new nivelActual = GetNivelPJ(playerid);
+        new minutosObjetivo = 0;
+        for(new n = 1; n <= nivelActual; n++) minutosObjetivo += HORAS_POR_NIVEL_PJ * n * 60;
+        new faltanMin = minutosObjetivo - PlayerTiempoJugadoMin[playerid];
+        if(faltanMin < 0) faltanMin = 0;
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new body[384], pagoHora = nivel * 500;
+        new body[384], pagoHora = nivelActual * 500;
         format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d
 {33CCFF}Tiempo jugado: {FFFFFF}%d horas
 {33CCFF}Prox nivel en: {FFFFFF}%dh %dm
 {33CCFF}Pago por hora: {00FF00}$%d
-{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/3", nivel, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
+{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/3", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -1488,41 +1495,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/cosehar", true) || !strcmp(cmd, "/cosechar", true)) {
-        new slot = GetCultivoCosechableCercano(playerid);
-        if(slot == -1) return SendClientMessage(playerid, -1, "No tienes cultivos listos cerca. Acercate a una planta madura para cosecharla.");
-        new restante = CultivoReadyTick[playerid][slot] - GetTickCount();
-        if(restante > 0) {
-            new ms[96];
-            format(ms, sizeof(ms), "Ese cultivo aun no esta listo. Falta: %d segundos.", restante / 1000);
-            return SendClientMessage(playerid, -1, ms);
-        }
-
-        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
-        new extra = random(3);
-        new total = CultivoCantidadBase[playerid][slot] + extra;
-        new semillasExtra = 0;
-        new bool:esHierba = (CultivoTipo[playerid][slot] == 1);
-        if(esHierba) InvHierba[playerid] += total;
-        else InvFlor[playerid] += total;
-
-        if(random(100) < 45) {
-            semillasExtra = 1 + random(2);
-            if(esHierba) InvSemillaHierba[playerid] += semillasExtra;
-            else InvSemillaFlor[playerid] += semillasExtra;
-        }
-
-        FinalizarCultivoVisual(playerid, slot);
-        CultivoActivo[playerid][slot] = 0;
-        if(PlantasColocadas[playerid] > 0) PlantasColocadas[playerid]--;
-        CultivoTipo[playerid][slot] = 0;
-        CultivoCantidadBase[playerid][slot] = 0;
-        CultivoReadyTick[playerid][slot] = 0;
-
-        new ok[160], tipo[16];
-        format(tipo, sizeof(tipo), esHierba ? "hierba" : "flores");
-        format(ok, sizeof(ok), "Cosechaste %d %s y %d semilla(s). Plantas activas: %d/%d.", total, tipo, semillasExtra, PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
-        SendClientMessage(playerid, 0x00FF00FF, ok);
-        return 1;
+        return SendClientMessage(playerid, -1, "Ahora se cosecha con la tecla H cerca de la planta lista.");
     }
 
     if(!strcmp(cmd, "/consumir", true)) {
@@ -2133,7 +2106,7 @@ stock bool:GetCasaInteriorData(slot, &interiorid, &Float:px, &Float:py, &Float:p
 stock ShowCrearCasaInteriorDialog(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT,
         "Crear casa",
-        "1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Katie's house (ID 2)\n4) Burglary house 1 (ID 3)\n5) Burglary house 6 (ID 2)\n\nIngresa el numero de interior (1-5):",
+        "1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Willowfield safehouse (ID 11)\n4) Vank Hoff Hotel (ID 5)\n5) Safe House 3 (ID 6)\n\nIngresa el numero de interior (1-5):",
         "Siguiente", "Cancelar");
 }
 
@@ -2321,7 +2294,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_CREAR_CASA_INTERIOR) {
         if(!response) { CasaInteriorPendiente[playerid] = -1; return 1; }
         new interiorSlot = strval(inputtext);
-        if(interiorSlot < 1 || interiorSlot > 5) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT, "Crear casa", "Interior invalido.\n\n1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Katie's house (ID 2)\n4) Burglary house 1 (ID 3)\n5) Burglary house 6 (ID 2)\n\nIngresa el numero de interior (1-5):", "Siguiente", "Cancelar");
+        if(interiorSlot < 1 || interiorSlot > 5) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT, "Crear casa", "Interior invalido.\n\n1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Willowfield safehouse (ID 11)\n4) Vank Hoff Hotel (ID 5)\n5) Safe House 3 (ID 6)\n\nIngresa el numero de interior (1-5):", "Siguiente", "Cancelar");
         CasaInteriorPendiente[playerid] = interiorSlot;
         return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio de la casa:", "Crear", "Atras");
     }
@@ -2362,7 +2335,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "[Minero]\n-Informacion del trabajo: extrae piedra/cobre/hierro en minas.\n-Comandos: H en mina, /inventario, /dejartrabajo.\n-Niveles: mejora por tiempo jugado general.\n-Paga: recursos para vender/craftear.\n\n[Basurero]\n-Informacion del trabajo: recoge bolsas y cargalas en la Rumpo con H.\n-Comandos: H en bolsa/camion, /tirar basura, /dejartrabajo.\n-Niveles: 1 a 10 por rutas completadas.\n-Paga: dinero + chance de flores.\n\n[Pizzero]\n-Informacion del trabajo: entrega pizzas en moto por checkpoints.\n-Comandos: H para tomar trabajo, /dejartrabajo.\n-Niveles: 1 a 10 por entregas.\n-Paga: dinero por entrega + bonus por nivel.\n\n[Camionero]\n-Informacion del trabajo: rutas de carga y entrega.\n-Comandos: H para iniciar, /dejartrabajo.\n-Niveles: 1 a 10 por viajes.\n-Paga: pago alto por ruta.\n\n[Armero]\n-Informacion del trabajo: crea armas y municion en armeria.\n-Comandos: H en armeria, /armero, /inventario.\n-Niveles: 1 a 10 por crafteo.\n-Paga: venta/utilidad de armas para combate.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /cosehar /inventario\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /inventario\nH para cosechar\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
         if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
         return 1;
@@ -3124,12 +3097,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return 1;
         new modelid = strval(inputtext);
         if(modelid < 300 || modelid > 20000) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "ID invalido. Ingresa un modelo valido (300-20000):", "Crear", "Atras");
-        if(TotalEditMap >= MAX_EDITMAP_OBJECTS) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
+        new slot = GetEditMapSlotLibre();
+        if(slot == -1) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
 
         new Float:px, Float:py, Float:pz;
         GetPlayerPos(playerid, px, py, pz);
 
-        new slot = TotalEditMap;
         EditMapData[slot][emActivo] = true;
         EditMapData[slot][emModelo] = modelid;
         EditMapData[slot][emX] = px;
@@ -3139,7 +3112,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         EditMapData[slot][emRY] = 0.0;
         EditMapData[slot][emRZ] = 0.0;
         EditMapData[slot][emObj] = CreateObject(modelid, EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ], 0.0, 0.0, 0.0);
-        TotalEditMap++;
+        if(slot >= TotalEditMap) TotalEditMap = slot + 1;
         EditMapEditandoSlot[playerid] = slot;
         EditObject(playerid, EditMapData[slot][emObj]);
         SendClientMessage(playerid, 0x66FF66FF, "Objeto creado. Ajusta posicion/rotacion y confirma para guardar.");
@@ -3255,7 +3228,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         CultivoActivo[playerid][slot] = 1;
         PlantasColocadas[playerid]++;
         new duracion = TIEMPO_CULTIVO_MIN + random(TIEMPO_CULTIVO_MAX - TIEMPO_CULTIVO_MIN + 1);
-        CultivoReadyTick[playerid][slot] = GetTickCount() + (duracion * 1000);
+        CultivoReadyTick[playerid][slot] = GetTickCount() + (duracion * 60000);
         CultivoCantidadBase[playerid][slot] = 2;
 
         new modeloCultivo = (CultivoTipo[playerid][slot] == 2) ? MODELO_FLOR_OBJ : MODELO_HIERBA_OBJ;
@@ -3997,9 +3970,19 @@ public SubirTiempoJugado() {
             if(PlayerTiempoJugadoMin[i] % 60 == 0) {
                 new pago = GetNivelPJ(i) * 500;
                 GivePlayerMoney(i, pago);
-                new paymsg[96];
+                new paymsg[128];
                 format(paymsg, sizeof(paymsg), "Pago horario recibido por nivel PJ: $%d", pago);
                 SendClientMessage(i, 0x00FF00FF, paymsg);
+            }
+            if(PlayerTiempoJugadoMin[i] % 1440 == 0) {
+                new totalVehiculos = ContarVehiculosTotalesJugador(i);
+                if(totalVehiculos > 0) {
+                    new cobro = totalVehiculos * COBRO_DIARIO_POR_VEHICULO;
+                    GivePlayerMoney(i, -cobro);
+                    new msgCobro[144];
+                    format(msgCobro, sizeof(msgCobro), "Cobro diario por tenencia vehicular: -$%d (%d vehiculos).", cobro, totalVehiculos);
+                    SendClientMessage(i, 0xFFAA00FF, msgCobro);
+                }
             }
             if(IsPlayerInAnyVehicle(i) && GetPlayerState(i) == PLAYER_STATE_DRIVER) {
                 new vehid = GetPlayerVehicleID(i);
@@ -4016,7 +3999,17 @@ public SubirTiempoJugado() {
 }
 
 stock GetNivelPJ(playerid) {
-    return (PlayerTiempoJugadoMin[playerid] / (HORAS_POR_NIVEL_PJ * 60)) + 1;
+    new mins = PlayerTiempoJugadoMin[playerid];
+    new nivel = 1;
+    new acumulado = 0;
+    while(true) {
+        new req = HORAS_POR_NIVEL_PJ * nivel * 60;
+        if(mins < acumulado + req) break;
+        acumulado += req;
+        nivel++;
+        if(nivel >= 1000) break;
+    }
+    return nivel;
 }
 
 stock ActualizarNivelPJ(playerid) {
@@ -4554,8 +4547,11 @@ stock ActualizarLabelCultivo(playerid, slot) {
     new label[128], tipo[20];
     if(CultivoTipo[playerid][slot] == 2) format(tipo, sizeof(tipo), "Flor");
     else format(tipo, sizeof(tipo), "Hierba");
-    if(restante == 0) format(label, sizeof(label), "%s lista para cosechar\nUsa /cosechar cerca", tipo);
-    else format(label, sizeof(label), "%s en cultivo\nTiempo restante: %d segundo(s)", tipo, restante / 1000);
+    if(restante == 0) format(label, sizeof(label), "%s lista para cosechar\nPresiona H cerca", tipo);
+    else {
+        new mins = (restante + 59999) / 60000;
+        format(label, sizeof(label), "%s en cultivo\nTiempo restante: %d minuto(s)", tipo, mins);
+    }
     if(CultivoLabel[playerid][slot] != Text3D:-1) Update3DTextLabelText(CultivoLabel[playerid][slot], 0xFFFFFFFF, label);
     return 1;
 }
@@ -4604,6 +4600,47 @@ stock GetCultivoCosechableCercano(playerid) {
         if(CultivoReadyTick[playerid][c] > GetTickCount()) continue;
         if(IsPlayerInRangeOfPoint(playerid, 2.5, CultivoPos[playerid][c][0], CultivoPos[playerid][c][1], CultivoPos[playerid][c][2])) return c;
     }
+    return -1;
+}
+
+
+stock CosecharCultivoCercano(playerid) {
+    new slot = GetCultivoCosechableCercano(playerid);
+    if(slot == -1) return 0;
+
+    ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+    new extra = random(3);
+    new total = CultivoCantidadBase[playerid][slot] + extra;
+    new semillasExtra = 0;
+    new bool:esHierba = (CultivoTipo[playerid][slot] == 1);
+    if(esHierba) InvHierba[playerid] += total;
+    else InvFlor[playerid] += total;
+
+    if(random(100) < 45) {
+        semillasExtra = 1 + random(2);
+        if(esHierba) InvSemillaHierba[playerid] += semillasExtra;
+        else InvSemillaFlor[playerid] += semillasExtra;
+    }
+
+    FinalizarCultivoVisual(playerid, slot);
+    CultivoActivo[playerid][slot] = 0;
+    if(PlantasColocadas[playerid] > 0) PlantasColocadas[playerid]--;
+    CultivoTipo[playerid][slot] = 0;
+    CultivoCantidadBase[playerid][slot] = 0;
+    CultivoReadyTick[playerid][slot] = 0;
+
+    new ok[160], tipo[16];
+    format(tipo, sizeof(tipo), esHierba ? "hierba" : "flores");
+    format(ok, sizeof(ok), "Cosechaste %d %s y %d semilla(s). Plantas activas: %d/%d.", total, tipo, semillasExtra, PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
+    SendClientMessage(playerid, 0x00FF00FF, ok);
+    return 1;
+}
+
+stock GetEditMapSlotLibre() {
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) return i;
+    }
+    if(TotalEditMap < MAX_EDITMAP_OBJECTS) return TotalEditMap;
     return -1;
 }
 
@@ -4703,7 +4740,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /m /d /telefono /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /cosechar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
+    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /m /d /telefono /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
