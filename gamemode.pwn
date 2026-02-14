@@ -2081,6 +2081,8 @@ public OnPlayerText(playerid, text[]) {
 
 public OnPlayerConnect(playerid) {
     IsPlayerLoggedIn[playerid] = false;
+    TogglePlayerSpectating(playerid, true);
+    TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
     BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 545.0, 150.0, "H: 100");
     PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.3, 1.2);
@@ -2194,6 +2196,7 @@ stock SpawnPlayerAfterAuth(playerid)
     TogglePlayerSpectating(playerid, false);
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    SetCameraBehindPlayer(playerid);
     SpawnPlayer(playerid);
     SetCameraBehindPlayer(playerid);
     return 1;
