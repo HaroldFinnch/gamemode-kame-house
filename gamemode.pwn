@@ -4107,12 +4107,11 @@ stock GetNivelPJ(playerid) {
     new mins = PlayerTiempoJugadoMin[playerid];
     new nivel = 1;
     new acumulado = 0;
-    for(;;) {
+    while(nivel < 1000) {
         new req = HORAS_POR_NIVEL_PJ * nivel * 60;
         if(mins < acumulado + req) break;
         acumulado += req;
         nivel++;
-        if(nivel >= 1000) break;
     }
     return nivel;
 }
@@ -6070,17 +6069,19 @@ stock RemoverSancionJugador(targetid) {
 
 stock ShowReglasDialog(playerid) {
     new reglasTexto[1024];
-    format(reglasTexto, sizeof(reglasTexto),
-        "Conceptos:                              Tiempo de Sancion:\n\
-PG: Acciones irreales.                 De 10 minutos a 1 hora.\n\
-DM: Matar sin rol.                     De 1 hora a 3 horas.\n\
-MG: Usar info OOC.                     De 10 minutos a 30 minutos.\n\
-RK: Vengarse tras morir.               De 1 hora a 2 horas.\n\
-CK: Matar atropellando.                De 1 hora a 3 horas.\n\
-NRE: No rolear entorno.                De 1 hora a 5 horas.\n\
-NVVPJ: No valorar vida.                De 30 minutos a 1 hora.\n\
-ER: Evadir rol.                        De 1 hora a 2 hora.\n\
-FR: Forzar rol.                        De 30 minutos a 10 hora.");
+    reglasTexto[0] = '\0';
+
+    strcat(reglasTexto, "Conceptos:                              Tiempo de Sancion:\n");
+    strcat(reglasTexto, "PG: Acciones irreales.                 De 10 minutos a 1 hora.\n");
+    strcat(reglasTexto, "DM: Matar sin rol.                     De 1 hora a 3 horas.\n");
+    strcat(reglasTexto, "MG: Usar info OOC.                     De 10 minutos a 30 minutos.\n");
+    strcat(reglasTexto, "RK: Vengarse tras morir.               De 1 hora a 2 horas.\n");
+    strcat(reglasTexto, "CK: Matar atropellando.                De 1 hora a 3 horas.\n");
+    strcat(reglasTexto, "NRE: No rolear entorno.                De 1 hora a 5 horas.\n");
+    strcat(reglasTexto, "NVVPJ: No valorar vida.                De 30 minutos a 1 hora.\n");
+    strcat(reglasTexto, "ER: Evadir rol.                        De 1 hora a 2 hora.\n");
+    strcat(reglasTexto, "FR: Forzar rol.                        De 30 minutos a 10 hora.");
+
     return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Reglas del servidor", reglasTexto, "Cerrar", "");
 }
 
