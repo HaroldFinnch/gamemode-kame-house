@@ -1,9 +1,9 @@
-# Migración de Kame House a MySQL (sin usar scriptfiles para cuentas/rutas)
+# Migración de Kame House a MySQL (todo persistente en DB)
 
-Esta guía deja **cuentas de jugador y rutas de trabajos** en MySQL desde cero, sin migrar datos viejos de `scriptfiles`.
+Esta guía deja **cuentas + configuraciones del mapa** en MySQL: casas, puntos movibles, minas, hornos, cajas, prepiezas, prendas, editmap, venta de autos y rutas.
 
 ## 1) Configurar conexión en la gamemode
-Edita `gamemode.pwn` y cambia estos `#define`:
+Edita `gamemode.pwn` y configura:
 
 ```pawn
 #define MYSQL_HOST          "15.204.150.91"
@@ -13,10 +13,8 @@ Edita `gamemode.pwn` y cambia estos `#define`:
 #define MYSQL_PORT          3306
 ```
 
-> Importante: usa exactamente los datos del panel MySQL. Si tu host permite `localhost`, puedes probar con `127.0.0.1` o la IP remota según el proveedor.
-
 ## 2) Crear base y tablas (phpMyAdmin)
-En phpMyAdmin entra a la base `s70935_kamehouse`, abre pestaña **SQL** y ejecuta este script:
+En phpMyAdmin, selecciona tu DB y ejecuta este SQL completo:
 
 ```sql
 CREATE TABLE IF NOT EXISTS cuentas (
@@ -66,31 +64,115 @@ CREATE TABLE IF NOT EXISTS rutas_trabajo (
     z FLOAT NOT NULL,
     INDEX idx_tipo (tipo)
 );
+
+CREATE TABLE IF NOT EXISTS casas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL,
+    interior_slot INT NOT NULL DEFAULT 1,
+    precio INT NOT NULL DEFAULT 0,
+    owner VARCHAR(24) NOT NULL DEFAULT 'None',
+    friends VARCHAR(128) NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS puntos_movibles (
+    slot_id INT PRIMARY KEY,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS minas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hornos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cajas_loot (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS prepiezas_puntos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS prendas_config (
+    slot_id INT PRIMARY KEY,
+    activa TINYINT(1) NOT NULL DEFAULT 0,
+    modelo INT NOT NULL DEFAULT 0,
+    precio INT NOT NULL DEFAULT 0,
+    stock INT NOT NULL DEFAULT 0,
+    bone INT NOT NULL DEFAULT 2,
+    off_x FLOAT NOT NULL DEFAULT 0,
+    off_y FLOAT NOT NULL DEFAULT 0,
+    off_z FLOAT NOT NULL DEFAULT 0,
+    rot_x FLOAT NOT NULL DEFAULT 0,
+    rot_y FLOAT NOT NULL DEFAULT 0,
+    rot_z FLOAT NOT NULL DEFAULT 0,
+    scale_x FLOAT NOT NULL DEFAULT 1,
+    scale_y FLOAT NOT NULL DEFAULT 1,
+    scale_z FLOAT NOT NULL DEFAULT 1,
+    nombre VARCHAR(32) NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS editmap (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    modelo INT NOT NULL,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    z FLOAT NOT NULL,
+    rx FLOAT NOT NULL,
+    ry FLOAT NOT NULL,
+    rz FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS venta_autos_config (
+    slot_id INT PRIMARY KEY,
+    activa TINYINT(1) NOT NULL DEFAULT 0,
+    modelo INT NOT NULL DEFAULT 0,
+    precio INT NOT NULL DEFAULT 0,
+    stock INT NOT NULL DEFAULT 0
+);
 ```
 
-## 3) Borrar datos viejos (jugadores y rutas)
-Si quieres empezar limpio:
+## 3) (Opcional) limpiar todo y reiniciar datos
+Si quieres iniciar totalmente limpio:
 
 ```sql
 TRUNCATE TABLE cuentas;
 TRUNCATE TABLE rutas_trabajo;
+TRUNCATE TABLE casas;
+TRUNCATE TABLE puntos_movibles;
+TRUNCATE TABLE minas;
+TRUNCATE TABLE hornos;
+TRUNCATE TABLE cajas_loot;
+TRUNCATE TABLE prepiezas_puntos;
+TRUNCATE TABLE prendas_config;
+TRUNCATE TABLE editmap;
+TRUNCATE TABLE venta_autos_config;
 ```
 
-Con esto borras cuentas/rutas viejas de MySQL.
-
-## 4) Subir e iniciar servidor
+## 4) Subir y arrancar
 1. Compila la gamemode.
 2. Reinicia servidor.
-3. Verifica en consola que salga el mensaje de MySQL conectado.
-4. Entra al server y registra una cuenta nueva.
+3. Verifica en consola: `"[MYSQL] Conexion establecida correctamente."`
+4. Entra al server y valida que crea/carga datos normalmente.
 
-## 5) Cargar rutas nuevas
-Como no se migran `rutas_*.txt`, crea rutas nuevas con admin:
-
-- `/crearparada` → agrega ruta camionero en MySQL.
-- `/crearparadapizza` → agrega ruta pizzero en MySQL.
-- `/crearparadabasura` → agrega ruta basurero en MySQL.
-
-## Notas
-- Este cambio deja **cuentas/rutas** en MySQL.
-- El resto de configuraciones de mapa (casas, minas, hornos, etc.) siguen en archivos `.txt` como antes.
+## Nota de operación
+- Con esta versión, las configuraciones principales del mapa ya se guardan/cargan por MySQL.
+- Si vienes de `.txt`, hay que recrear o migrar esos datos a la DB (puedo pasarte script de migración desde txt si quieres).

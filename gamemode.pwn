@@ -562,6 +562,7 @@ new AdminVidaChalecoTargetPendiente[MAX_PLAYERS] = {-1, ...};
 forward strtok(const string[], &index);
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
 forward GuardarCasas();
+stock CargarCasas();
 forward GuardarCuenta(playerid);
 stock bool:SQL_AbrirConexion() {
     g_SQL = mysql_connect(MYSQL_HOST, MYSQL_USER, MYSQL_DB, MYSQL_PASS, MYSQL_PORT);
@@ -580,6 +581,15 @@ stock SQL_CrearTablas() {
     if(!g_MySQLReady) return 0;
     mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS cuentas (id INT AUTO_INCREMENT PRIMARY KEY, nombre VARCHAR(24) NOT NULL UNIQUE, password VARCHAR(64) NOT NULL, dinero INT NOT NULL DEFAULT 500, admin INT NOT NULL DEFAULT 0, camionero_nivel INT NOT NULL DEFAULT 0, camionero_viajes INT NOT NULL DEFAULT 0, pizzero_nivel INT NOT NULL DEFAULT 0, pizzero_entregas INT NOT NULL DEFAULT 0, basurero_nivel INT NOT NULL DEFAULT 0, basurero_recorridos INT NOT NULL DEFAULT 0, banco INT NOT NULL DEFAULT 0, hambre INT NOT NULL DEFAULT 100, tiempo_jugado INT NOT NULL DEFAULT 0, skin INT NOT NULL DEFAULT 229, spawn_x FLOAT NOT NULL DEFAULT 2494.24, spawn_y FLOAT NOT NULL DEFAULT -1671.19, spawn_z FLOAT NOT NULL DEFAULT 13.33, semilla_hierba INT NOT NULL DEFAULT 0, semilla_flor INT NOT NULL DEFAULT 0, inv_hierba INT NOT NULL DEFAULT 0, inv_flor INT NOT NULL DEFAULT 0, inv_madera INT NOT NULL DEFAULT 0, inv_piedra INT NOT NULL DEFAULT 0, inv_cobre INT NOT NULL DEFAULT 0, inv_hierro INT NOT NULL DEFAULT 0, inv_polvora INT NOT NULL DEFAULT 0, inv_prepieza INT NOT NULL DEFAULT 0, inv_carbon INT NOT NULL DEFAULT 0, tiene_mazo TINYINT(1) NOT NULL DEFAULT 0, mazo_durabilidad INT NOT NULL DEFAULT 0, armero_nivel INT NOT NULL DEFAULT 1, armero_exp INT NOT NULL DEFAULT 0, bidon_gasolina INT NOT NULL DEFAULT 0, tiene_telefono TINYINT(1) NOT NULL DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
     mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS rutas_trabajo (id INT AUTO_INCREMENT PRIMARY KEY, tipo ENUM('camionero','pizzero','basurero') NOT NULL, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL, INDEX idx_tipo (tipo))");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS casas (id INT AUTO_INCREMENT PRIMARY KEY, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL, interior_slot INT NOT NULL DEFAULT 1, precio INT NOT NULL DEFAULT 0, owner VARCHAR(24) NOT NULL DEFAULT 'None', friends VARCHAR(128) NOT NULL DEFAULT '')");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS puntos_movibles (slot_id INT PRIMARY KEY, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS minas (id INT AUTO_INCREMENT PRIMARY KEY, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS hornos (id INT AUTO_INCREMENT PRIMARY KEY, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS cajas_loot (id INT AUTO_INCREMENT PRIMARY KEY, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS prepiezas_puntos (id INT AUTO_INCREMENT PRIMARY KEY, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS prendas_config (slot_id INT PRIMARY KEY, activa TINYINT(1) NOT NULL DEFAULT 0, modelo INT NOT NULL DEFAULT 0, precio INT NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT 0, bone INT NOT NULL DEFAULT 2, off_x FLOAT NOT NULL DEFAULT 0, off_y FLOAT NOT NULL DEFAULT 0, off_z FLOAT NOT NULL DEFAULT 0, rot_x FLOAT NOT NULL DEFAULT 0, rot_y FLOAT NOT NULL DEFAULT 0, rot_z FLOAT NOT NULL DEFAULT 0, scale_x FLOAT NOT NULL DEFAULT 1, scale_y FLOAT NOT NULL DEFAULT 1, scale_z FLOAT NOT NULL DEFAULT 1, nombre VARCHAR(32) NOT NULL DEFAULT '')");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS editmap (id INT AUTO_INCREMENT PRIMARY KEY, modelo INT NOT NULL, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL, rx FLOAT NOT NULL, ry FLOAT NOT NULL, rz FLOAT NOT NULL)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS venta_autos_config (slot_id INT PRIMARY KEY, activa TINYINT(1) NOT NULL DEFAULT 0, modelo INT NOT NULL DEFAULT 0, precio INT NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT 0)");
     return 1;
 }
 
@@ -1021,48 +1031,7 @@ public OnGameModeInit() {
     CargarPrepiezaPoints();
     CargarEditMap();
 
-    // Cargar casas
-    new File:h = fopen(PATH_CASAS, io_read);
-    if(h) {
-        new str[256];
-        while(fread(h, str) && TotalCasas < MAX_CASAS) {
-            new idx = 0;
-            CasaData[TotalCasas][cX] = floatstr(strtok(str, idx));
-            CasaData[TotalCasas][cY] = floatstr(strtok(str, idx));
-            CasaData[TotalCasas][cZ] = floatstr(strtok(str, idx));
-
-            new tokenA[32], tokenB[32], ownerTok[MAX_PLAYER_NAME], friendsTok[128];
-            format(tokenA, sizeof(tokenA), "%s", strtok(str, idx));
-            format(tokenB, sizeof(tokenB), "%s", strtok(str, idx));
-
-            if(strval(tokenA) >= 1 && strval(tokenA) <= 5 && strval(tokenB) > 0) {
-                CasaData[TotalCasas][cInteriorSlot] = strval(tokenA);
-                CasaData[TotalCasas][cPrecio] = strval(tokenB);
-                format(ownerTok, sizeof(ownerTok), "%s", strtok(str, idx));
-                format(friendsTok, sizeof(friendsTok), "%s", strtok(str, idx));
-            } else {
-                CasaData[TotalCasas][cInteriorSlot] = 1;
-                CasaData[TotalCasas][cPrecio] = strval(tokenA);
-                format(ownerTok, sizeof(ownerTok), "%s", tokenB);
-                format(friendsTok, sizeof(friendsTok), "%s", strtok(str, idx));
-            }
-
-            strmid(CasaData[TotalCasas][cOwner], ownerTok, 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
-            strmid(CasaData[TotalCasas][cFriends], friendsTok, 0, 128, 128);
-
-            CasaPickup[TotalCasas] = CreatePickup(strcmp(CasaData[TotalCasas][cOwner], "None") == 0 ? 1273 : 1559, 2, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ], 0);
-
-            new labelstr[64];
-            if(!strcmp(CasaData[TotalCasas][cOwner], "None")) {
-                format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", CasaData[TotalCasas][cPrecio], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
-            } else {
-                format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", CasaData[TotalCasas][cOwner], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
-            }
-            CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ] + 0.5, 10.0, 0);
-            TotalCasas++;
-        }
-        fclose(h);
-    }
+    CargarCasas();
 
     SetTimer("AutoGuardadoGlobal", 300000, true);
     SetTimer("BajarHambre", 60000, true);
@@ -3917,48 +3886,85 @@ public GuardarCuenta(playerid) {
     return 1;
 }
 
-public GuardarCasas() {
-    new File:h = fopen(PATH_CASAS, io_write);
-    if(h) {
-        new line[256];
-        for(new i = 0; i < TotalCasas; i++) {
-            format(line, sizeof(line), "%f %f %f %d %d %s %s\n",
-                CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ],
-                CasaData[i][cInteriorSlot], CasaData[i][cPrecio], CasaData[i][cOwner], CasaData[i][cFriends]);
-            fwrite(h, line);
+stock CargarCasas() {
+    if(!g_MySQLReady) return 0;
+
+    for(new i = 0; i < MAX_CASAS; i++) {
+        if(CasaPickup[i] != 0) DestroyPickup(CasaPickup[i]);
+        if(_:CasaLabel[i] != -1) Delete3DTextLabel(CasaLabel[i]);
+        CasaLabel[i] = Text3D:-1;
+    }
+
+    TotalCasas = 0;
+    mysql_query(g_SQL, "SELECT x,y,z,interior_slot,precio,owner,friends FROM casas ORDER BY id ASC");
+
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows && TotalCasas < MAX_CASAS; r++) {
+        cache_get_value_name_float(r, "x", CasaData[TotalCasas][cX]);
+        cache_get_value_name_float(r, "y", CasaData[TotalCasas][cY]);
+        cache_get_value_name_float(r, "z", CasaData[TotalCasas][cZ]);
+        cache_get_value_name_int(r, "interior_slot", CasaData[TotalCasas][cInteriorSlot]);
+        cache_get_value_name_int(r, "precio", CasaData[TotalCasas][cPrecio]);
+        cache_get_value_name(r, "owner", CasaData[TotalCasas][cOwner], MAX_PLAYER_NAME);
+        cache_get_value_name(r, "friends", CasaData[TotalCasas][cFriends], 128);
+
+        if(CasaData[TotalCasas][cInteriorSlot] < 1 || CasaData[TotalCasas][cInteriorSlot] > sizeof(CasaInteriorNombre)) CasaData[TotalCasas][cInteriorSlot] = 1;
+
+        CasaPickup[TotalCasas] = CreatePickup(strcmp(CasaData[TotalCasas][cOwner], "None") == 0 ? 1273 : 1559, 2, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ], 0);
+        new labelstr[64];
+        if(!strcmp(CasaData[TotalCasas][cOwner], "None")) {
+            format(labelstr, sizeof(labelstr), "Casa en venta
+Precio: $%d
+Int: %s", CasaData[TotalCasas][cPrecio], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
+        } else {
+            format(labelstr, sizeof(labelstr), "Casa de %s
+Int: %s", CasaData[TotalCasas][cOwner], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
         }
-        fclose(h);
+        CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ] + 0.5, 10.0, 0);
+        TotalCasas++;
+    }
+    return 1;
+}
+
+public GuardarCasas() {
+    if(!g_MySQLReady) return 0;
+
+    mysql_query(g_SQL, "DELETE FROM casas");
+    new query[512], escOwner[(MAX_PLAYER_NAME * 2) + 1], escFriends[257];
+    for(new i = 0; i < TotalCasas; i++) {
+        SQL_Escape(CasaData[i][cOwner], escOwner, sizeof(escOwner));
+        SQL_Escape(CasaData[i][cFriends], escFriends, sizeof(escFriends));
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO casas (x,y,z,interior_slot,precio,owner,friends) VALUES (%f,%f,%f,%d,%d,'%e','%e')", CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ], CasaData[i][cInteriorSlot], CasaData[i][cPrecio], escOwner, escFriends);
+        mysql_query(g_SQL, query);
     }
     return 1;
 }
 
 stock GuardarPuntosMovibles() {
-    new File:h = fopen(PATH_PUNTOS_MOVIBLES, io_write);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[96];
+    mysql_query(g_SQL, "DELETE FROM puntos_movibles");
+    new query[192];
     for(new i = 0; i < _:totalPuntosMovibles; i++) {
-        format(line, sizeof(line), "%f %f %f\n", PuntoPos[ePuntoMovible:i][0], PuntoPos[ePuntoMovible:i][1], PuntoPos[ePuntoMovible:i][2]);
-        fwrite(h, line);
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO puntos_movibles (slot_id,x,y,z) VALUES (%d,%f,%f,%f)", i, PuntoPos[ePuntoMovible:i][0], PuntoPos[ePuntoMovible:i][1], PuntoPos[ePuntoMovible:i][2]);
+        mysql_query(g_SQL, query);
     }
-    fclose(h);
     return 1;
 }
 
 stock CargarPuntosMovibles() {
-    new File:h = fopen(PATH_PUNTOS_MOVIBLES, io_read);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[96], idx = 0;
-    while(fread(h, line) && idx < _:totalPuntosMovibles) {
-        new Float:px, Float:py, Float:pz;
-        sscanf_manual(line, px, py, pz);
-        PuntoPos[ePuntoMovible:idx][0] = px;
-        PuntoPos[ePuntoMovible:idx][1] = py;
-        PuntoPos[ePuntoMovible:idx][2] = pz;
-        idx++;
+    mysql_query(g_SQL, "SELECT slot_id,x,y,z FROM puntos_movibles ORDER BY slot_id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows; r++) {
+        new slot;
+        cache_get_value_name_int(r, "slot_id", slot);
+        if(slot < 0 || slot >= _:totalPuntosMovibles) continue;
+        cache_get_value_name_float(r, "x", PuntoPos[ePuntoMovible:slot][0]);
+        cache_get_value_name_float(r, "y", PuntoPos[ePuntoMovible:slot][1]);
+        cache_get_value_name_float(r, "z", PuntoPos[ePuntoMovible:slot][2]);
     }
-    fclose(h);
     return 1;
 }
 
@@ -5286,26 +5292,34 @@ stock MostrarDialogoAdmin(playerid) {
 }
 
 stock GuardarMinas() {
-    new File:h = fopen(PATH_MINAS, io_write);
-    if(!h) return 0;
-    new line[96];
-    for(new i = 0; i < TotalMinas; i++) { if(!MinaData[i][minaActiva]) continue; format(line, sizeof(line), "%f %f %f\n", MinaData[i][minaX], MinaData[i][minaY], MinaData[i][minaZ]); fwrite(h, line); }
-    fclose(h);
+    if(!g_MySQLReady) return 0;
+
+    mysql_query(g_SQL, "DELETE FROM minas");
+    new query[192];
+    for(new i = 0; i < TotalMinas; i++) {
+        if(!MinaData[i][minaActiva]) continue;
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO minas (x,y,z) VALUES (%f,%f,%f)", MinaData[i][minaX], MinaData[i][minaY], MinaData[i][minaZ]);
+        mysql_query(g_SQL, query);
+    }
     return 1;
 }
 stock CargarMinas() {
-    new File:h = fopen(PATH_MINAS, io_read), line[96];
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
+
     TotalMinas = 0;
-    while(fread(h, line) && TotalMinas < MAX_MINAS) {
-        new idx, Float:x = floatstr(strtok(line, idx)), Float:y = floatstr(strtok(line, idx)), Float:z = floatstr(strtok(line, idx));
-        MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
-        MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
+    mysql_query(g_SQL, "SELECT x,y,z FROM minas ORDER BY id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows && TotalMinas < MAX_MINAS; r++) {
+        cache_get_value_name_float(r, "x", MinaData[TotalMinas][minaX]);
+        cache_get_value_name_float(r, "y", MinaData[TotalMinas][minaY]);
+        cache_get_value_name_float(r, "z", MinaData[TotalMinas][minaZ]);
+        MinaData[TotalMinas][minaActiva] = true;
+        MinaData[TotalMinas][minaObj] = CreateObject(748, MinaData[TotalMinas][minaX], MinaData[TotalMinas][minaY], MinaData[TotalMinas][minaZ] - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
-        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
+        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina
+Usa H para minar", 0xCCCCCCFF, MinaData[TotalMinas][minaX], MinaData[TotalMinas][minaY], MinaData[TotalMinas][minaZ] + 0.7, 12.0, 0);
         TotalMinas++;
     }
-    fclose(h);
     return 1;
 }
 
@@ -5321,8 +5335,8 @@ stock ObtenerDatosCrafteoArmero(tier, listitem, &weaponid, weaponName[], weaponN
     switch(tier) {
         case 0: {
             if(listitem == 0) { weaponid = 22; format(weaponName, weaponNameLen, "Colt 45"); needM = 12; needH = 22; needP = 50; needPr = 20; }
-            else if(listitem == 1) { weaponid = 23; format(weaponName, weaponNameLen, "Silenced Pistol"); needM = 14; needH = 24; needP = 60; needPr = 25; needC = 6; }
-            else if(listitem == 2) { weaponid = 24; format(weaponName, weaponNameLen, "Desert Eagle"); needM = 20; needH = 38; needP = 95; needPr = 35; needC = 12; }
+            else if(listitem == 1) { weaponid = 23; format(weaponName, weaponNameLen, "Silenced Pistol"); needM = 14; needH = 24; needP = 55; needPr = 24; }
+            else if(listitem == 2) { weaponid = 24; format(weaponName, weaponNameLen, "Deagle"); needM = 18; needH = 30; needP = 75; needPr = 35; }
         }
         case 1: {
             if(listitem == 0) { weaponid = 32; format(weaponName, weaponNameLen, "Tec-9"); needM = 18; needH = 22; needP = 85; needPr = 40; }
@@ -5342,121 +5356,101 @@ stock ObtenerDatosCrafteoArmero(tier, listitem, &weaponid, weaponName[], weaponN
     return (weaponid > 0);
 }
 stock GuardarHornos() {
-    new File:h = fopen(PATH_HORNOS, io_write);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[96];
+    mysql_query(g_SQL, "DELETE FROM hornos");
+    new query[192];
     for(new i = 0; i < TotalHornos; i++) {
         if(!HornoData[i][hornoActivo]) continue;
-        format(line, sizeof(line), "%f %f %f\n", HornoData[i][hornoX], HornoData[i][hornoY], HornoData[i][hornoZ]);
-        fwrite(h, line);
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO hornos (x,y,z) VALUES (%f,%f,%f)", HornoData[i][hornoX], HornoData[i][hornoY], HornoData[i][hornoZ]);
+        mysql_query(g_SQL, query);
     }
-
-    fclose(h);
     return 1;
 }
 stock CargarHornos() {
-    new File:h = fopen(PATH_HORNOS, io_read), line[96];
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
     TotalHornos = 0;
-    while(fread(h, line) && TotalHornos < MAX_HORNOS) {
-        new idx;
-        new Float:x = floatstr(strtok(line, idx));
-        new Float:y = floatstr(strtok(line, idx));
-        new Float:z = floatstr(strtok(line, idx));
-
+    mysql_query(g_SQL, "SELECT x,y,z FROM hornos ORDER BY id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows && TotalHornos < MAX_HORNOS; r++) {
+        cache_get_value_name_float(r, "x", HornoData[TotalHornos][hornoX]);
+        cache_get_value_name_float(r, "y", HornoData[TotalHornos][hornoY]);
+        cache_get_value_name_float(r, "z", HornoData[TotalHornos][hornoZ]);
         HornoData[TotalHornos][hornoActivo] = true;
-        HornoData[TotalHornos][hornoX] = x;
-        HornoData[TotalHornos][hornoY] = y;
-        HornoData[TotalHornos][hornoZ] = z;
-        HornoData[TotalHornos][hornoObj] = CreateObject(19831, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
+        HornoData[TotalHornos][hornoObj] = CreateObject(19831, HornoData[TotalHornos][hornoX], HornoData[TotalHornos][hornoY], HornoData[TotalHornos][hornoZ] - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno
+Usa H", 0xFFAA00FF, HornoData[TotalHornos][hornoX], HornoData[TotalHornos][hornoY], HornoData[TotalHornos][hornoZ] + 0.8, 12.0, 0);
         HornoData[TotalHornos][hornoListoRetiro] = false;
         HornoData[TotalHornos][hornoEnUso] = false;
         HornoData[TotalHornos][hornoOwner] = INVALID_PLAYER_ID;
         TotalHornos++;
     }
-
-    fclose(h);
     return 1;
 }
 stock GuardarCajasLoot() {
-    new File:h = fopen(PATH_CAJAS, io_write);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[96];
+    mysql_query(g_SQL, "DELETE FROM cajas_loot");
+    new query[192];
     for(new i = 0; i < TotalCajas; i++) {
         if(!CajaDataLoot[i][cajaActiva]) continue;
-        format(line, sizeof(line), "%f %f %f\n", CajaDataLoot[i][cajaX], CajaDataLoot[i][cajaY], CajaDataLoot[i][cajaZ]);
-        fwrite(h, line);
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO cajas_loot (x,y,z) VALUES (%f,%f,%f)", CajaDataLoot[i][cajaX], CajaDataLoot[i][cajaY], CajaDataLoot[i][cajaZ]);
+        mysql_query(g_SQL, query);
     }
-
-    fclose(h);
     return 1;
 }
 stock CargarCajasLoot() {
-    new File:h = fopen(PATH_CAJAS, io_read), line[96];
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
     TotalCajas = 0;
-    while(fread(h, line) && TotalCajas < MAX_CAJAS) {
-        new idx;
-        new Float:x = floatstr(strtok(line, idx));
-        new Float:y = floatstr(strtok(line, idx));
-        new Float:z = floatstr(strtok(line, idx));
-
+    mysql_query(g_SQL, "SELECT x,y,z FROM cajas_loot ORDER BY id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows && TotalCajas < MAX_CAJAS; r++) {
+        cache_get_value_name_float(r, "x", CajaDataLoot[TotalCajas][cajaX]);
+        cache_get_value_name_float(r, "y", CajaDataLoot[TotalCajas][cajaY]);
+        cache_get_value_name_float(r, "z", CajaDataLoot[TotalCajas][cajaZ]);
         CajaDataLoot[TotalCajas][cajaActiva] = true;
-        CajaDataLoot[TotalCajas][cajaX] = x;
-        CajaDataLoot[TotalCajas][cajaY] = y;
-        CajaDataLoot[TotalCajas][cajaZ] = z;
-        CajaDataLoot[TotalCajas][cajaObj] = CreateObject(2358, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        CajaDataLoot[TotalCajas][cajaLabel] = Create3DTextLabel("Caja de busqueda\nUsa H", 0xFFFFFFFF, x, y, z + 0.7, 10.0, 0);
+        CajaDataLoot[TotalCajas][cajaObj] = CreateObject(2358, CajaDataLoot[TotalCajas][cajaX], CajaDataLoot[TotalCajas][cajaY], CajaDataLoot[TotalCajas][cajaZ] - 1.0, 0.0, 0.0, 0.0);
+        CajaDataLoot[TotalCajas][cajaLabel] = Create3DTextLabel("Caja de busqueda
+Usa H", 0xFFFFFFFF, CajaDataLoot[TotalCajas][cajaX], CajaDataLoot[TotalCajas][cajaY], CajaDataLoot[TotalCajas][cajaZ] + 0.7, 10.0, 0);
         TotalCajas++;
     }
-
-    fclose(h);
     return 1;
 }
 stock GuardarPrepiezaPoints() {
-    new File:h = fopen(PATH_PREPIEZAS, io_write);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[96];
+    mysql_query(g_SQL, "DELETE FROM prepiezas_puntos");
+    new query[192];
     for(new i = 0; i < TotalPrepiezaPoints; i++) {
         if(!PrepiezaPoints[i][ppActivo]) continue;
-        format(line, sizeof(line), "%f %f %f\n", PrepiezaPoints[i][ppX], PrepiezaPoints[i][ppY], PrepiezaPoints[i][ppZ]);
-        fwrite(h, line);
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO prepiezas_puntos (x,y,z) VALUES (%f,%f,%f)", PrepiezaPoints[i][ppX], PrepiezaPoints[i][ppY], PrepiezaPoints[i][ppZ]);
+        mysql_query(g_SQL, query);
     }
-
-    fclose(h);
     return 1;
 }
 stock CargarPrepiezaPoints() {
-    new File:h = fopen(PATH_PREPIEZAS, io_read), line[96];
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
     TotalPrepiezaPoints = 0;
-    while(fread(h, line) && TotalPrepiezaPoints < MAX_PREPIEZA_POINTS) {
-        new idx;
-        new Float:x = floatstr(strtok(line, idx));
-        new Float:y = floatstr(strtok(line, idx));
-        new Float:z = floatstr(strtok(line, idx));
-
+    mysql_query(g_SQL, "SELECT x,y,z FROM prepiezas_puntos ORDER BY id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows && TotalPrepiezaPoints < MAX_PREPIEZA_POINTS; r++) {
+        cache_get_value_name_float(r, "x", PrepiezaPoints[TotalPrepiezaPoints][ppX]);
+        cache_get_value_name_float(r, "y", PrepiezaPoints[TotalPrepiezaPoints][ppY]);
+        cache_get_value_name_float(r, "z", PrepiezaPoints[TotalPrepiezaPoints][ppZ]);
         PrepiezaPoints[TotalPrepiezaPoints][ppActivo] = true;
-        PrepiezaPoints[TotalPrepiezaPoints][ppX] = x;
-        PrepiezaPoints[TotalPrepiezaPoints][ppY] = y;
-        PrepiezaPoints[TotalPrepiezaPoints][ppZ] = z;
-        PrepiezaPoints[TotalPrepiezaPoints][ppObj] = CreateObject(1279, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        PrepiezaPoints[TotalPrepiezaPoints][ppLabel] = Create3DTextLabel("Punto de prepiezas ($100/2)\nUsa H", 0x99CCFFFF, x, y, z + 0.6, 10.0, 0);
+        PrepiezaPoints[TotalPrepiezaPoints][ppObj] = CreateObject(1279, PrepiezaPoints[TotalPrepiezaPoints][ppX], PrepiezaPoints[TotalPrepiezaPoints][ppY], PrepiezaPoints[TotalPrepiezaPoints][ppZ] - 1.0, 0.0, 0.0, 0.0);
+        PrepiezaPoints[TotalPrepiezaPoints][ppLabel] = Create3DTextLabel("Punto de prepiezas ($100/2)
+Usa H", 0x99CCFFFF, PrepiezaPoints[TotalPrepiezaPoints][ppX], PrepiezaPoints[TotalPrepiezaPoints][ppY], PrepiezaPoints[TotalPrepiezaPoints][ppZ] + 0.6, 10.0, 0);
         TotalPrepiezaPoints++;
     }
-
-    fclose(h);
     return 1;
 }
 
 stock CrearPrendasDefault() {
+
     for(new i = 0; i < MAX_PRENDAS; i++) {
         PrendasData[i][prendaActiva] = false;
         PrendasData[i][prendaModelo] = 0;
@@ -5477,60 +5471,50 @@ stock CrearPrendasDefault() {
 }
 
 stock GuardarPrendasConfig() {
-    new File:h = fopen(PATH_PRENDAS, io_write);
-    if(!h) return 0;
-    new line[256];
+    if(!g_MySQLReady) return 0;
+
+    mysql_query(g_SQL, "DELETE FROM prendas_config");
+    new query[512], escNombre[65];
     for(new i = 0; i < MAX_PRENDAS; i++) {
-        format(line, sizeof(line), "%d %d %d %d %d %f %f %f %f %f %f %f %f %f %s\n",
-            PrendasData[i][prendaActiva], PrendasData[i][prendaModelo], PrendasData[i][prendaPrecio], PrendasData[i][prendaStock], PrendasData[i][prendaBone],
-            PrendasData[i][prendaOffX], PrendasData[i][prendaOffY], PrendasData[i][prendaOffZ],
-            PrendasData[i][prendaRotX], PrendasData[i][prendaRotY], PrendasData[i][prendaRotZ],
-            PrendasData[i][prendaScaleX], PrendasData[i][prendaScaleY], PrendasData[i][prendaScaleZ], PrendasData[i][prendaNombre]);
-        fwrite(h, line);
+        SQL_Escape(PrendasData[i][prendaNombre], escNombre, sizeof(escNombre));
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO prendas_config (slot_id,activa,modelo,precio,stock,bone,off_x,off_y,off_z,rot_x,rot_y,rot_z,scale_x,scale_y,scale_z,nombre) VALUES (%d,%d,%d,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,'%e')", i, PrendasData[i][prendaActiva] ? 1 : 0, PrendasData[i][prendaModelo], PrendasData[i][prendaPrecio], PrendasData[i][prendaStock], PrendasData[i][prendaBone], PrendasData[i][prendaOffX], PrendasData[i][prendaOffY], PrendasData[i][prendaOffZ], PrendasData[i][prendaRotX], PrendasData[i][prendaRotY], PrendasData[i][prendaRotZ], PrendasData[i][prendaScaleX], PrendasData[i][prendaScaleY], PrendasData[i][prendaScaleZ], escNombre);
+        mysql_query(g_SQL, query);
     }
-    fclose(h);
     return 1;
 }
 
 stock CargarPrendasConfig() {
     CrearPrendasDefault();
-    new File:h = fopen(PATH_PRENDAS, io_read), line[256];
-    if(!h) {
-        GuardarPrendasConfig();
-        return 1;
-    }
-    new i = 0;
-    while(fread(h, line) && i < MAX_PRENDAS) {
-        new idx = 0;
-        PrendasData[i][prendaActiva] = strval(strtok(line, idx)) != 0;
-        PrendasData[i][prendaModelo] = strval(strtok(line, idx));
-        PrendasData[i][prendaPrecio] = strval(strtok(line, idx));
-        PrendasData[i][prendaStock] = strval(strtok(line, idx));
-        PrendasData[i][prendaBone] = strval(strtok(line, idx));
-        PrendasData[i][prendaOffX] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaOffY] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaOffZ] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaRotX] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaRotY] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaRotZ] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaScaleX] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaScaleY] = floatstr(strtok(line, idx));
-        PrendasData[i][prendaScaleZ] = floatstr(strtok(line, idx));
-        strmid(PrendasData[i][prendaNombre], strtok(line, idx), 0, 32, 32);
-        i++;
-    }
-    fclose(h);
-    for(new j = i; j < MAX_PRENDAS; j++) {
-        PrendasData[j][prendaActiva] = false;
-        PrendasData[j][prendaModelo] = 0;
-        PrendasData[j][prendaPrecio] = 0;
-        PrendasData[j][prendaStock] = 0;
-        format(PrendasData[j][prendaNombre], 32, "");
+    if(!g_MySQLReady) return 0;
+
+    mysql_query(g_SQL, "SELECT slot_id,activa,modelo,precio,stock,bone,off_x,off_y,off_z,rot_x,rot_y,rot_z,scale_x,scale_y,scale_z,nombre FROM prendas_config ORDER BY slot_id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows; r++) {
+        new slot;
+        cache_get_value_name_int(r, "slot_id", slot);
+        if(slot < 0 || slot >= MAX_PRENDAS) continue;
+        new val;
+        cache_get_value_name_int(r, "activa", val); PrendasData[slot][prendaActiva] = val != 0;
+        cache_get_value_name_int(r, "modelo", PrendasData[slot][prendaModelo]);
+        cache_get_value_name_int(r, "precio", PrendasData[slot][prendaPrecio]);
+        cache_get_value_name_int(r, "stock", PrendasData[slot][prendaStock]);
+        cache_get_value_name_int(r, "bone", PrendasData[slot][prendaBone]);
+        cache_get_value_name_float(r, "off_x", PrendasData[slot][prendaOffX]);
+        cache_get_value_name_float(r, "off_y", PrendasData[slot][prendaOffY]);
+        cache_get_value_name_float(r, "off_z", PrendasData[slot][prendaOffZ]);
+        cache_get_value_name_float(r, "rot_x", PrendasData[slot][prendaRotX]);
+        cache_get_value_name_float(r, "rot_y", PrendasData[slot][prendaRotY]);
+        cache_get_value_name_float(r, "rot_z", PrendasData[slot][prendaRotZ]);
+        cache_get_value_name_float(r, "scale_x", PrendasData[slot][prendaScaleX]);
+        cache_get_value_name_float(r, "scale_y", PrendasData[slot][prendaScaleY]);
+        cache_get_value_name_float(r, "scale_z", PrendasData[slot][prendaScaleZ]);
+        cache_get_value_name(r, "nombre", PrendasData[slot][prendaNombre], 32);
     }
     return 1;
 }
 
 stock ShowPrendasMenu(playerid) {
+
     new list[1024], line[128];
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
@@ -5797,61 +5781,48 @@ stock ShowEditMapViewList(playerid) {
 }
 
 stock GuardarEditMap() {
-    new File:h = fopen(PATH_EDITMAP, io_write);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[160];
+    mysql_query(g_SQL, "DELETE FROM editmap");
+    new query[256];
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
-        format(line, sizeof(line), "%d %f %f %f %f %f %f\n", EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ], EditMapData[i][emRX], EditMapData[i][emRY], EditMapData[i][emRZ]);
-        fwrite(h, line);
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO editmap (modelo,x,y,z,rx,ry,rz) VALUES (%d,%f,%f,%f,%f,%f,%f)", EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ], EditMapData[i][emRX], EditMapData[i][emRY], EditMapData[i][emRZ]);
+        mysql_query(g_SQL, query);
     }
-    fclose(h);
     return 1;
 }
 
 stock CargarEditMap() {
-    new File:h = fopen(PATH_EDITMAP, io_read);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[160];
     TotalEditMap = 0;
-    while(fread(h, line) && TotalEditMap < MAX_EDITMAP_OBJECTS) {
-        new idx;
-        new modelid = strval(strtok(line, idx));
-        new Float:x = floatstr(strtok(line, idx));
-        new Float:y = floatstr(strtok(line, idx));
-        new Float:z = floatstr(strtok(line, idx));
-        new Float:rx = floatstr(strtok(line, idx));
-        new Float:ry = floatstr(strtok(line, idx));
-        new Float:rz = floatstr(strtok(line, idx));
-
+    mysql_query(g_SQL, "SELECT modelo,x,y,z,rx,ry,rz FROM editmap ORDER BY id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows && TotalEditMap < MAX_EDITMAP_OBJECTS; r++) {
+        cache_get_value_name_int(r, "modelo", EditMapData[TotalEditMap][emModelo]);
+        cache_get_value_name_float(r, "x", EditMapData[TotalEditMap][emX]);
+        cache_get_value_name_float(r, "y", EditMapData[TotalEditMap][emY]);
+        cache_get_value_name_float(r, "z", EditMapData[TotalEditMap][emZ]);
+        cache_get_value_name_float(r, "rx", EditMapData[TotalEditMap][emRX]);
+        cache_get_value_name_float(r, "ry", EditMapData[TotalEditMap][emRY]);
+        cache_get_value_name_float(r, "rz", EditMapData[TotalEditMap][emRZ]);
         EditMapData[TotalEditMap][emActivo] = true;
-        EditMapData[TotalEditMap][emModelo] = modelid;
-        EditMapData[TotalEditMap][emX] = x;
-        EditMapData[TotalEditMap][emY] = y;
-        EditMapData[TotalEditMap][emZ] = z;
-        EditMapData[TotalEditMap][emRX] = rx;
-        EditMapData[TotalEditMap][emRY] = ry;
-        EditMapData[TotalEditMap][emRZ] = rz;
-        EditMapData[TotalEditMap][emObj] = CreateObject(modelid, x, y, z, rx, ry, rz);
+        EditMapData[TotalEditMap][emObj] = CreateObject(EditMapData[TotalEditMap][emModelo], EditMapData[TotalEditMap][emX], EditMapData[TotalEditMap][emY], EditMapData[TotalEditMap][emZ], EditMapData[TotalEditMap][emRX], EditMapData[TotalEditMap][emRY], EditMapData[TotalEditMap][emRZ]);
         TotalEditMap++;
     }
-    fclose(h);
     return 1;
 }
 
 stock GuardarVentaAutosConfig() {
-    new File:h = fopen(PATH_VENTA_AUTOS, io_write);
-    if(!h) return 0;
+    if(!g_MySQLReady) return 0;
 
-    new line[96];
+    mysql_query(g_SQL, "DELETE FROM venta_autos_config");
+    new query[192];
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
-        format(line, sizeof(line), "%d %d %d %d\n", VentaAutosData[i][vaActiva], VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock]);
-        fwrite(h, line);
+        mysql_format(g_SQL, query, sizeof(query), "INSERT INTO venta_autos_config (slot_id,activa,modelo,precio,stock) VALUES (%d,%d,%d,%d,%d)", i, VentaAutosData[i][vaActiva] ? 1 : 0, VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock]);
+        mysql_query(g_SQL, query);
     }
-
-    fclose(h);
     return 1;
 }
 
@@ -5862,23 +5833,18 @@ stock CargarVentaAutosConfig() {
         VentaAutosData[i][vaPrecio] = 0;
         VentaAutosData[i][vaStock] = 0;
     }
+    if(!g_MySQLReady) return 0;
 
-    new File:h = fopen(PATH_VENTA_AUTOS, io_read), line[96];
-    if(!h) {
-        GuardarVentaAutosConfig();
-        return 1;
+    mysql_query(g_SQL, "SELECT slot_id,activa,modelo,precio,stock FROM venta_autos_config ORDER BY slot_id ASC");
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows; r++) {
+        new slot, val;
+        cache_get_value_name_int(r, "slot_id", slot);
+        if(slot < 0 || slot >= MAX_AUTOS_VENTA) continue;
+        cache_get_value_name_int(r, "activa", val); VentaAutosData[slot][vaActiva] = val != 0;
+        cache_get_value_name_int(r, "modelo", VentaAutosData[slot][vaModelo]);
+        cache_get_value_name_int(r, "precio", VentaAutosData[slot][vaPrecio]);
+        cache_get_value_name_int(r, "stock", VentaAutosData[slot][vaStock]);
     }
-
-    new i = 0;
-    while(fread(h, line) && i < MAX_AUTOS_VENTA) {
-        new idx;
-        VentaAutosData[i][vaActiva] = strval(strtok(line, idx)) != 0;
-        VentaAutosData[i][vaModelo] = strval(strtok(line, idx));
-        VentaAutosData[i][vaPrecio] = strval(strtok(line, idx));
-        VentaAutosData[i][vaStock] = strval(strtok(line, idx));
-        i++;
-    }
-
-    fclose(h);
     return 1;
 }
