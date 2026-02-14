@@ -181,6 +181,9 @@
 
 #define MAX_AUTOS_NORMALES_JUGADOR 3
 #define MAX_VEHICULOS_TOTALES_JUGADOR 4
+#define CUENTA_DATA_VERSION 3
+#define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
+#define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -487,7 +490,9 @@ forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
 forward GuardarCasas();
 forward GuardarCuenta(playerid);
 stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h);
+stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]);
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h);
+stock bool:EsLineaPrendaCuenta(const line[]);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
@@ -3453,24 +3458,70 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             if(fread(h, line)) PlayerTieneTelefono[playerid] = strval(line) != 0;
                         }
 
-                        for(new pi = 0; pi < MAX_PRENDAS; pi++) {
-                            if(!fread(h, line)) break;
-                            new idxp = 0;
-                            PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
-                            PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
-                            PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
-                            PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
-                            PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
+                        if(fread(h, line)) {
+                            if(strcmp(line, CUENTA_SECCION_PRENDAS, false) == 0) {
+                                for(new pi = 0; pi < MAX_PRENDAS; pi++) {
+                                    if(!fread(h, line)) break;
+                                    if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
+                                        CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                                        break;
+                                    }
+                                    if(!EsLineaPrendaCuenta(line)) continue;
+                                    new idxp = 0;
+                                    PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
+                                    PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
+                                    PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
+                                    PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                }
+                            } else {
+                                if(EsLineaPrendaCuenta(line)) {
+                                    new idxp = 0;
+                                    PlayerPrendaComprada[playerid][0] = strval(strtok(line, idxp));
+                                    PlayerPrendaActiva[playerid][0] = strval(strtok(line, idxp));
+                                    PlayerPrendaBone[playerid][0] = strval(strtok(line, idxp));
+                                    PlayerPrendaOffX[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaOffY[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaOffZ[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaRotX[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaRotY[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaRotZ[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaScaleX[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaScaleY[playerid][0] = floatstr(strtok(line, idxp));
+                                    PlayerPrendaScaleZ[playerid][0] = floatstr(strtok(line, idxp));
+                                    for(new pi = 1; pi < MAX_PRENDAS; pi++) {
+                                        if(!fread(h, line)) break;
+                                        if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
+                                            CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                                            break;
+                                        }
+                                        if(!EsLineaPrendaCuenta(line)) continue;
+                                        idxp = 0;
+                                        PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
+                                        PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
+                                        PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
+                                        PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
+                                        PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                    }
+                                } else {
+                                    CargarVehiculosJugadorDesdeLinea(playerid, h, line);
+                                }
+                            }
                         }
-
-                        CargarVehiculosJugadorDesdeCuenta(playerid, h);
                     }
                 }
 
@@ -3490,14 +3541,17 @@ public GuardarCuenta(playerid) {
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = fopen(path, io_write);
         if(h) {
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n3",
+            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n%d",
                 PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
-                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], p[0], p[1], p[2]);
+                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
                 PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);
+            fwrite(h, line);
+
+            format(line, sizeof(line), "\n%s", CUENTA_SECCION_PRENDAS);
             fwrite(h, line);
 
             for(new pi = 0; pi < MAX_PRENDAS; pi++) {
@@ -3508,6 +3562,9 @@ public GuardarCuenta(playerid) {
                     PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi]);
                 fwrite(h, line);
             }
+
+            format(line, sizeof(line), "\n%s", CUENTA_SECCION_VEHICULOS);
+            fwrite(h, line);
 
             GuardarVehiculosJugadorEnCuenta(playerid, h);
             fclose(h);
@@ -4575,6 +4632,13 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
 stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
     new line[256];
     if(!fread(h, line)) return 0;
+    return CargarVehiculosJugadorDesdeLinea(playerid, h, line);
+}
+
+stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
+    new line[256];
+    strmid(line, primeraLinea, 0, sizeof(line), sizeof(line));
+
     new cantidad = strval(line);
     if(cantidad < 0) cantidad = 0;
     if(cantidad > MAX_VEHICULOS_TOTALES_JUGADOR) cantidad = MAX_VEHICULOS_TOTALES_JUGADOR;
@@ -4625,6 +4689,16 @@ stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
         }
     }
     return 1;
+}
+
+stock bool:EsLineaPrendaCuenta(const line[]) {
+    if(strfind(line, ".") == -1) return false;
+
+    new espacios;
+    for(new i = 0; line[i] != EOS; i++) {
+        if(line[i] == ' ') espacios++;
+    }
+    return espacios == 11;
 }
 
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
