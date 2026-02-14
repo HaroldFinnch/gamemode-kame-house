@@ -79,6 +79,7 @@
 
 #define DIALOG_REGISTRO     1
 #define DIALOG_LOGIN        2
+#define DIR_USUARIOS        "usuarios"
 #define PATH_USUARIOS       "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
 #define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
@@ -643,6 +644,7 @@ public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
     EnableStuntBonusForAll(false);
+    fmkdir(DIR_USUARIOS);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
     PuntoPos[puntoCamionero][0] = POS_TRABAJO_X;
@@ -3358,6 +3360,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}La clave debe tener al menos 3 caracteres.\n{AAAAAA}Ingresa una clave valida:", "Registrar", "Salir");
         strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
+        fmkdir(DIR_USUARIOS);
         new File:h = fopen(path, io_write);
         if(h) {
             format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", PlayerPassword[playerid], DINERO_INICIAL);
@@ -3368,6 +3371,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             GuardarCuenta(playerid);
             SendClientMessage(playerid, 0x66CCFFFF, "{66FF99}Bienvenido a Kame House.");
             SpawnPlayerAfterAuth(playerid);
+        } else {
+            SendClientMessage(playerid, 0xFF4444FF, "No se pudo crear tu cuenta. Revisa la carpeta 'usuarios' del servidor.");
+            ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}Error guardando la cuenta.\n{AAAAAA}Intenta nuevamente:", "Registrar", "Salir");
         }
     }
     if(dialogid == DIALOG_LOGIN) {
