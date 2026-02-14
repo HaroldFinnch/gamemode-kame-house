@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <?xml-stylesheet href="file:///C|/GTASERVER/qawno/xml/pawndoc.xsl" type="text/xsl"?>
-<doc source="C:\GTASERVER\gamemodes\gamemode.pwn">
+<doc source="gamemode.pwn">
 	<assembly>
 		<name>gamemode.pwn</name>
 	</assembly>
