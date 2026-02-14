@@ -701,6 +701,9 @@ stock ShowEditMapEditList(playerid);
 stock ShowEditMapDeleteList(playerid);
 stock ShowEditMapViewList(playerid);
 stock GetEditMapSlotByListIndex(listindex);
+stock GetEditMapFreeSlot();
+stock bool:EnsureEditMapObject(slot);
+stock bool:StartEditMapEdition(playerid, slot);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -3124,12 +3127,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return 1;
         new modelid = strval(inputtext);
         if(modelid < 300 || modelid > 20000) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "ID invalido. Ingresa un modelo valido (300-20000):", "Crear", "Atras");
-        if(TotalEditMap >= MAX_EDITMAP_OBJECTS) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
+        new slot = GetEditMapFreeSlot();
+        if(slot == -1) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
 
         new Float:px, Float:py, Float:pz;
         GetPlayerPos(playerid, px, py, pz);
 
-        new slot = TotalEditMap;
         EditMapData[slot][emActivo] = true;
         EditMapData[slot][emModelo] = modelid;
         EditMapData[slot][emX] = px;
@@ -3139,11 +3142,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         EditMapData[slot][emRY] = 0.0;
         EditMapData[slot][emRZ] = 0.0;
         EditMapData[slot][emObj] = CreateObject(modelid, EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ], 0.0, 0.0, 0.0);
-        TotalEditMap++;
-        EditMapEditandoSlot[playerid] = slot;
-        EditObject(playerid, EditMapData[slot][emObj]);
-        SendClientMessage(playerid, 0x66FF66FF, "Objeto creado. Ajusta posicion/rotacion y confirma para guardar.");
-        return 1;
+        if(slot == TotalEditMap) TotalEditMap++;
+        return StartEditMapEdition(playerid, slot);
     }
 
     if(dialogid == DIALOG_EDITMAP_EDIT_LIST) {
@@ -3151,10 +3151,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return 1;
         new slot = GetEditMapSlotByListIndex(listitem);
         if(slot == -1) return SendClientMessage(playerid, -1, "Objeto invalido.");
-        EditMapEditandoSlot[playerid] = slot;
-        EditObject(playerid, EditMapData[slot][emObj]);
-        SendClientMessage(playerid, 0x66FF66FF, "Editando objeto seleccionado. Confirma para guardar.");
-        return 1;
+        return StartEditMapEdition(playerid, slot);
     }
 
     if(dialogid == DIALOG_EDITMAP_DELETE_LIST) {
@@ -3189,11 +3186,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
 
         if(listitem == 0) {
-            EditMapEditandoSlot[playerid] = slot;
-            EditObject(playerid, EditMapData[slot][emObj]);
-            SendClientMessage(playerid, 0x66FF66FF, "Editando objeto seleccionado. Confirma para guardar.");
             EditMapListaSlotSeleccionado[playerid] = -1;
-            return 1;
+            return StartEditMapEdition(playerid, slot);
         }
 
         if(listitem == 1) {
@@ -5707,10 +5701,10 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
 }
 
 public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:response, Float:fX, Float:fY, Float:fZ, Float:fRotX, Float:fRotY, Float:fRotZ) {
-    #pragma unused playerobject
-    #pragma unused objectid
     new slot = EditMapEditandoSlot[playerid];
     if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo]) return 1;
+    if(playerobject) return 1;
+    if(objectid != EditMapData[slot][emObj]) return 1;
 
     if(response == EDIT_RESPONSE_FINAL) {
         EditMapData[slot][emX] = fX;
@@ -5734,6 +5728,49 @@ public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:respon
 
 stock ShowEditMapMenu(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_EDITMAP_MENU, DIALOG_STYLE_LIST, "EditMap Admin", "Agregar modelo\nEditar modelo\nEliminar modelo\nVer lista", "Seleccionar", "Cerrar");
+}
+
+stock GetEditMapFreeSlot() {
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) return i;
+    }
+    if(TotalEditMap >= MAX_EDITMAP_OBJECTS) return -1;
+    return TotalEditMap;
+}
+
+stock bool:EnsureEditMapObject(slot) {
+    if(slot < 0 || slot >= MAX_EDITMAP_OBJECTS || !EditMapData[slot][emActivo]) return false;
+    if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) return true;
+
+    EditMapData[slot][emObj] = CreateObject(
+        EditMapData[slot][emModelo],
+        EditMapData[slot][emX],
+        EditMapData[slot][emY],
+        EditMapData[slot][emZ],
+        EditMapData[slot][emRX],
+        EditMapData[slot][emRY],
+        EditMapData[slot][emRZ]
+    );
+
+    return (EditMapData[slot][emObj] != INVALID_OBJECT_ID);
+}
+
+stock bool:StartEditMapEdition(playerid, slot) {
+    if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo]) {
+        SendClientMessage(playerid, -1, "Objeto invalido.");
+        return false;
+    }
+    if(!EnsureEditMapObject(slot)) {
+        SendClientMessage(playerid, -1, "No se pudo crear/cargar el objeto para editar.");
+        return false;
+    }
+
+    SetPlayerPos(playerid, EditMapData[slot][emX] + 1.5, EditMapData[slot][emY], EditMapData[slot][emZ] + 0.5);
+    SetPlayerFacingAngle(playerid, EditMapData[slot][emRZ]);
+    EditMapEditandoSlot[playerid] = slot;
+    EditObject(playerid, EditMapData[slot][emObj]);
+    SendClientMessage(playerid, 0x66FF66FF, "Editando objeto seleccionado. Confirma para guardar.");
+    return true;
 }
 
 stock GetEditMapSlotByListIndex(listindex) {
