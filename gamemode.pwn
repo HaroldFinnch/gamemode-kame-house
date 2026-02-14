@@ -1,6 +1,7 @@
 #include <open.mp>
 #include <string>
 #include <file>
+#include <a_mysql>
 
 // ================= [ CONFIGURACION EDITABLE ] =================
 #define SKIN_POR_DEFECTO    229
@@ -91,6 +92,15 @@
 #define PATH_EDITMAP "editmap.txt"
 #define PATH_VENTA_AUTOS "venta_autos_config.txt"
 #define MAX_CASAS           50
+
+#define MYSQL_HOST          "127.0.0.1"
+#define MYSQL_USER          "db_user"
+#define MYSQL_PASS          "db_pass"
+#define MYSQL_DB            "kamehouse"
+#define MYSQL_PORT          3306
+
+#define MAX_RUTAS_CAMIONERO_DB 512
+#define MAX_RUTAS_PIZZERO_DB   512
 
 #define DIALOG_GPS          10
 #define DIALOG_AYUDA        11
@@ -205,6 +215,9 @@
 #endif
 
 // ================= [ VARIABLES ] =================
+new MySQL:g_SQL = MySQL:0;
+new bool:g_MySQLReady = false;
+
 new bool:IsPlayerLoggedIn[MAX_PLAYERS];
 new PlayerPassword[MAX_PLAYERS][16];
 new PlayerAdmin[MAX_PLAYERS];
@@ -222,6 +235,8 @@ new TrabajandoCamionero[MAX_PLAYERS];
 new CamioneroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new CamioneroNivel[MAX_PLAYERS];
 new CamioneroViajes[MAX_PLAYERS];
+new Float:RutasCamioneroDB[MAX_RUTAS_CAMIONERO_DB][3];
+new TotalRutasCamioneroDB;
 
 // Variables Pizzero
 new TrabajandoPizzero[MAX_PLAYERS];
@@ -229,6 +244,8 @@ new PizzeroVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new PizzeroNivel[MAX_PLAYERS];
 new PizzeroEntregas[MAX_PLAYERS];
 new Float:PizzeroDestino[MAX_PLAYERS][3];
+new Float:RutasPizzeroDB[MAX_RUTAS_PIZZERO_DB][3];
+new TotalRutasPizzeroDB;
 
 // Variables Basurero
 new TrabajandoBasurero[MAX_PLAYERS];
@@ -546,6 +563,226 @@ forward strtok(const string[], &index);
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
 forward GuardarCasas();
 forward GuardarCuenta(playerid);
+stock bool:SQL_AbrirConexion() {
+    g_SQL = mysql_connect(MYSQL_HOST, MYSQL_USER, MYSQL_DB, MYSQL_PASS, MYSQL_PORT);
+    if(mysql_errno(g_SQL) != 0) {
+        printf("[MYSQL] Error de conexion: %d", mysql_errno(g_SQL));
+        g_MySQLReady = false;
+        return false;
+    }
+    g_MySQLReady = true;
+    SQL_CrearTablas();
+    printf("[MYSQL] Conexion establecida correctamente.");
+    return true;
+}
+
+stock SQL_CrearTablas() {
+    if(!g_MySQLReady) return 0;
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS cuentas (id INT AUTO_INCREMENT PRIMARY KEY, nombre VARCHAR(24) NOT NULL UNIQUE, password VARCHAR(64) NOT NULL, dinero INT NOT NULL DEFAULT 500, admin INT NOT NULL DEFAULT 0, camionero_nivel INT NOT NULL DEFAULT 0, camionero_viajes INT NOT NULL DEFAULT 0, pizzero_nivel INT NOT NULL DEFAULT 0, pizzero_entregas INT NOT NULL DEFAULT 0, basurero_nivel INT NOT NULL DEFAULT 0, basurero_recorridos INT NOT NULL DEFAULT 0, banco INT NOT NULL DEFAULT 0, hambre INT NOT NULL DEFAULT 100, tiempo_jugado INT NOT NULL DEFAULT 0, skin INT NOT NULL DEFAULT 229, spawn_x FLOAT NOT NULL DEFAULT 2494.24, spawn_y FLOAT NOT NULL DEFAULT -1671.19, spawn_z FLOAT NOT NULL DEFAULT 13.33, semilla_hierba INT NOT NULL DEFAULT 0, semilla_flor INT NOT NULL DEFAULT 0, inv_hierba INT NOT NULL DEFAULT 0, inv_flor INT NOT NULL DEFAULT 0, inv_madera INT NOT NULL DEFAULT 0, inv_piedra INT NOT NULL DEFAULT 0, inv_cobre INT NOT NULL DEFAULT 0, inv_hierro INT NOT NULL DEFAULT 0, inv_polvora INT NOT NULL DEFAULT 0, inv_prepieza INT NOT NULL DEFAULT 0, inv_carbon INT NOT NULL DEFAULT 0, tiene_mazo TINYINT(1) NOT NULL DEFAULT 0, mazo_durabilidad INT NOT NULL DEFAULT 0, armero_nivel INT NOT NULL DEFAULT 1, armero_exp INT NOT NULL DEFAULT 0, bidon_gasolina INT NOT NULL DEFAULT 0, tiene_telefono TINYINT(1) NOT NULL DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
+    mysql_query(g_SQL, "CREATE TABLE IF NOT EXISTS rutas_trabajo (id INT AUTO_INCREMENT PRIMARY KEY, tipo ENUM('camionero','pizzero','basurero') NOT NULL, x FLOAT NOT NULL, y FLOAT NOT NULL, z FLOAT NOT NULL, INDEX idx_tipo (tipo))");
+    return 1;
+}
+
+stock SQL_Escape(strsrc[], strdest[], maxlen) {
+    mysql_escape_string(strsrc, strdest, g_SQL, maxlen);
+    return 1;
+}
+
+stock bool:SQL_CrearCuenta(playerid, const inputtext[]) {
+    if(!g_MySQLReady) return false;
+    new name[MAX_PLAYER_NAME], escName[(MAX_PLAYER_NAME * 2) + 1], escPass[129], query[512];
+    GetPlayerName(playerid, name, sizeof(name));
+    SQL_Escape(name, escName, sizeof(escName));
+    SQL_Escape(inputtext, escPass, sizeof(escPass));
+
+    mysql_format(g_SQL, query, sizeof(query), "INSERT INTO cuentas (nombre,password,dinero,skin) VALUES ('%e','%e',%d,%d)", escName, escPass, DINERO_INICIAL, SKIN_POR_DEFECTO);
+    mysql_query(g_SQL, query);
+    if(mysql_errno(g_SQL) != 0) return false;
+
+    strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
+    IsPlayerLoggedIn[playerid] = true;
+    GivePlayerMoney(playerid, DINERO_INICIAL);
+    ActualizarNivelPJ(playerid);
+    SQL_GuardarCuenta(playerid);
+    SendClientMessage(playerid, 0x66CCFFFF, "{66FF99}Bienvenido a Kame House.");
+    SpawnPlayerAfterAuth(playerid);
+    return true;
+}
+
+stock bool:SQL_CargarCuenta(playerid, const inputtext[]) {
+    if(!g_MySQLReady) return false;
+    new name[MAX_PLAYER_NAME], escName[(MAX_PLAYER_NAME * 2) + 1], escPass[129], query[512];
+    GetPlayerName(playerid, name, sizeof(name));
+    SQL_Escape(name, escName, sizeof(escName));
+    SQL_Escape(inputtext, escPass, sizeof(escPass));
+
+    mysql_format(g_SQL, query, sizeof(query), "SELECT * FROM cuentas WHERE nombre='%e' AND password='%e' LIMIT 1", escName, escPass);
+    mysql_query(g_SQL, query);
+    if(cache_num_rows() <= 0) return false;
+
+    cache_get_value_name(0, "password", PlayerPassword[playerid], sizeof(PlayerPassword[]));
+    cache_get_value_name_int(0, "admin", PlayerAdmin[playerid]);
+    cache_get_value_name_int(0, "camionero_nivel", CamioneroNivel[playerid]);
+    cache_get_value_name_int(0, "camionero_viajes", CamioneroViajes[playerid]);
+    cache_get_value_name_int(0, "pizzero_nivel", PizzeroNivel[playerid]);
+    cache_get_value_name_int(0, "pizzero_entregas", PizzeroEntregas[playerid]);
+    cache_get_value_name_int(0, "basurero_nivel", BasureroNivel[playerid]);
+    cache_get_value_name_int(0, "basurero_recorridos", BasureroRecorridos[playerid]);
+    cache_get_value_name_int(0, "banco", PlayerBankMoney[playerid]);
+    cache_get_value_name_int(0, "hambre", PlayerHambre[playerid]);
+    cache_get_value_name_int(0, "tiempo_jugado", PlayerTiempoJugadoMin[playerid]);
+    cache_get_value_name_int(0, "skin", PlayerSkinGuardada[playerid]);
+    cache_get_value_name_int(0, "semilla_hierba", InvSemillaHierba[playerid]);
+    cache_get_value_name_int(0, "semilla_flor", InvSemillaFlor[playerid]);
+    cache_get_value_name_int(0, "inv_hierba", InvHierba[playerid]);
+    cache_get_value_name_int(0, "inv_flor", InvFlor[playerid]);
+    cache_get_value_name_int(0, "inv_madera", InvMadera[playerid]);
+    cache_get_value_name_int(0, "inv_piedra", InvPiedra[playerid]);
+    cache_get_value_name_int(0, "inv_cobre", InvCobre[playerid]);
+    cache_get_value_name_int(0, "inv_hierro", InvHierroMineral[playerid]);
+    cache_get_value_name_int(0, "inv_polvora", InvPolvora[playerid]);
+    cache_get_value_name_int(0, "inv_prepieza", InvPrepieza[playerid]);
+    cache_get_value_name_int(0, "inv_carbon", InvCarbon[playerid]);
+    cache_get_value_name_int(0, "mazo_durabilidad", MazoDurabilidad[playerid]);
+    cache_get_value_name_int(0, "armero_nivel", ArmeroNivel[playerid]);
+    cache_get_value_name_int(0, "armero_exp", ArmeroExp[playerid]);
+    cache_get_value_name_int(0, "bidon_gasolina", BidonGasolina[playerid]);
+
+    new tempInt;
+    cache_get_value_name_int(0, "tiene_mazo", tempInt); PlayerTieneMazo[playerid] = tempInt != 0;
+    cache_get_value_name_int(0, "tiene_telefono", tempInt); PlayerTieneTelefono[playerid] = tempInt != 0;
+
+    new Float:spX, Float:spY, Float:spZ;
+    cache_get_value_name_float(0, "spawn_x", spX);
+    cache_get_value_name_float(0, "spawn_y", spY);
+    cache_get_value_name_float(0, "spawn_z", spZ);
+
+    SetPVarFloat(playerid, "SpawnX", spX);
+    SetPVarFloat(playerid, "SpawnY", spY);
+    SetPVarFloat(playerid, "SpawnZ", spZ);
+
+    new dinero;
+    cache_get_value_name_int(0, "dinero", dinero);
+    GivePlayerMoney(playerid, dinero);
+
+    IsPlayerLoggedIn[playerid] = true;
+    ActualizarNivelPJ(playerid);
+    SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
+    SpawnPlayerAfterAuth(playerid);
+    return true;
+}
+
+stock SQL_GuardarCuenta(playerid) {
+    if(!g_MySQLReady || !IsPlayerLoggedIn[playerid]) return 0;
+
+    new name[MAX_PLAYER_NAME], escName[(MAX_PLAYER_NAME * 2) + 1], escPass[129], query[1024], Float:p[3];
+    GetPlayerName(playerid, name, sizeof(name));
+    GetPlayerPos(playerid, p[0], p[1], p[2]);
+    SQL_Escape(name, escName, sizeof(escName));
+    SQL_Escape(PlayerPassword[playerid], escPass, sizeof(escPass));
+
+    if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
+
+    mysql_format(g_SQL, query, sizeof(query),
+        "UPDATE cuentas SET password='%e', dinero=%d, admin=%d, camionero_nivel=%d, camionero_viajes=%d, pizzero_nivel=%d, pizzero_entregas=%d, basurero_nivel=%d, basurero_recorridos=%d, banco=%d, hambre=%d, tiempo_jugado=%d, skin=%d, spawn_x=%f, spawn_y=%f, spawn_z=%f, semilla_hierba=%d, semilla_flor=%d, inv_hierba=%d, inv_flor=%d, inv_madera=%d, inv_piedra=%d, inv_cobre=%d, inv_hierro=%d, inv_polvora=%d, inv_prepieza=%d, inv_carbon=%d, tiene_mazo=%d, mazo_durabilidad=%d, armero_nivel=%d, armero_exp=%d, bidon_gasolina=%d, tiene_telefono=%d WHERE nombre='%e'",
+        escPass, GetPlayerMoney(playerid), PlayerAdmin[playerid], CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], PlayerBankMoney[playerid], PlayerHambre[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid], PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0, escName);
+    mysql_query(g_SQL, query);
+    return 1;
+}
+
+stock SQL_CargarRutasTrabajo() {
+    if(!g_MySQLReady) return 0;
+
+    new query[128];
+    mysql_format(g_SQL, query, sizeof(query), "SELECT tipo,x,y,z FROM rutas_trabajo ORDER BY id ASC");
+    mysql_query(g_SQL, query);
+
+    TotalRutasCamioneroDB = 0;
+    TotalRutasPizzeroDB = 0;
+
+    for(new i = 0; i < MAX_RUTAS_BASURA; i++) {
+        if(BasuraPickup[i] != 0) DestroyPickup(BasuraPickup[i]);
+        BasuraPickup[i] = 0;
+        if(_:BasuraLabel[i] != -1) Delete3DTextLabel(BasuraLabel[i]);
+        BasuraLabel[i] = Text3D:-1;
+    }
+    TotalRutasBasura = 0;
+
+    new rows = cache_num_rows();
+    for(new r = 0; r < rows; r++) {
+        new tipo[16];
+        new Float:x, Float:y, Float:z;
+        cache_get_value_name(r, "tipo", tipo, sizeof(tipo));
+        cache_get_value_name_float(r, "x", x);
+        cache_get_value_name_float(r, "y", y);
+        cache_get_value_name_float(r, "z", z);
+
+        if(!strcmp(tipo, "camionero", true)) {
+            if(TotalRutasCamioneroDB >= MAX_RUTAS_CAMIONERO_DB) continue;
+            RutasCamioneroDB[TotalRutasCamioneroDB][0] = x;
+            RutasCamioneroDB[TotalRutasCamioneroDB][1] = y;
+            RutasCamioneroDB[TotalRutasCamioneroDB][2] = z;
+            TotalRutasCamioneroDB++;
+        } else if(!strcmp(tipo, "pizzero", true)) {
+            if(TotalRutasPizzeroDB >= MAX_RUTAS_PIZZERO_DB) continue;
+            RutasPizzeroDB[TotalRutasPizzeroDB][0] = x;
+            RutasPizzeroDB[TotalRutasPizzeroDB][1] = y;
+            RutasPizzeroDB[TotalRutasPizzeroDB][2] = z;
+            TotalRutasPizzeroDB++;
+        } else if(!strcmp(tipo, "basurero", true)) {
+            if(TotalRutasBasura >= MAX_RUTAS_BASURA) continue;
+            BasuraRuta[TotalRutasBasura][0] = x;
+            BasuraRuta[TotalRutasBasura][1] = y;
+            BasuraRuta[TotalRutasBasura][2] = z;
+            BasuraPickup[TotalRutasBasura] = CreatePickup(1328, 1, x, y, z, 0);
+            BasuraLabel[TotalRutasBasura] = Create3DTextLabel("Punto de basura\nPresiona H para recolectar", 0x66FF66FF, x, y, z + 0.6, 12.0, 0);
+            TotalRutasBasura++;
+        }
+    }
+    return 1;
+}
+
+stock bool:SQL_ObtenerRutaAleatoria(tipo[], &Float:x, &Float:y, &Float:z) {
+    if(!strcmp(tipo, "camionero", true)) {
+        if(TotalRutasCamioneroDB <= 0) return false;
+        new idx = random(TotalRutasCamioneroDB);
+        x = RutasCamioneroDB[idx][0];
+        y = RutasCamioneroDB[idx][1];
+        z = RutasCamioneroDB[idx][2];
+        return true;
+    }
+    if(!strcmp(tipo, "pizzero", true)) {
+        if(TotalRutasPizzeroDB <= 0) return false;
+        new idx = random(TotalRutasPizzeroDB);
+        x = RutasPizzeroDB[idx][0];
+        y = RutasPizzeroDB[idx][1];
+        z = RutasPizzeroDB[idx][2];
+        return true;
+    }
+    if(!strcmp(tipo, "basurero", true)) {
+        if(TotalRutasBasura <= 0) return false;
+        new idx = random(TotalRutasBasura);
+        x = BasuraRuta[idx][0];
+        y = BasuraRuta[idx][1];
+        z = BasuraRuta[idx][2];
+        return true;
+    }
+    return false;
+}
+
+stock bool:SQL_AgregarRuta(tipo[], Float:x, Float:y, Float:z) {
+    if(!g_MySQLReady) return false;
+    if(strcmp(tipo, "camionero", true) != 0 && strcmp(tipo, "pizzero", true) != 0 && strcmp(tipo, "basurero", true) != 0) return false;
+
+    new escTipo[32], query[256];
+    SQL_Escape(tipo, escTipo, sizeof(escTipo));
+    mysql_format(g_SQL, query, sizeof(query), "INSERT INTO rutas_trabajo (tipo,x,y,z) VALUES ('%e',%f,%f,%f)", escTipo, x, y, z);
+    mysql_query(g_SQL, query);
+    if(mysql_errno(g_SQL) != 0) return false;
+    SQL_CargarRutasTrabajo();
+    return true;
+}
+
 stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h);
 stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]);
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h);
@@ -704,6 +941,15 @@ stock GetEditMapSlotByListIndex(listindex);
 stock GetEditMapFreeSlot();
 stock bool:EnsureEditMapObject(slot);
 stock bool:StartEditMapEdition(playerid, slot);
+stock bool:SQL_AbrirConexion();
+stock SQL_CrearTablas();
+stock SQL_Escape(strsrc[], strdest[], maxlen);
+stock bool:SQL_CargarCuenta(playerid, const inputtext[]);
+stock bool:SQL_CrearCuenta(playerid, const inputtext[]);
+stock SQL_GuardarCuenta(playerid);
+stock SQL_CargarRutasTrabajo();
+stock bool:SQL_ObtenerRutaAleatoria(tipo[], &Float:x, &Float:y, &Float:z);
+stock bool:SQL_AgregarRuta(tipo[], Float:x, Float:y, Float:z);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -714,7 +960,7 @@ public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
     EnableStuntBonusForAll(false);
-    fcreatedir(DIR_USUARIOS);
+    SQL_AbrirConexion();
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
     PuntoPos[puntoCamionero][0] = POS_TRABAJO_X;
@@ -768,7 +1014,7 @@ public OnGameModeInit() {
     ActualizarLabelVentaAutos();
     if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
     BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
-    CargarRutasBasura();
+    SQL_CargarRutasTrabajo();
     CargarMinas();
     CargarHornos();
     CargarCajasLoot();
@@ -1136,26 +1382,14 @@ public FinalizarCarga(playerid) {
     TogglePlayerControllable(playerid, true);
     TrabajandoCamionero[playerid] = 3;
 
-    new File:h = fopen(PATH_RUTAS, io_read);
-    if(h) {
-        new line[64], count = 0;
-        while(fread(h, line)) count++;
-
-        if(count > 0) {
-            fseek(h, 0, seek_start);
-            new ruta_azar = random(count);
-            for(new i = 0; i <= ruta_azar; i++) fread(h, line);
-
-            new Float:rx, Float:ry, Float:rz;
-            sscanf_manual(line, rx, ry, rz);
-            CamioneroDestino[playerid][0] = rx;
-            CamioneroDestino[playerid][1] = ry;
-            CamioneroDestino[playerid][2] = rz;
-            SetPlayerCheckpoint(playerid, rx, ry, rz, 5.0);
-            SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Carga completa. Entrega la mercancia en el checkpoint.");
-        }
-        fclose(h);
-    } else SendClientMessage(playerid, -1, "{FF0000}ERROR: No hay rutas guardadas.");
+    new Float:rx, Float:ry, Float:rz;
+    if(SQL_ObtenerRutaAleatoria("camionero", rx, ry, rz)) {
+        CamioneroDestino[playerid][0] = rx;
+        CamioneroDestino[playerid][1] = ry;
+        CamioneroDestino[playerid][2] = rz;
+        SetPlayerCheckpoint(playerid, rx, ry, rz, 5.0);
+        SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Carga completa. Entrega la mercancia en el checkpoint.");
+    } else SendClientMessage(playerid, -1, "{FF0000}ERROR: No hay rutas de camionero en MySQL.");
     return 1;
 }
 
@@ -1240,29 +1474,12 @@ stock FinalizarTrabajo(playerid) {
 public AsignarRutaPizzero(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoPizzero[playerid] == 0) return 1;
 
-    new File:h = fopen(PATH_RUTAS_PIZZA, io_read);
-    if(!h) {
-        SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de pizzero guardadas. Contacta un admin.");
-        CanceladoTrabajoPizzero(playerid);
-        return 1;
-    }
-
-    new line[64], count = 0;
-    while(fread(h, line)) count++;
-    if(count <= 0) {
-        fclose(h);
-        SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de pizzero guardadas.");
-        CanceladoTrabajoPizzero(playerid);
-        return 1;
-    }
-
-    fseek(h, 0, seek_start);
-    new ruta_azar = random(count);
-    for(new i = 0; i <= ruta_azar; i++) fread(h, line);
-    fclose(h);
-
     new Float:rx, Float:ry, Float:rz;
-    sscanf_manual(line, rx, ry, rz);
+    if(!SQL_ObtenerRutaAleatoria("pizzero", rx, ry, rz)) {
+        SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de pizzero guardadas en MySQL.");
+        CanceladoTrabajoPizzero(playerid);
+        return 1;
+    }
     PizzeroDestino[playerid][0] = rx;
     PizzeroDestino[playerid][1] = ry;
     PizzeroDestino[playerid][2] = rz;
@@ -1675,41 +1892,28 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/crearparada", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new Float:p[3], File:h = fopen(PATH_RUTAS, io_append), line[64];
+        new Float:p[3];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
-        format(line, 64, "%f %f %f\n", p[0], p[1], p[2]);
-        if(h) {
-            fwrite(h, line);
-            fclose(h);
-            SendClientMessage(playerid, 0x00FF00FF, "Punto de entrega guardado exitosamente.");
-        }
+        if(SQL_AgregarRuta("camionero", p[0], p[1], p[2])) SendClientMessage(playerid, 0x00FF00FF, "Punto de entrega camionero guardado en MySQL.");
+        else SendClientMessage(playerid, 0xFF0000FF, "No se pudo guardar la ruta en MySQL.");
         return 1;
     }
 
     if(!strcmp(cmd, "/crearparadapizza", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new Float:p[3], File:h = fopen(PATH_RUTAS_PIZZA, io_append), line[64];
+        new Float:p[3];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
-        format(line, sizeof(line), "%f %f %f\n", p[0], p[1], p[2]);
-        if(h) {
-            fwrite(h, line);
-            fclose(h);
-            SendClientMessage(playerid, 0x00FF00FF, "Punto de entrega de pizzero guardado.");
-        }
+        if(SQL_AgregarRuta("pizzero", p[0], p[1], p[2])) SendClientMessage(playerid, 0x00FF00FF, "Punto de entrega pizzero guardado en MySQL.");
+        else SendClientMessage(playerid, 0xFF0000FF, "No se pudo guardar la ruta en MySQL.");
         return 1;
     }
 
     if(!strcmp(cmd, "/crearparadabasura", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new Float:p[3], File:h = fopen(PATH_RUTAS_BASURA, io_append), line[64];
+        new Float:p[3];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
-        format(line, sizeof(line), "%f %f %f\n", p[0], p[1], p[2]);
-        if(h) {
-            fwrite(h, line);
-            fclose(h);
-            CargarRutasBasura();
-            SendClientMessage(playerid, 0x00FF00FF, "Punto de basura guardado.");
-        }
+        if(SQL_AgregarRuta("basurero", p[0], p[1], p[2])) SendClientMessage(playerid, 0x00FF00FF, "Punto de basura guardado en MySQL.");
+        else SendClientMessage(playerid, 0xFF0000FF, "No se pudo guardar la ruta en MySQL.");
         return 1;
     }
 
@@ -2187,6 +2391,11 @@ public OnPlayerText(playerid, text[]) {
     return 0;
 }
 
+public OnGameModeExit() {
+    if(g_MySQLReady) mysql_close(g_SQL);
+    return 1;
+}
+
 public OnPlayerConnect(playerid) {
     IsPlayerLoggedIn[playerid] = false;
     TogglePlayerSpectating(playerid, true);
@@ -2275,10 +2484,18 @@ public OnPlayerConnect(playerid) {
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
 
-    new name[MAX_PLAYER_NAME], path[64];
+    new name[MAX_PLAYER_NAME], query[256], escName[(MAX_PLAYER_NAME * 2) + 1];
     GetPlayerName(playerid, name, sizeof(name));
-    format(path, sizeof(path), PATH_USUARIOS, name);
-    if(fexist(path)) ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "{33CCFF}Kame House - Login", "{FFFFFF}Bienvenido de nuevo a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Ingresa tu clave para continuar:", "Entrar", "Salir");
+
+    if(!g_MySQLReady) {
+        SendClientMessage(playerid, 0xFF4444FF, "MYSQL no esta conectado. Reinicia el servidor y revisa la configuracion.");
+        return Kick(playerid);
+    }
+
+    SQL_Escape(name, escName, sizeof(escName));
+    mysql_format(g_SQL, query, sizeof(query), "SELECT id FROM cuentas WHERE nombre='%e' LIMIT 1", escName);
+    mysql_query(g_SQL, query);
+    if(cache_num_rows() > 0) ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "{33CCFF}Kame House - Login", "{FFFFFF}Bienvenido de nuevo a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Ingresa tu clave para continuar:", "Entrar", "Salir");
     else ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FFFFFF}Bienvenido a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Crea una clave para tu cuenta:", "Registrar", "Salir");
     ActualizarNivelPJ(playerid);
     return 1;
@@ -3674,258 +3891,29 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return ShowBankMenu(playerid);
     }
 
-    new name[MAX_PLAYER_NAME], path[64], line[128];
+    new name[MAX_PLAYER_NAME];
     GetPlayerName(playerid, name, sizeof(name));
-    format(path, sizeof(path), PATH_USUARIOS, name);
+
     if(dialogid == DIALOG_REGISTRO) {
         if(!response) return Kick(playerid);
         if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}La clave debe tener al menos 3 caracteres.\n{AAAAAA}Ingresa una clave valida:", "Registrar", "Salir");
-        strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
-        fcreatedir(DIR_USUARIOS);
-        new File:h = fopen(path, io_write);
-        if(h) {
-            format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", PlayerPassword[playerid], DINERO_INICIAL);
-            fwrite(h, line); fclose(h);
-            IsPlayerLoggedIn[playerid] = true;
-            GivePlayerMoney(playerid, DINERO_INICIAL);
-            ActualizarNivelPJ(playerid);
-            GuardarCuenta(playerid);
-            SendClientMessage(playerid, 0x66CCFFFF, "{66FF99}Bienvenido a Kame House.");
-            SpawnPlayerAfterAuth(playerid);
-        } else {
-            SendClientMessage(playerid, 0xFF4444FF, "No se pudo crear tu cuenta. Revisa la carpeta 'usuarios' del servidor.");
-            ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}Error guardando la cuenta.\n{AAAAAA}Intenta nuevamente:", "Registrar", "Salir");
+        if(!SQL_CrearCuenta(playerid, inputtext)) {
+            return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}No se pudo crear la cuenta en MySQL.\n{AAAAAA}Intenta nuevamente:", "Registrar", "Salir");
         }
+        return 1;
     }
     if(dialogid == DIALOG_LOGIN) {
         if(!response) return Kick(playerid);
-        new File:h = fopen(path, io_read);
-        if(h) {
-            fread(h, PlayerPassword[playerid]);
-            for(new i=0; i<strlen(PlayerPassword[playerid]); i++) if(PlayerPassword[playerid][i] < 32) PlayerPassword[playerid][i] = '\0';
-            if(strlen(PlayerPassword[playerid]) < 3) { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error de cuenta", "Tu cuenta tiene una clave invalida o vacia. Contacta a un admin para repararla.", "Cerrar", ""); return 1; }
-            if(!strcmp(inputtext, PlayerPassword[playerid])) {
-                IsPlayerLoggedIn[playerid] = true;
-                fread(h, line); GivePlayerMoney(playerid, strval(line));
-                fread(h, line); PlayerAdmin[playerid] = strval(line);
-                fread(h, line); CamioneroNivel[playerid] = strval(line);
-                fread(h, line); CamioneroViajes[playerid] = strval(line);
-
-                new Float:v[3];
-                fread(h, line);
-                if(strfind(line, ".") != -1) {
-                    // Compatibilidad: cuenta vieja sin pizzero/banco/inventario
-                    PizzeroNivel[playerid] = 0;
-                    PizzeroEntregas[playerid] = 0;
-                    PlayerBankMoney[playerid] = 0;
-                    InvSemillaHierba[playerid] = 0;
-                    InvSemillaFlor[playerid] = 0;
-                    InvHierba[playerid] = 0;
-                    InvFlor[playerid] = 0;
-                    ArmeroNivel[playerid] = 1;
-                    PlayerTiempoJugadoMin[playerid] = 0;
-                    PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-                    v[0] = floatstr(line);
-                    fread(h, line); v[1] = floatstr(line);
-                    fread(h, line); v[2] = floatstr(line);
-                } else {
-                    PizzeroNivel[playerid] = strval(line);
-                    fread(h, line); PizzeroEntregas[playerid] = strval(line);
-                    fread(h, line);
-                    if(strfind(line, ".") != -1) {
-                        PlayerBankMoney[playerid] = 0;
-                        InvSemillaHierba[playerid] = 0;
-                        InvSemillaFlor[playerid] = 0;
-                        InvHierba[playerid] = 0;
-                        InvFlor[playerid] = 0;
-                        ArmeroNivel[playerid] = 1;
-                        PlayerTiempoJugadoMin[playerid] = 0;
-                        PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-                        v[0] = floatstr(line);
-                        fread(h, line); v[1] = floatstr(line);
-                        fread(h, line); v[2] = floatstr(line);
-                    } else {
-                        PlayerBankMoney[playerid] = strval(line);
-                        fread(h, line);
-                        if(strfind(line, ".") != -1) {
-                            InvSemillaHierba[playerid] = 0;
-                            InvSemillaFlor[playerid] = 0;
-                            InvHierba[playerid] = 0;
-                            InvFlor[playerid] = 0;
-                            ArmeroNivel[playerid] = 1;
-                            PlayerTiempoJugadoMin[playerid] = 0;
-                            PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-                            v[0] = floatstr(line);
-                            fread(h, line); v[1] = floatstr(line);
-                            fread(h, line); v[2] = floatstr(line);
-                        } else {
-                            InvSemillaHierba[playerid] = strval(line);
-                            fread(h, line); InvSemillaFlor[playerid] = strval(line);
-                            fread(h, line); InvHierba[playerid] = strval(line);
-                            fread(h, line); InvFlor[playerid] = strval(line);
-                            fread(h, line);
-                            if(strfind(line, ".") != -1) {
-                                PlayerTiempoJugadoMin[playerid] = 0;
-                                PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-                                v[0] = floatstr(line);
-                                fread(h, line); v[1] = floatstr(line);
-                                fread(h, line); v[2] = floatstr(line);
-                            } else {
-                                PlayerTiempoJugadoMin[playerid] = strval(line);
-                                fread(h, line);
-                                if(strfind(line, ".") != -1) {
-                                    PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-                                    v[0] = floatstr(line);
-                                    fread(h, line); v[1] = floatstr(line);
-                                    fread(h, line); v[2] = floatstr(line);
-                                } else {
-                                    PlayerSkinGuardada[playerid] = strval(line);
-                                    if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-                                    fread(h, line); v[0] = floatstr(line);
-                                    fread(h, line); v[1] = floatstr(line);
-                                    fread(h, line); v[2] = floatstr(line);
-                                }
-                            }
-                        }
-                    }
-                }
-                SetPVarFloat(playerid, "SpawnX", v[0]); SetPVarFloat(playerid, "SpawnY", v[1]); SetPVarFloat(playerid, "SpawnZ", v[2]);
-
-                if(fread(h, line)) {
-                    new dataVersion = strval(line);
-                    if(dataVersion >= 2) {
-                        fread(h, line); InvMadera[playerid] = strval(line);
-                        fread(h, line); InvPiedra[playerid] = strval(line);
-                        fread(h, line); InvCobre[playerid] = strval(line);
-                        fread(h, line); InvHierroMineral[playerid] = strval(line);
-                        fread(h, line); InvPolvora[playerid] = strval(line);
-                        fread(h, line); InvPrepieza[playerid] = strval(line);
-                        fread(h, line); InvCarbon[playerid] = strval(line);
-                        fread(h, line); PlayerTieneMazo[playerid] = strval(line) != 0;
-                        fread(h, line); MazoDurabilidad[playerid] = strval(line);
-                        fread(h, line); ArmeroNivel[playerid] = strval(line);
-                        fread(h, line); ArmeroExp[playerid] = strval(line);
-                        fread(h, line); BasureroNivel[playerid] = strval(line);
-                        fread(h, line); BasureroRecorridos[playerid] = strval(line);
-                        fread(h, line); BidonGasolina[playerid] = strval(line);
-                        PlayerTieneTelefono[playerid] = false;
-                        if(dataVersion >= 3) {
-                            if(fread(h, line)) PlayerTieneTelefono[playerid] = strval(line) != 0;
-                        }
-
-                        if(fread(h, line)) {
-                            if(strcmp(line, CUENTA_SECCION_PRENDAS, false) == 0) {
-                                for(new pi = 0; pi < MAX_PRENDAS; pi++) {
-                                    if(!fread(h, line)) break;
-                                    if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
-                                        CargarVehiculosJugadorDesdeCuenta(playerid, h);
-                                        break;
-                                    }
-                                    if(!EsLineaPrendaCuenta(line)) continue;
-                                    new idxp = 0;
-                                    PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
-                                    PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
-                                    PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
-                                    PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                }
-                            } else {
-                                if(EsLineaPrendaCuenta(line)) {
-                                    new idxp = 0;
-                                    PlayerPrendaComprada[playerid][0] = strval(strtok(line, idxp));
-                                    PlayerPrendaActiva[playerid][0] = strval(strtok(line, idxp));
-                                    PlayerPrendaBone[playerid][0] = strval(strtok(line, idxp));
-                                    PlayerPrendaOffX[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffY[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffZ[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotX[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotY[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotZ[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleX[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleY[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleZ[playerid][0] = floatstr(strtok(line, idxp));
-                                    for(new pi = 1; pi < MAX_PRENDAS; pi++) {
-                                        if(!fread(h, line)) break;
-                                        if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
-                                            CargarVehiculosJugadorDesdeCuenta(playerid, h);
-                                            break;
-                                        }
-                                        if(!EsLineaPrendaCuenta(line)) continue;
-                                        idxp = 0;
-                                        PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
-                                        PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
-                                        PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
-                                        PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                    }
-                                } else {
-                                    CargarVehiculosJugadorDesdeLinea(playerid, h, line);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                ActualizarNivelPJ(playerid);
-                SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
-                fclose(h); SpawnPlayerAfterAuth(playerid);
-            } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
+        if(!SQL_CargarCuenta(playerid, inputtext)) {
+            return ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave incorrecta o cuenta invalida.", "Entrar", "Salir");
         }
+        return 1;
     }
     return 1;
 }
 
 public GuardarCuenta(playerid) {
-    if(IsPlayerLoggedIn[playerid]) {
-        new name[MAX_PLAYER_NAME], path[64], line[256], Float:p[3];
-        GetPlayerName(playerid, name, sizeof(name));
-        format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
-        new File:h = fopen(path, io_write);
-        if(h) {
-            if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
-            format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n%d",
-                PlayerPassword[playerid], GetPlayerMoney(playerid), PlayerAdmin[playerid],
-                CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
-            fwrite(h, line);
-
-            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
-                InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
-                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);
-            fwrite(h, line);
-
-            format(line, sizeof(line), "\n%s", CUENTA_SECCION_PRENDAS);
-            fwrite(h, line);
-
-            for(new pi = 0; pi < MAX_PRENDAS; pi++) {
-                format(line, sizeof(line), "\n%d %d %d %f %f %f %f %f %f %f %f %f",
-                    PlayerPrendaComprada[playerid][pi], PlayerPrendaActiva[playerid][pi], PlayerPrendaBone[playerid][pi],
-                    PlayerPrendaOffX[playerid][pi], PlayerPrendaOffY[playerid][pi], PlayerPrendaOffZ[playerid][pi],
-                    PlayerPrendaRotX[playerid][pi], PlayerPrendaRotY[playerid][pi], PlayerPrendaRotZ[playerid][pi],
-                    PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi]);
-                fwrite(h, line);
-            }
-
-            format(line, sizeof(line), "\n%s", CUENTA_SECCION_VEHICULOS);
-            fwrite(h, line);
-
-            GuardarVehiculosJugadorEnCuenta(playerid, h);
-            fclose(h);
-        }
-    }
+    if(IsPlayerLoggedIn[playerid]) SQL_GuardarCuenta(playerid);
     return 1;
 }
 
@@ -4379,24 +4367,7 @@ stock CrearVehiculoTrabajoUnico(playerid, modelid, Float:x, Float:y, Float:z, Fl
 }
 
 stock CargarRutasBasura() {
-    for(new i = 0; i < MAX_RUTAS_BASURA; i++) {
-        if(BasuraPickup[i] != 0) DestroyPickup(BasuraPickup[i]);
-        BasuraPickup[i] = 0;
-        if(_:BasuraLabel[i] != -1) Delete3DTextLabel(BasuraLabel[i]);
-        BasuraLabel[i] = Text3D:-1;
-    }
-
-    TotalRutasBasura = 0;
-    new File:h = fopen(PATH_RUTAS_BASURA, io_read);
-    if(!h) return 1;
-    new line[64];
-    while(fread(h, line) && TotalRutasBasura < MAX_RUTAS_BASURA) {
-        sscanf_manual(line, BasuraRuta[TotalRutasBasura][0], BasuraRuta[TotalRutasBasura][1], BasuraRuta[TotalRutasBasura][2]);
-        BasuraPickup[TotalRutasBasura] = CreatePickup(1328, 1, BasuraRuta[TotalRutasBasura][0], BasuraRuta[TotalRutasBasura][1], BasuraRuta[TotalRutasBasura][2], 0);
-        BasuraLabel[TotalRutasBasura] = Create3DTextLabel("Punto de basura\nPresiona H para recolectar", 0x66FF66FF, BasuraRuta[TotalRutasBasura][0], BasuraRuta[TotalRutasBasura][1], BasuraRuta[TotalRutasBasura][2] + 0.6, 12.0, 0);
-        TotalRutasBasura++;
-    }
-    fclose(h);
+    SQL_CargarRutasTrabajo();
     return 1;
 }
 
