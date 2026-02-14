@@ -36,9 +36,6 @@
 
 #define MAX_WEAPON_ID_GM     47
 
-#define CASA_INT_X           2496.0499
-#define CASA_INT_Y           -1707.84
-#define CASA_INT_Z           1014.74
 #define ARMARIO_X            2493.20
 #define ARMARIO_Y            -1702.10
 #define ARMARIO_Z            1014.74
@@ -164,6 +161,8 @@
 #define DIALOG_ADMIN_VIDA_CHALECO_TIPO 83
 #define DIALOG_ADMIN_VIDA_CHALECO_ID 84
 #define DIALOG_ADMIN_VIDA_CHALECO_VALOR 85
+#define DIALOG_CREAR_CASA_INTERIOR 86
+#define DIALOG_CREAR_CASA_PRECIO 87
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -266,12 +265,14 @@ new Text3D:CultivoLabel[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR];
 new Float:CultivoPos[MAX_PLAYERS][MAX_PLANTAS_POR_JUGADOR][3];
 new CultivoTimer[MAX_PLAYERS] = {-1, ...};
 new PlantasColocadas[MAX_PLAYERS];
+new CasaInteriorPendiente[MAX_PLAYERS] = {-1, ...};
 
 // Variables Casas
 enum eCasa {
     Float:cX,
     Float:cY,
     Float:cZ,
+    cInteriorSlot,
     cPrecio,
     cOwner[MAX_PLAYER_NAME],
     cFriends[128]
@@ -282,6 +283,24 @@ new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
+
+static const CasaInteriorNombre[5][] = {
+    "Safe House 1",
+    "Safe House 4",
+    "Katie's house",
+    "Burglary house 1",
+    "Burglary house 6"
+};
+
+static const CasaInteriorJuegoID[5] = {10, 1, 2, 3, 2};
+
+static const Float:CasaInteriorPos[5][3] = {
+    {2262.83, -1137.71, 1050.63},
+    {2217.28, -1076.27, 1050.48},
+    {225.756989, 1240.00, 1082.14},
+    {-42.5819, 1405.6208, 1084.43},
+    {-68.0244, 1351.59, 1080.21}
+};
 
 // Sistema de armeria
 #define MAX_ARMAS_TIENDA 20
@@ -535,6 +554,8 @@ stock GetClosestCasa(playerid);
 stock GetClosestCasaOwnedBy(playerid);
 stock bool:PlayerTieneAccesoCasa(playerid, casa);
 stock EntrarCasa(playerid, casa);
+stock bool:GetCasaInteriorData(slot, &interiorid, &Float:px, &Float:py, &Float:pz);
+stock ShowCrearCasaInteriorDialog(playerid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
 stock FormatTiempoRestante(ms, dest[], len);
@@ -655,7 +676,7 @@ public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
     EnableStuntBonusForAll(false);
-    fmkdir(DIR_USUARIOS);
+    fcreatedir(DIR_USUARIOS);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
     PuntoPos[puntoCamionero][0] = POS_TRABAJO_X;
@@ -723,17 +744,33 @@ public OnGameModeInit() {
             CasaData[TotalCasas][cX] = floatstr(strtok(str, idx));
             CasaData[TotalCasas][cY] = floatstr(strtok(str, idx));
             CasaData[TotalCasas][cZ] = floatstr(strtok(str, idx));
-            CasaData[TotalCasas][cPrecio] = strval(strtok(str, idx));
-            strmid(CasaData[TotalCasas][cOwner], strtok(str, idx), 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
-            strmid(CasaData[TotalCasas][cFriends], strtok(str, idx), 0, 128, 128);
+
+            new tokenA[32], tokenB[32], ownerTok[MAX_PLAYER_NAME], friendsTok[128];
+            format(tokenA, sizeof(tokenA), "%s", strtok(str, idx));
+            format(tokenB, sizeof(tokenB), "%s", strtok(str, idx));
+
+            if(strval(tokenA) >= 1 && strval(tokenA) <= 5 && strval(tokenB) > 0) {
+                CasaData[TotalCasas][cInteriorSlot] = strval(tokenA);
+                CasaData[TotalCasas][cPrecio] = strval(tokenB);
+                format(ownerTok, sizeof(ownerTok), "%s", strtok(str, idx));
+                format(friendsTok, sizeof(friendsTok), "%s", strtok(str, idx));
+            } else {
+                CasaData[TotalCasas][cInteriorSlot] = 1;
+                CasaData[TotalCasas][cPrecio] = strval(tokenA);
+                format(ownerTok, sizeof(ownerTok), "%s", tokenB);
+                format(friendsTok, sizeof(friendsTok), "%s", strtok(str, idx));
+            }
+
+            strmid(CasaData[TotalCasas][cOwner], ownerTok, 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
+            strmid(CasaData[TotalCasas][cFriends], friendsTok, 0, 128, 128);
 
             CasaPickup[TotalCasas] = CreatePickup(strcmp(CasaData[TotalCasas][cOwner], "None") == 0 ? 1273 : 1559, 2, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ], 0);
 
             new labelstr[64];
             if(!strcmp(CasaData[TotalCasas][cOwner], "None")) {
-                format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d", CasaData[TotalCasas][cPrecio]);
+                format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", CasaData[TotalCasas][cPrecio], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
             } else {
-                format(labelstr, sizeof(labelstr), "Casa de %s", CasaData[TotalCasas][cOwner]);
+                format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", CasaData[TotalCasas][cOwner], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
             }
             CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ] + 0.5, 10.0, 0);
             TotalCasas++;
@@ -1585,7 +1622,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         strmid(CasaData[casa][cOwner], name, 0, strlen(name)+1, MAX_PLAYER_NAME);
         CasaData[casa][cFriends][0] = EOS;
         new labelstr[64];
-        format(labelstr, sizeof(labelstr), "Casa de %s", name);
+        format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", name, CasaInteriorNombre[CasaData[casa][cInteriorSlot] - 1]);
         Update3DTextLabelText(CasaLabel[casa], 0x00FF00FF, labelstr);
         if(CasaPickup[casa] != 0) DestroyPickup(CasaPickup[casa]);
         CasaPickup[casa] = CreatePickup(1559, 2, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ], 0);
@@ -1904,41 +1941,15 @@ public OnPlayerCommandText(playerid, cmdtext[])
     // Comandos de casas (solo admin para crear)
     if(!strcmp(cmd, "/crearcasa", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new tmp[32];
-        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
-        if(!strlen(tmp)) return SendClientMessage(playerid, -1, "Uso: /crearcasa [precio]");
-        new precio = strval(tmp);
-        if(precio <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
         if(TotalCasas >= MAX_CASAS) return SendClientMessage(playerid, -1, "Maximo de casas alcanzado.");
-        new Float:p[3];
-        GetPlayerPos(playerid, p[0], p[1], p[2]);
-        CasaData[TotalCasas][cX] = p[0];
-        CasaData[TotalCasas][cY] = p[1];
-        CasaData[TotalCasas][cZ] = p[2];
-        CasaData[TotalCasas][cPrecio] = precio;
-        strmid(CasaData[TotalCasas][cOwner], "None", 0, strlen("None")+1, MAX_PLAYER_NAME);
-        CasaData[TotalCasas][cFriends][0] = EOS;
-        CasaPickup[TotalCasas] = CreatePickup(1273, 2, p[0], p[1], p[2], 0);
-        new labelstr[64];
-        format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d", precio);
-        CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, p[0], p[1], p[2] + 0.5, 10.0, 0);
-        // Guardar en archivo
-        new File:fh = fopen(PATH_CASAS, io_append);
-        if(fh) {
-            new line[128];
-            format(line, sizeof(line), "%f %f %f %d None\n", p[0], p[1], p[2], precio);
-            fwrite(fh, line);
-            fclose(fh);
-        }
-        SendClientMessage(playerid, 0x00FF00FF, "Casa creada y guardada.");
-        TotalCasas++;
-        return 1;
+        return ShowCrearCasaInteriorDialog(playerid);
     }
 
     if(!strcmp(cmd, "/salir", true)) {
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "No estas en una casa.");
         new casa = PlayerInCasa[playerid];
         PlayerInCasa[playerid] = -1;
+        CasaInteriorPendiente[playerid] = -1;
         SetPlayerPos(playerid, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ] + 1.0);
         SetPlayerInterior(playerid, 0);
         SetPlayerVirtualWorld(playerid, 0);
@@ -1990,6 +2001,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             CasaData[i][cX] = CasaData[i + 1][cX];
             CasaData[i][cY] = CasaData[i + 1][cY];
             CasaData[i][cZ] = CasaData[i + 1][cZ];
+            CasaData[i][cInteriorSlot] = CasaData[i + 1][cInteriorSlot];
             CasaData[i][cPrecio] = CasaData[i + 1][cPrecio];
             strmid(CasaData[i][cOwner], CasaData[i + 1][cOwner], 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
             strmid(CasaData[i][cFriends], CasaData[i + 1][cFriends], 0, 128, 128);
@@ -2007,7 +2019,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
                 SendClientMessage(i, 0xFF0000FF, "Tu casa fue eliminada por un administrador.");
             } else if(PlayerInCasa[i] > casa) {
                 PlayerInCasa[i]--;
-                SetPlayerVirtualWorld(i, PlayerInCasa[i] + 1);
             }
         }
 
@@ -2016,8 +2027,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
             CasaPickup[i] = CreatePickup(strcmp(CasaData[i][cOwner], "None") == 0 ? 1273 : 1559, 2, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ], 0);
 
             new labelstr[64];
-            if(!strcmp(CasaData[i][cOwner], "None")) format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d", CasaData[i][cPrecio]);
-            else format(labelstr, sizeof(labelstr), "Casa de %s", CasaData[i][cOwner]);
+            if(!strcmp(CasaData[i][cOwner], "None")) format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", CasaData[i][cPrecio], CasaInteriorNombre[CasaData[i][cInteriorSlot] - 1]);
+            else format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", CasaData[i][cOwner], CasaInteriorNombre[CasaData[i][cInteriorSlot] - 1]);
             CasaLabel[i] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ] + 0.5, 10.0, 0);
 
         }
@@ -2048,12 +2059,40 @@ stock bool:PlayerTieneAccesoCasa(playerid, casa) {
 
 stock EntrarCasa(playerid, casa) {
     PlayerInCasa[playerid] = casa;
-    SetPlayerPos(playerid, CASA_INT_X, CASA_INT_Y, CASA_INT_Z);
-    SetPlayerInterior(playerid, 3);
+
+    new interiorid;
+    new Float:intX, Float:intY, Float:intZ;
+    if(!GetCasaInteriorData(CasaData[casa][cInteriorSlot], interiorid, intX, intY, intZ)) {
+        interiorid = 10;
+        intX = CasaInteriorPos[0][0];
+        intY = CasaInteriorPos[0][1];
+        intZ = CasaInteriorPos[0][2];
+    }
+
+    SetPlayerPos(playerid, intX, intY, intZ);
+    SetPlayerInterior(playerid, interiorid);
     SetPlayerVirtualWorld(playerid, casa + 1);
     SetCameraBehindPlayer(playerid);
     SendClientMessage(playerid, -1, "Has entrado a la casa. Aqui puedes usar /comer y descansar.");
     return 1;
+}
+
+
+stock bool:GetCasaInteriorData(slot, &interiorid, &Float:px, &Float:py, &Float:pz) {
+    if(slot < 1 || slot > 5) return false;
+    new idx = slot - 1;
+    interiorid = CasaInteriorJuegoID[idx];
+    px = CasaInteriorPos[idx][0];
+    py = CasaInteriorPos[idx][1];
+    pz = CasaInteriorPos[idx][2];
+    return true;
+}
+
+stock ShowCrearCasaInteriorDialog(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT,
+        "Crear casa",
+        "1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Katie's house (ID 2)\n4) Burglary house 1 (ID 3)\n5) Burglary house 6 (ID 2)\n\nIngresa el numero de interior (1-5):",
+        "Siguiente", "Cancelar");
 }
 
 stock GetClosestCasaOwnedBy(playerid) {
@@ -2122,6 +2161,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetShadow(playerid, BarraGas[playerid], 1);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
     PlayerInCasa[playerid] = -1;
+    CasaInteriorPendiente[playerid] = -1;
     TrabajandoCamionero[playerid] = 0;
     TrabajandoPizzero[playerid] = 0;
     TrabajandoBasurero[playerid] = 0;
@@ -2221,7 +2261,7 @@ public OnPlayerSpawn(playerid) {
 
 stock SpawnPlayerAfterAuth(playerid)
 {
-    SetSpawnInfo(playerid, 255, SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 0.0, 0, 0, 0, 0, 0, 0);
+    SetSpawnInfo(playerid, 255, SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
     TogglePlayerSpectating(playerid, false);
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
@@ -2232,6 +2272,46 @@ stock SpawnPlayerAfterAuth(playerid)
 }
 
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
+
+    if(dialogid == DIALOG_CREAR_CASA_INTERIOR) {
+        if(!response) { CasaInteriorPendiente[playerid] = -1; return 1; }
+        new interiorSlot = strval(inputtext);
+        if(interiorSlot < 1 || interiorSlot > 5) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT, "Crear casa", "Interior invalido.\n\n1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Katie's house (ID 2)\n4) Burglary house 1 (ID 3)\n5) Burglary house 6 (ID 2)\n\nIngresa el numero de interior (1-5):", "Siguiente", "Cancelar");
+        CasaInteriorPendiente[playerid] = interiorSlot;
+        return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio de la casa:", "Crear", "Atras");
+    }
+
+    if(dialogid == DIALOG_CREAR_CASA_PRECIO) {
+        if(!response) return ShowCrearCasaInteriorDialog(playerid);
+        if(CasaInteriorPendiente[playerid] < 1 || CasaInteriorPendiente[playerid] > 5) return ShowCrearCasaInteriorDialog(playerid);
+
+        new precio = strval(inputtext);
+        if(precio <= 0) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Precio invalido. Ingresa un precio mayor a 0:", "Crear", "Atras");
+        if(TotalCasas >= MAX_CASAS) return SendClientMessage(playerid, -1, "Maximo de casas alcanzado.");
+
+        new Float:p[3];
+        GetPlayerPos(playerid, p[0], p[1], p[2]);
+
+        CasaData[TotalCasas][cX] = p[0];
+        CasaData[TotalCasas][cY] = p[1];
+        CasaData[TotalCasas][cZ] = p[2];
+        CasaData[TotalCasas][cInteriorSlot] = CasaInteriorPendiente[playerid];
+        CasaData[TotalCasas][cPrecio] = precio;
+        strmid(CasaData[TotalCasas][cOwner], "None", 0, strlen("None")+1, MAX_PLAYER_NAME);
+        CasaData[TotalCasas][cFriends][0] = EOS;
+
+        CasaPickup[TotalCasas] = CreatePickup(1273, 2, p[0], p[1], p[2], 0);
+
+        new labelstr[96];
+        format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", precio, CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
+        CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, p[0], p[1], p[2] + 0.5, 10.0, 0);
+
+        TotalCasas++;
+        CasaInteriorPendiente[playerid] = -1;
+        GuardarCasas();
+        SendClientMessage(playerid, 0x00FF00FF, "Casa creada y guardada correctamente.");
+        return 1;
+    }
 
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
@@ -3457,7 +3537,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}La clave debe tener al menos 3 caracteres.\n{AAAAAA}Ingresa una clave valida:", "Registrar", "Salir");
         strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
-        fmkdir(DIR_USUARIOS);
+        fcreatedir(DIR_USUARIOS);
         new File:h = fopen(path, io_write);
         if(h) {
             format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", PlayerPassword[playerid], DINERO_INICIAL);
@@ -3695,9 +3775,9 @@ public GuardarCasas() {
     if(h) {
         new line[256];
         for(new i = 0; i < TotalCasas; i++) {
-            format(line, sizeof(line), "%f %f %f %d %s %s\n",
+            format(line, sizeof(line), "%f %f %f %d %d %s %s\n",
                 CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ],
-                CasaData[i][cPrecio], CasaData[i][cOwner], CasaData[i][cFriends]);
+                CasaData[i][cInteriorSlot], CasaData[i][cPrecio], CasaData[i][cOwner], CasaData[i][cFriends]);
             fwrite(h, line);
         }
         fclose(h);
@@ -3868,13 +3948,25 @@ public OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid) {
         return 1;
     }
 
-    if(PlayerInCasa[playerid] != -1 && newinteriorid != 3) {
-        SetPlayerInterior(playerid, 3);
-        SetPlayerVirtualWorld(playerid, PlayerInCasa[playerid] + 1);
-        SetPlayerPos(playerid, CASA_INT_X, CASA_INT_Y, CASA_INT_Z);
-        SetCameraBehindPlayer(playerid);
-        SendClientMessage(playerid, 0xFF0000FF, "No uses el marker amarillo. Usa /salir para salir de tu casa.");
-        return 1;
+    if(PlayerInCasa[playerid] != -1) {
+        new casa = PlayerInCasa[playerid];
+        new expectedInterior;
+        new Float:intX, Float:intY, Float:intZ;
+        if(!GetCasaInteriorData(CasaData[casa][cInteriorSlot], expectedInterior, intX, intY, intZ)) {
+            expectedInterior = 10;
+            intX = CasaInteriorPos[0][0];
+            intY = CasaInteriorPos[0][1];
+            intZ = CasaInteriorPos[0][2];
+        }
+
+        if(newinteriorid != expectedInterior) {
+            SetPlayerInterior(playerid, expectedInterior);
+            SetPlayerVirtualWorld(playerid, casa + 1);
+            SetPlayerPos(playerid, intX, intY, intZ);
+            SetCameraBehindPlayer(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "No uses el marker amarillo. Usa /salir para salir de tu casa.");
+            return 1;
+        }
     }
     return 1;
 }
