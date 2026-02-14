@@ -2188,6 +2188,17 @@ public OnPlayerSpawn(playerid) {
     return 1;
 }
 
+stock SpawnPlayerAfterAuth(playerid)
+{
+    SetSpawnInfo(playerid, 255, SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 0.0, 0, 0, 0, 0, 0, 0);
+    TogglePlayerSpectating(playerid, false);
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    SpawnPlayer(playerid);
+    SetCameraBehindPlayer(playerid);
+    return 1;
+}
+
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
@@ -3353,7 +3364,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             ActualizarNivelPJ(playerid);
             GuardarCuenta(playerid);
             SendClientMessage(playerid, 0x66CCFFFF, "{66FF99}Bienvenido a Kame House.");
-            SpawnPlayer(playerid);
+            SpawnPlayerAfterAuth(playerid);
         }
     }
     if(dialogid == DIALOG_LOGIN) {
@@ -3527,7 +3538,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
                 ActualizarNivelPJ(playerid);
                 SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
-                fclose(h); SpawnPlayer(playerid);
+                fclose(h); SpawnPlayerAfterAuth(playerid);
             } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
         }
     }
