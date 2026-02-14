@@ -158,6 +158,12 @@
 #define DIALOG_TELEFONO_CALC_OPERACION 77
 #define DIALOG_TELEFONO_CALC_VALOR2 78
 #define DIALOG_TELEFONO_LLAMAR_VEHICULO 79
+#define DIALOG_ADMIN_IR_JUGADOR_ID 80
+#define DIALOG_ADMIN_SKIN_ID 81
+#define DIALOG_ADMIN_SKIN_VALOR 82
+#define DIALOG_ADMIN_VIDA_CHALECO_TIPO 83
+#define DIALOG_ADMIN_VIDA_CHALECO_ID 84
+#define DIALOG_ADMIN_VIDA_CHALECO_VALOR 85
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -400,6 +406,8 @@ new GasRefuelTimer[MAX_PLAYERS] = {-1, ...};
 new GasRefuelVeh[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new GasRefuelCost[MAX_PLAYERS];
 new BidonGasolina[MAX_PLAYERS];
+new UltimoVehiculoGasMostrado[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
+new UltimoAvisoGasCeroTick[MAX_PLAYERS];
 new KameTiendaTipoPendiente[MAX_PLAYERS];
 new KameTiendaCantidadPendiente[MAX_PLAYERS];
 new bool:PlayerTieneTelefono[MAX_PLAYERS];
@@ -484,6 +492,9 @@ new TotalPrepiezaPoints;
 new PrepiezaCooldownTick[MAX_PLAYERS][MAX_PREPIEZA_POINTS];
 new AdminMineralTipoPendiente[MAX_PLAYERS] = {-1, ...};
 new AdminMineralCantidadPendiente[MAX_PLAYERS];
+new AdminSkinTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new AdminVidaChalecoTipoPendiente[MAX_PLAYERS];
+new AdminVidaChalecoTargetPendiente[MAX_PLAYERS] = {-1, ...};
 
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
@@ -1797,20 +1808,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/tp", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        new tmp[32], id;
-        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
-        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /tp [id]");
-        id = strval(tmp);
-        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
-        new Float:p[3]; GetPlayerPos(id, p[0], p[1], p[2]);
-        SetPlayerPos(playerid, p[0], p[1], p[2]+1.5);
+        if(AdminMapPos[playerid][0] == 0.0) return SendClientMessage(playerid, -1, "Marca el mapa.");
+        SetPlayerPos(playerid, AdminMapPos[playerid][0], AdminMapPos[playerid][1], AdminMapPos[playerid][2]);
         return 1;
     }
 
     if(!strcmp(cmd, "/ir", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        if(AdminMapPos[playerid][0] == 0.0) return SendClientMessage(playerid, -1, "Marca el mapa.");
-        SetPlayerPos(playerid, AdminMapPos[playerid][0], AdminMapPos[playerid][1], AdminMapPos[playerid][2]);
+        new tmp[32], id;
+        format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
+        if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /ir [id]");
+        id = strval(tmp);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
+        new Float:p[3]; GetPlayerPos(id, p[0], p[1], p[2]);
+        SetPlayerPos(playerid, p[0], p[1], p[2]+1.5);
         return 1;
     }
 
@@ -1845,11 +1856,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/sacarveh", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], vid;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /sacarveh [idveh]");
         vid = strval(tmp);
-        if(vid <= 0 || vid >= MAX_VEHICLES || !IsValidVehicle(vid)) return SendClientMessage(playerid, -1, "Vehiculo invalido.");
+        if(vid < 1 || vid >= MAX_VEHICLES || !IsValidVehicle(vid)) return SendClientMessage(playerid, -1, "Vehiculo invalido.");
         if(VehTempRestoreTimer[vid] != -1) return SendClientMessage(playerid, -1, "Ese vehiculo ya esta temporalmente retirado.");
         GetVehiclePos(vid, TempVehPos[vid][0], TempVehPos[vid][1], TempVehPos[vid][2]);
         GetVehicleZAngle(vid, TempVehPos[vid][3]);
@@ -1864,6 +1876,16 @@ public OnPlayerCommandText(playerid, cmdtext[])
         DestroyVehicle(vid);
         VehTempRestoreTimer[vid] = SetTimerEx("RestaurarVehiculoTemporal", 600000, false, "d", vid);
         SendClientMessage(playerid, 0xFFAA00FF, "Vehiculo retirado por 10 minutos.");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/rc", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes conducir un vehiculo.");
+        new veh = GetPlayerVehicleID(playerid);
+        RepairVehicle(veh);
+        SetVehicleHealth(veh, 1000.0);
+        SendClientMessage(playerid, 0x66FF66FF, "Vehiculo reparado: carroceria y motor al 1000.");
         return 1;
     }
 
@@ -2065,7 +2087,7 @@ stock sscanf_manual(const string[], &Float:x, &Float:y, &Float:z) {
 
 public OnPlayerClickMap(playerid, Float:fX, Float:fY, Float:fZ) {
     AdminMapPos[playerid][0] = fX; AdminMapPos[playerid][1] = fY; AdminMapPos[playerid][2] = fZ;
-    if(PlayerAdmin[playerid] >= 1) SendClientMessage(playerid, -1, "{FFFF00}Punto marcado. /ir");
+    if(PlayerAdmin[playerid] >= 1) SendClientMessage(playerid, -1, "{FFFF00}Punto marcado. Usa /tp para ir al punto.");
     return 1;
 }
 
@@ -2123,6 +2145,11 @@ public OnPlayerConnect(playerid) {
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
     GasRefuelCost[playerid] = 0;
     BidonGasolina[playerid] = 0;
+    UltimoVehiculoGasMostrado[playerid] = INVALID_VEHICLE_ID;
+    UltimoAvisoGasCeroTick[playerid] = 0;
+    AdminSkinTargetPendiente[playerid] = -1;
+    AdminVidaChalecoTipoPendiente[playerid] = 0;
+    AdminVidaChalecoTargetPendiente[playerid] = -1;
     PlayerTieneTelefono[playerid] = false;
     TelefonoMensajeDestino[playerid] = -1;
     CalcValor1Pendiente[playerid] = 0.0;
@@ -2642,7 +2669,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
             return ShowPrendaUsuarioEditar(playerid, idxp);
         }
-        new bones[] = {1,2,3,4,5,6,7,8,9,10,11};
+        new bones[] = {2,1,1,3,4,5,6,7,8,9,10};
         if(listitem < 0 || listitem >= sizeof(bones)) return 1;
         if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) {
             PrendasData[idxp][prendaBone] = bones[listitem];
@@ -2834,11 +2861,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return OnPlayerCommandText(playerid, cmdMover);
         }
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
-        if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/tp /ir /traer /kick /kill /cord /sacarveh /fly /admprendas", "Cerrar", "");
+        if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
         if(listitem == 5) {
             new cmdAdmPrendas[] = "/admprendas";
             return OnPlayerCommandText(playerid, cmdAdmPrendas);
         }
+        if(listitem == 6) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "Admin - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
+        if(listitem == 7) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_ID, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID del jugador", "Siguiente", "Atras");
+        if(listitem == 8) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_TIPO, DIALOG_STYLE_LIST, "Admin - Vida/Chaleco", "Vida\nChaleco", "Siguiente", "Atras");
         return 1;
     }
 
@@ -2902,6 +2932,73 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_ADMIN_DAR_MINERAL_TIPO) { if(!response) return MostrarDialogoAdmin(playerid); if(!strcmp(inputtext,"piedra",true)) AdminMineralTipoPendiente[playerid]=0; else if(!strcmp(inputtext,"cobre",true)) AdminMineralTipoPendiente[playerid]=1; else if(!strcmp(inputtext,"hierro",true)) AdminMineralTipoPendiente[playerid]=2; else if(!strcmp(inputtext,"madera",true)) AdminMineralTipoPendiente[playerid]=3; else if(!strcmp(inputtext,"polvora",true)) AdminMineralTipoPendiente[playerid]=4; else if(!strcmp(inputtext,"prepieza",true)||!strcmp(inputtext,"prepiezas",true)) AdminMineralTipoPendiente[playerid]=5; else if(!strcmp(inputtext,"carbon",true)) AdminMineralTipoPendiente[playerid]=6; else return SendClientMessage(playerid,-1,"Tipo invalido."); return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_MONTO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Monto","Siguiente","Atras"); }
     if(dialogid == DIALOG_ADMIN_DAR_MINERAL_MONTO) { if(!response) return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_TIPO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Tipo mineral","Siguiente","Atras"); AdminMineralCantidadPendiente[playerid]=strval(inputtext); if(AdminMineralCantidadPendiente[playerid]<=0) return SendClientMessage(playerid,-1,"Monto invalido."); return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_ID,DIALOG_STYLE_INPUT,"Admin - Dar minerales","ID del jugador","Dar","Atras"); }
     if(dialogid == DIALOG_ADMIN_DAR_MINERAL_ID) { if(!response) return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_MONTO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Monto","Siguiente","Atras"); new id=strval(inputtext),cant=AdminMineralCantidadPendiente[playerid],tipo=AdminMineralTipoPendiente[playerid]; if(!IsPlayerConnected(id)||cant<=0||tipo<0) return SendClientMessage(playerid,-1,"Datos invalidos."); if(tipo==0) InvPiedra[id]+=cant; else if(tipo==1) InvCobre[id]+=cant; else if(tipo==2) InvHierroMineral[id]+=cant; else if(tipo==3) InvMadera[id]+=cant; else if(tipo==4) InvPolvora[id]+=cant; else if(tipo==5) InvPrepieza[id]+=cant; else InvCarbon[id]+=cant; return SendClientMessage(playerid,0x66FF66FF,"Minerales entregados."); }
+
+    if(dialogid == DIALOG_ADMIN_IR_JUGADOR_ID) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        new Float:p[3]; GetPlayerPos(id, p[0], p[1], p[2]);
+        SetPlayerPos(playerid, p[0], p[1], p[2] + 1.5);
+        return SendClientMessage(playerid, 0x66FF66FF, "Teletransportado al jugador seleccionado.");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SKIN_ID) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        AdminSkinTargetPendiente[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_VALOR, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID de skin", "Aplicar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SKIN_VALOR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_ID, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID del jugador", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new target = AdminSkinTargetPendiente[playerid];
+        new skin = strval(inputtext);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
+        if(skin < 0 || skin > 311) return SendClientMessage(playerid, -1, "Skin invalida (0-311).");
+        SetPlayerSkin(target, skin);
+        SendClientMessage(playerid, 0x66FF66FF, "Skin cambiada correctamente.");
+        SendClientMessage(target, 0x66FF66FF, "Un admin cambio tu skin.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_VIDA_CHALECO_TIPO) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(listitem < 0 || listitem > 1) return 1;
+        AdminVidaChalecoTipoPendiente[playerid] = listitem;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_ID, DIALOG_STYLE_INPUT, "Admin - Vida/Chaleco", "Ingresa ID del jugador", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_VIDA_CHALECO_ID) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_TIPO, DIALOG_STYLE_LIST, "Admin - Vida/Chaleco", "Vida\nChaleco", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        AdminVidaChalecoTargetPendiente[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_VALOR, DIALOG_STYLE_INPUT, "Admin - Vida/Chaleco", "Ingresa porcentaje (0-100)", "Aplicar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_VIDA_CHALECO_VALOR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_ID, DIALOG_STYLE_INPUT, "Admin - Vida/Chaleco", "Ingresa ID del jugador", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new target = AdminVidaChalecoTargetPendiente[playerid];
+        new porcentaje = strval(inputtext);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
+        if(porcentaje < 0 || porcentaje > 100) return SendClientMessage(playerid, -1, "Porcentaje invalido (0-100).");
+        if(AdminVidaChalecoTipoPendiente[playerid] == 0) {
+            SetPlayerHealth(target, float(porcentaje));
+            SendClientMessage(playerid, 0x66FF66FF, "Vida aplicada correctamente.");
+        } else {
+            SetPlayerArmour(target, float(porcentaje));
+            SendClientMessage(playerid, 0x66FF66FF, "Chaleco aplicado correctamente.");
+        }
+        SendClientMessage(target, 0x66FF66FF, "Un admin actualizo tu vida/chaleco.");
+        return 1;
+    }
     if(dialogid == DIALOG_PLANTAR) {
         if(!response) return 1;
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
@@ -3806,14 +3903,39 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
                 }
             }
             if(newstate == PLAYER_STATE_DRIVER && GasVehiculo[vehid] <= 0) {
-                new Float:vx, Float:vy, Float:vz;
-                GetVehicleVelocity(vehid, vx, vy, vz);
-                SetVehicleVelocity(vehid, vx * 0.2, vy * 0.2, vz);
+                new engine, lights, alarm, doors, bonnet, boot, objective;
+                GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
+                if(engine != 0) SetVehicleParamsEx(vehid, 0, lights, alarm, doors, bonnet, boot, objective);
+                SetVehicleVelocity(vehid, 0.0, 0.0, 0.0);
+                UltimoAvisoGasCeroTick[playerid] = GetTickCount();
                 SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a una gasolinera y usa /llenar para repostar.");
             }
         }
     } else {
+        UltimoVehiculoGasMostrado[playerid] = INVALID_VEHICLE_ID;
         PlayerTextDrawHide(playerid, BarraGas[playerid]);
+    }
+    return 1;
+}
+
+public OnPlayerUpdate(playerid) {
+    if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
+    if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
+        new vehid = GetPlayerVehicleID(playerid);
+        if(vehid != INVALID_VEHICLE_ID) {
+            if(!GasInitVehiculo[vehid]) { GasInitVehiculo[vehid] = true; GasVehiculo[vehid] = 70 + random(31); }
+            if(UltimoVehiculoGasMostrado[playerid] != vehid) ActualizarGasTextoVehiculo(playerid);
+            if(GasVehiculo[vehid] <= 0) {
+                new engine, lights, alarm, doors, bonnet, boot, objective;
+                GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
+                if(engine != 0) SetVehicleParamsEx(vehid, 0, lights, alarm, doors, bonnet, boot, objective);
+                SetVehicleVelocity(vehid, 0.0, 0.0, 0.0);
+                if(GetTickCount() - UltimoAvisoGasCeroTick[playerid] > 3000) {
+                    UltimoAvisoGasCeroTick[playerid] = GetTickCount();
+                    SendClientMessage(playerid, 0xFF0000FF, "Este vehiculo esta sin gasolina y no puede moverse.");
+                }
+            }
+        }
     }
     return 1;
 }
@@ -4442,7 +4564,8 @@ stock ActualizarGasTextoVehiculo(playerid) {
     if(GetPlayerState(playerid) != PLAYER_STATE_DRIVER && GetPlayerState(playerid) != PLAYER_STATE_PASSENGER) return 1;
     new veh = GetPlayerVehicleID(playerid);
     if(veh == INVALID_VEHICLE_ID) return 1;
-    if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 100; }
+    UltimoVehiculoGasMostrado[playerid] = veh;
+    if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 70 + random(31); }
     new gt[16]; format(gt, sizeof(gt), "G: %d", GasVehiculo[veh]);
     PlayerTextDrawSetString(playerid, BarraGas[playerid], gt);
     PlayerTextDrawShow(playerid, BarraGas[playerid]);
@@ -4933,7 +5056,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco", "Abrir", "Cerrar");
     return 1;
 }
 
