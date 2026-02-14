@@ -89,6 +89,7 @@
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_PRENDAS "prendas_config.txt"
 #define PATH_EDITMAP "editmap.txt"
+#define PATH_VENTA_AUTOS "venta_autos_config.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -662,6 +663,8 @@ stock GetVentaAutoByListIndex(listindex);
 stock ShowVentaAutosAdminMenu(playerid);
 stock CargarPrendasConfig();
 stock GuardarPrendasConfig();
+stock CargarVentaAutosConfig();
+stock GuardarVentaAutosConfig();
 stock CrearPrendasDefault();
 stock ShowPrendasMenu(playerid);
 stock AplicarPrendaJugador(playerid, idx);
@@ -753,6 +756,7 @@ public OnGameModeInit() {
 
     CargarPuntosMovibles();
     CargarPrendasConfig();
+    CargarVentaAutosConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
@@ -3158,9 +3162,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return 1;
         new slot = GetEditMapSlotByListIndex(listitem);
         if(slot == -1) return SendClientMessage(playerid, -1, "Objeto invalido.");
-        if(EditMapData[slot][emObj] != 0) DestroyObject(EditMapData[slot][emObj]);
+        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) DestroyObject(EditMapData[slot][emObj]);
         EditMapData[slot][emActivo] = false;
-        EditMapData[slot][emObj] = 0;
+        EditMapData[slot][emObj] = INVALID_OBJECT_ID;
         GuardarEditMap();
         SendClientMessage(playerid, 0xFFAA00FF, "Objeto eliminado del editmap.");
         return ShowEditMapDeleteList(playerid);
@@ -3193,9 +3197,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
 
         if(listitem == 1) {
-            if(EditMapData[slot][emObj] != 0) DestroyObject(EditMapData[slot][emObj]);
+            if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) DestroyObject(EditMapData[slot][emObj]);
             EditMapData[slot][emActivo] = false;
-            EditMapData[slot][emObj] = 0;
+            EditMapData[slot][emObj] = INVALID_OBJECT_ID;
             GuardarEditMap();
             EditMapListaSlotSeleccionado[playerid] = -1;
             SendClientMessage(playerid, 0xFFAA00FF, "Objeto eliminado del editmap.");
@@ -3497,6 +3501,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo) {
                 VentaAutosData[i][vaPrecio] = precio;
                 VentaAutosData[i][vaStock] += stockVehiculos;
+                GuardarVentaAutosConfig();
                 SendClientMessage(playerid, 0x00FF00FF, "Auto actualizado correctamente en el concesionario.");
                 ActualizarLabelVentaAutos();
                 return ShowVentaAutosAdminMenu(playerid);
@@ -3509,6 +3514,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 VentaAutosData[i][vaModelo] = modelo;
                 VentaAutosData[i][vaPrecio] = precio;
                 VentaAutosData[i][vaStock] = stockVehiculos;
+                GuardarVentaAutosConfig();
                 SendClientMessage(playerid, 0x00FF00FF, "Auto agregado correctamente al concesionario.");
                 ActualizarLabelVentaAutos();
                 return ShowVentaAutosAdminMenu(playerid);
@@ -3526,6 +3532,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VentaAutosData[item][vaModelo] = 0;
         VentaAutosData[item][vaPrecio] = 0;
         VentaAutosData[item][vaStock] = 0;
+        GuardarVentaAutosConfig();
         SendClientMessage(playerid, 0x00FF00FF, "Modelo eliminado de la venta.");
         ActualizarLabelVentaAutos();
         return ShowVentaAutosAdminMenu(playerid);
@@ -4035,6 +4042,7 @@ public AutoGuardadoGlobal() {
     GuardarCasas();
     GuardarPuntosMovibles();
     GuardarEditMap();
+    GuardarVentaAutosConfig();
     return 1;
 }
 
@@ -5711,13 +5719,13 @@ public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:respon
         EditMapData[slot][emRX] = fRotX;
         EditMapData[slot][emRY] = fRotY;
         EditMapData[slot][emRZ] = fRotZ;
-        if(EditMapData[slot][emObj] != 0) SetObjectPos(EditMapData[slot][emObj], fX, fY, fZ);
-        if(EditMapData[slot][emObj] != 0) SetObjectRot(EditMapData[slot][emObj], fRotX, fRotY, fRotZ);
+        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectPos(EditMapData[slot][emObj], fX, fY, fZ);
+        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectRot(EditMapData[slot][emObj], fRotX, fRotY, fRotZ);
         GuardarEditMap();
         SendClientMessage(playerid, 0x66FF66FF, "Objeto de editmap guardado.");
     } else if(response == EDIT_RESPONSE_CANCEL) {
-        if(EditMapData[slot][emObj] != 0) SetObjectPos(EditMapData[slot][emObj], EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ]);
-        if(EditMapData[slot][emObj] != 0) SetObjectRot(EditMapData[slot][emObj], EditMapData[slot][emRX], EditMapData[slot][emRY], EditMapData[slot][emRZ]);
+        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectPos(EditMapData[slot][emObj], EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ]);
+        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectRot(EditMapData[slot][emObj], EditMapData[slot][emRX], EditMapData[slot][emRY], EditMapData[slot][emRZ]);
         SendClientMessage(playerid, 0xFFAA00FF, "Edicion cancelada.");
     }
     EditMapEditandoSlot[playerid] = -1;
@@ -5821,6 +5829,48 @@ stock CargarEditMap() {
         EditMapData[TotalEditMap][emObj] = CreateObject(modelid, x, y, z, rx, ry, rz);
         TotalEditMap++;
     }
+    fclose(h);
+    return 1;
+}
+
+stock GuardarVentaAutosConfig() {
+    new File:h = fopen(PATH_VENTA_AUTOS, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+        format(line, sizeof(line), "%d %d %d %d\n", VentaAutosData[i][vaActiva], VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock]);
+        fwrite(h, line);
+    }
+
+    fclose(h);
+    return 1;
+}
+
+stock CargarVentaAutosConfig() {
+    for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+        VentaAutosData[i][vaActiva] = false;
+        VentaAutosData[i][vaModelo] = 0;
+        VentaAutosData[i][vaPrecio] = 0;
+        VentaAutosData[i][vaStock] = 0;
+    }
+
+    new File:h = fopen(PATH_VENTA_AUTOS, io_read), line[96];
+    if(!h) {
+        GuardarVentaAutosConfig();
+        return 1;
+    }
+
+    new i = 0;
+    while(fread(h, line) && i < MAX_AUTOS_VENTA) {
+        new idx;
+        VentaAutosData[i][vaActiva] = strval(strtok(line, idx)) != 0;
+        VentaAutosData[i][vaModelo] = strval(strtok(line, idx));
+        VentaAutosData[i][vaPrecio] = strval(strtok(line, idx));
+        VentaAutosData[i][vaStock] = strval(strtok(line, idx));
+        i++;
+    }
+
     fclose(h);
     return 1;
 }
