@@ -172,6 +172,12 @@
 #define DIALOG_EDITMAP_DELETE_LIST 91
 #define DIALOG_EDITMAP_LISTA 92
 #define DIALOG_EDITMAP_LISTA_ACCION 93
+#define DIALOG_EDITMAP_ADD_NOMBRE 94
+#define DIALOG_ADMIN_SANCION_CONCEPTO 95
+#define DIALOG_ADMIN_SANCION_ID 96
+#define DIALOG_ADMIN_SANCION_MINUTOS 97
+#define DIALOG_ADMIN_UNSAN_ID 98
+#define DIALOG_ADMIN_UNSAN_MOTIVO 99
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -404,6 +410,7 @@ new Float:PlayerPrendaScaleZ[MAX_PLAYERS][MAX_PRENDAS];
 enum eEditMapData {
     bool:emActivo,
     emModelo,
+    emNombre[32],
     Float:emX,
     Float:emY,
     Float:emZ,
@@ -416,7 +423,16 @@ new EditMapData[MAX_EDITMAP_OBJECTS][eEditMapData];
 new TotalEditMap;
 new EditMapEditandoSlot[MAX_PLAYERS] = {-1, ...};
 new EditMapListaSlotSeleccionado[MAX_PLAYERS] = {-1, ...};
+new EditMapModeloPendiente[MAX_PLAYERS];
 new PlayerSkinGuardada[MAX_PLAYERS];
+
+new bool:PlayerSancionado[MAX_PLAYERS];
+new SancionConcepto[MAX_PLAYERS];
+new SancionAdminIdPendiente[MAX_PLAYERS] = {-1, ...};
+new UnsanTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new SancionFinTick[MAX_PLAYERS];
+new Float:SancionPos[MAX_PLAYERS][3];
+new Text3D:SancionLabel[MAX_PLAYERS] = {Text3D:-1, ...};
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -703,6 +719,10 @@ stock ShowEditMapDeleteList(playerid);
 stock ShowEditMapViewList(playerid);
 stock GetEditMapSlotByListIndex(listindex);
 stock GetEditMapSlotLibre();
+stock GetConceptoSancionNombre(concepto, dest[], len);
+stock AplicarSancionJugador(adminid, targetid, concepto, minutos);
+stock RemoverSancionJugador(targetid);
+stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
 
 // ================= [ MAIN & INIT ] =================
@@ -1779,6 +1799,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return MostrarDialogoAdmin(playerid);
     }
 
+    if(!strcmp(cmd, "/reglas", true)) {
+        return ShowReglasDialog(playerid);
+    }
+
     if(!strcmp(cmd, "/editmp", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         return ShowEditMapMenu(playerid);
@@ -2214,7 +2238,17 @@ public OnPlayerConnect(playerid) {
     GPSVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
     EditMapEditandoSlot[playerid] = -1;
     EditMapListaSlotSeleccionado[playerid] = -1;
+    EditMapModeloPendiente[playerid] = 0;
     PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
+    PlayerSancionado[playerid] = false;
+    SancionConcepto[playerid] = 0;
+    SancionAdminIdPendiente[playerid] = -1;
+    UnsanTargetPendiente[playerid] = -1;
+    SancionFinTick[playerid] = 0;
+    SancionPos[playerid][0] = 0.0;
+    SancionPos[playerid][1] = 0.0;
+    SancionPos[playerid][2] = 0.0;
+    SancionLabel[playerid] = Text3D:-1;
     InvSemillaHierba[playerid] = 0;
     InvSemillaFlor[playerid] = 0;
     InvHierba[playerid] = 0;
@@ -2271,6 +2305,10 @@ public OnPlayerSpawn(playerid) {
     }
     if(sz < -20.0 || sz > 200.0) sz = 13.33;
     SetPlayerPos(playerid, sx, sy, sz + 0.5);
+    if(PlayerSancionado[playerid]) {
+        SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
+        TogglePlayerControllable(playerid, false);
+    }
     SetCameraBehindPlayer(playerid);
     PlayerTextDrawShow(playerid, BarraHambre[playerid]);
     PlayerTextDrawHide(playerid, BarraGas[playerid]);
@@ -2968,6 +3006,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 7) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_ID, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID del jugador", "Siguiente", "Atras");
         if(listitem == 8) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_TIPO, DIALOG_STYLE_LIST, "Admin - Vida/Chaleco", "Vida\nChaleco", "Siguiente", "Atras");
         if(listitem == 9) return ShowEditMapMenu(playerid);
+        if(listitem == 10) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
+        if(listitem == 11) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
         return 1;
     }
 
@@ -3085,7 +3125,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_EDITMAP_MENU) {
         if(!response) return MostrarDialogoAdmin(playerid);
         if(PlayerAdmin[playerid] < 1) return 1;
-        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "Ingresa ID del modelo GTA (objeto):", "Crear", "Atras");
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "Ingresa ID del modelo GTA (objeto):", "Siguiente", "Atras");
         if(listitem == 1) return ShowEditMapEditList(playerid);
         if(listitem == 2) return ShowEditMapDeleteList(playerid);
         if(listitem == 3) return ShowEditMapViewList(playerid);
@@ -3096,15 +3136,30 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return ShowEditMapMenu(playerid);
         if(PlayerAdmin[playerid] < 1) return 1;
         new modelid = strval(inputtext);
-        if(modelid < 300 || modelid > 20000) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "ID invalido. Ingresa un modelo valido (300-20000):", "Crear", "Atras");
+        if(modelid < 300 || modelid > 20000) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "ID invalido. Ingresa un modelo valido (300-20000):", "Siguiente", "Atras");
         new slot = GetEditMapSlotLibre();
         if(slot == -1) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
+        EditMapModeloPendiente[playerid] = modelid;
+        return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_NOMBRE, DIALOG_STYLE_INPUT, "EditMap - Nombre", "Ingresa nombre para identificar este objeto en la lista:", "Crear", "Atras");
+    }
+
+    if(dialogid == DIALOG_EDITMAP_ADD_NOMBRE) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "Ingresa ID del modelo GTA (objeto):", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!inputtext[0]) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_NOMBRE, DIALOG_STYLE_INPUT, "EditMap - Nombre", "Nombre invalido. Ingresa un nombre para identificar este objeto:", "Crear", "Atras");
+
+        new slot = GetEditMapSlotLibre();
+        if(slot == -1) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
+
+        new modelid = EditMapModeloPendiente[playerid];
+        if(modelid < 300 || modelid > 20000) return SendClientMessage(playerid, -1, "Modelo pendiente invalido. Intenta de nuevo.");
 
         new Float:px, Float:py, Float:pz;
         GetPlayerPos(playerid, px, py, pz);
 
         EditMapData[slot][emActivo] = true;
         EditMapData[slot][emModelo] = modelid;
+        format(EditMapData[slot][emNombre], 32, "%s", inputtext);
         EditMapData[slot][emX] = px;
         EditMapData[slot][emY] = py + 2.0;
         EditMapData[slot][emZ] = pz;
@@ -3116,6 +3171,56 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         EditMapEditandoSlot[playerid] = slot;
         EditObject(playerid, EditMapData[slot][emObj]);
         SendClientMessage(playerid, 0x66FF66FF, "Objeto creado. Ajusta posicion/rotacion y confirma para guardar.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_SANCION_CONCEPTO) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(listitem < 0 || listitem > 8) return 1;
+        SancionConcepto[playerid] = listitem;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_ID, DIALOG_STYLE_INPUT, "Admin - Sancionar", "Ingresa ID del jugador", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SANCION_ID) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        SancionAdminIdPendiente[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_MINUTOS, DIALOG_STYLE_INPUT, "Admin - Sancionar", "Ingresa minutos de sancion", "Sancionar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SANCION_MINUTOS) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_ID, DIALOG_STYLE_INPUT, "Admin - Sancionar", "Ingresa ID del jugador", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new minutos = strval(inputtext);
+        new id = SancionAdminIdPendiente[playerid];
+        if(!IsPlayerConnected(id) || minutos <= 0) return SendClientMessage(playerid, -1, "Datos invalidos para sancionar.");
+        return AplicarSancionJugador(playerid, id, SancionConcepto[playerid], minutos);
+    }
+
+    if(dialogid == DIALOG_ADMIN_UNSAN_ID) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id) || !PlayerSancionado[id]) return SendClientMessage(playerid, -1, "ID invalido o el jugador no esta sancionado.");
+        UnsanTargetPendiente[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_MOTIVO, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Escribe motivo de liberacion", "Liberar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_UNSAN_MOTIVO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new id = UnsanTargetPendiente[playerid];
+        if(!IsPlayerConnected(id) || !PlayerSancionado[id]) return SendClientMessage(playerid, -1, "El jugador ya no esta sancionado.");
+        if(!inputtext[0]) return SendClientMessage(playerid, -1, "Debes indicar un motivo.");
+        RemoverSancionJugador(id);
+        new msg[160], admName[MAX_PLAYER_NAME], tarName[MAX_PLAYER_NAME];
+        GetPlayerName(playerid, admName, sizeof(admName));
+        GetPlayerName(id, tarName, sizeof(tarName));
+        format(msg, sizeof(msg), "AdmCmd: %s libero de sancion a %s. Motivo: %s", admName, tarName, inputtext);
+        SendClientMessageToAll(0x66FF66FF, msg);
         return 1;
     }
 
@@ -4060,6 +4165,11 @@ public OnPlayerDisconnect(playerid, reason) {
         PlayerInCasa[playerid] = -1;
     }
     if(GasRefuelTimer[playerid] != -1) { KillTimer(GasRefuelTimer[playerid]); GasRefuelTimer[playerid] = -1; }
+    if(SancionLabel[playerid] != Text3D:-1) {
+        Delete3DTextLabel(SancionLabel[playerid]);
+        SancionLabel[playerid] = Text3D:-1;
+    }
+    PlayerSancionado[playerid] = false;
     GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
@@ -4173,6 +4283,25 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
 
 public OnPlayerUpdate(playerid) {
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
+    if(PlayerSancionado[playerid]) {
+        new restante = SancionFinTick[playerid] - GetTickCount();
+        if(restante <= 0) {
+            RemoverSancionJugador(playerid);
+            SendClientMessage(playerid, 0x66FF66FF, "Tu sancion ha terminado. Ya puedes moverte nuevamente.");
+        } else {
+            TogglePlayerControllable(playerid, false);
+            SetPlayerHealth(playerid, 100.0);
+            SetPlayerArmour(playerid, 100.0);
+            SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
+            new mins = restante / 60000;
+            new secs = (restante / 1000) % 60;
+            new conceptoNombre[16], labelText[96];
+            GetConceptoSancionNombre(SancionConcepto[playerid], conceptoNombre, sizeof(conceptoNombre));
+            format(labelText, sizeof(labelText), "Sancionado por: %s\nTiempo restante: %02d:%02d min", conceptoNombre, mins, secs);
+            if(SancionLabel[playerid] != Text3D:-1) Update3DTextLabelText(SancionLabel[playerid], 0xFF4444FF, labelText);
+            SetPlayerDrunkLevel(playerid, 0);
+        }
+    }
     if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
         new vehid = GetPlayerVehicleID(playerid);
         if(vehid != INVALID_VEHICLE_ID) {
@@ -5353,7 +5482,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco\nEditmap", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco\nEditmap\nSancionar\nQuitar sancion", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -5789,7 +5918,7 @@ stock ShowEditMapEditList(playerid) {
     list[0] = EOS;
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
-        format(line, sizeof(line), "Slot %d | Model %d", i, EditMapData[i][emModelo]);
+        format(line, sizeof(line), "Slot %d | %s | Model %d", i, EditMapData[i][emNombre], EditMapData[i][emModelo]);
         if(count > 0) strcat(list, "\n");
         strcat(list, line);
         count++;
@@ -5804,7 +5933,7 @@ stock ShowEditMapDeleteList(playerid) {
     list[0] = EOS;
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
-        format(line, sizeof(line), "Slot %d | Model %d", i, EditMapData[i][emModelo]);
+        format(line, sizeof(line), "Slot %d | %s | Model %d", i, EditMapData[i][emNombre], EditMapData[i][emModelo]);
         if(count > 0) strcat(list, "\n");
         strcat(list, line);
         count++;
@@ -5814,12 +5943,12 @@ stock ShowEditMapDeleteList(playerid) {
 }
 
 stock ShowEditMapViewList(playerid) {
-    static list[4096], line[128];
+    static list[4096], line[160];
     new count;
     list[0] = EOS;
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
-        format(line, sizeof(line), "Slot %d | Model %d | %.1f %.1f %.1f", i, EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ]);
+        format(line, sizeof(line), "Slot %d | %s | Model %d | %.1f %.1f %.1f", i, EditMapData[i][emNombre], EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ]);
         if(count > 0) strcat(list, "\n");
         strcat(list, line);
         count++;
@@ -5832,10 +5961,16 @@ stock GuardarEditMap() {
     new File:h = fopen(PATH_EDITMAP, io_write);
     if(!h) return 0;
 
-    new line[160];
+    new line[220];
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
-        format(line, sizeof(line), "%d %f %f %f %f %f %f\n", EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ], EditMapData[i][emRX], EditMapData[i][emRY], EditMapData[i][emRZ]);
+        new nombre[32];
+        format(nombre, sizeof(nombre), "%s", EditMapData[i][emNombre]);
+        for(new c = 0; c < sizeof(nombre); c++) {
+            if(nombre[c] == EOS) break;
+            if(nombre[c] == ' ') nombre[c] = '_';
+        }
+        format(line, sizeof(line), "%d %f %f %f %f %f %f %s\n", EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ], EditMapData[i][emRX], EditMapData[i][emRY], EditMapData[i][emRZ], nombre);
         fwrite(h, line);
     }
     fclose(h);
@@ -5846,7 +5981,7 @@ stock CargarEditMap() {
     new File:h = fopen(PATH_EDITMAP, io_read);
     if(!h) return 0;
 
-    new line[160];
+    new line[220];
     TotalEditMap = 0;
     while(fread(h, line) && TotalEditMap < MAX_EDITMAP_OBJECTS) {
         new idx;
@@ -5857,9 +5992,17 @@ stock CargarEditMap() {
         new Float:rx = floatstr(strtok(line, idx));
         new Float:ry = floatstr(strtok(line, idx));
         new Float:rz = floatstr(strtok(line, idx));
+        new nombre[32];
+        format(nombre, sizeof(nombre), "%s", strtok(line, idx));
+        if(!nombre[0]) format(nombre, sizeof(nombre), "Objeto_%d", TotalEditMap);
+        for(new c = 0; c < sizeof(nombre); c++) {
+            if(nombre[c] == EOS) break;
+            if(nombre[c] == '_') nombre[c] = ' ';
+        }
 
         EditMapData[TotalEditMap][emActivo] = true;
         EditMapData[TotalEditMap][emModelo] = modelid;
+        format(EditMapData[TotalEditMap][emNombre], 32, "%s", nombre);
         EditMapData[TotalEditMap][emX] = x;
         EditMapData[TotalEditMap][emY] = y;
         EditMapData[TotalEditMap][emZ] = z;
@@ -5871,6 +6014,74 @@ stock CargarEditMap() {
     }
     fclose(h);
     return 1;
+}
+
+stock GetConceptoSancionNombre(concepto, dest[], len) {
+    if(concepto == 0) return format(dest, len, "PG");
+    if(concepto == 1) return format(dest, len, "DM");
+    if(concepto == 2) return format(dest, len, "MG");
+    if(concepto == 3) return format(dest, len, "RK");
+    if(concepto == 4) return format(dest, len, "CK");
+    if(concepto == 5) return format(dest, len, "NRE");
+    if(concepto == 6) return format(dest, len, "NVVPJ");
+    if(concepto == 7) return format(dest, len, "ER");
+    if(concepto == 8) return format(dest, len, "FR");
+    return format(dest, len, "N/A");
+}
+
+stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
+    if(!IsPlayerConnected(targetid) || minutos <= 0) return 0;
+
+    PlayerSancionado[targetid] = true;
+    SancionConcepto[targetid] = concepto;
+    SancionFinTick[targetid] = GetTickCount() + (minutos * 60000);
+    GetPlayerPos(targetid, SancionPos[targetid][0], SancionPos[targetid][1], SancionPos[targetid][2]);
+    TogglePlayerControllable(targetid, false);
+    SetPlayerHealth(targetid, 100.0);
+    SetPlayerArmour(targetid, 100.0);
+
+    new conceptoNombre[16], labelText[96];
+    GetConceptoSancionNombre(concepto, conceptoNombre, sizeof(conceptoNombre));
+    format(labelText, sizeof(labelText), "Sancionado por: %s\nTiempo restante: %02d:00 min", conceptoNombre, minutos);
+    if(SancionLabel[targetid] != Text3D:-1) Delete3DTextLabel(SancionLabel[targetid]);
+    SancionLabel[targetid] = Create3DTextLabel(labelText, 0xFF4444FF, SancionPos[targetid][0], SancionPos[targetid][1], SancionPos[targetid][2] + 1.0, 25.0, 0);
+    Attach3DTextLabelToPlayer(SancionLabel[targetid], targetid, 0.0, 0.0, 0.7);
+
+    new msg[160], admName[MAX_PLAYER_NAME], tarName[MAX_PLAYER_NAME];
+    GetPlayerName(adminid, admName, sizeof(admName));
+    GetPlayerName(targetid, tarName, sizeof(tarName));
+    format(msg, sizeof(msg), "AdmCmd: %s sanciono a %s por %s durante %d minutos.", admName, tarName, conceptoNombre, minutos);
+    SendClientMessageToAll(0xFF4444FF, msg);
+    SendClientMessage(targetid, 0xFF4444FF, "Has sido sancionado. Permaneceras congelado hasta terminar tu tiempo.");
+    return 1;
+}
+
+stock RemoverSancionJugador(targetid) {
+    if(!IsPlayerConnected(targetid)) return 0;
+    PlayerSancionado[targetid] = false;
+    SancionFinTick[targetid] = 0;
+    TogglePlayerControllable(targetid, true);
+    if(SancionLabel[targetid] != Text3D:-1) {
+        Delete3DTextLabel(SancionLabel[targetid]);
+        SancionLabel[targetid] = Text3D:-1;
+    }
+    return 1;
+}
+
+stock ShowReglasDialog(playerid) {
+    new reglasTexto[1024];
+    format(reglasTexto, sizeof(reglasTexto),
+        "Conceptos:                              Tiempo de Sancion:\n"
+        "PG: Acciones irreales.                 De 10 minutos a 1 hora.\n"
+        "DM: Matar sin rol.                     De 1 hora a 3 horas.\n"
+        "MG: Usar info OOC.                     De 10 minutos a 30 minutos.\n"
+        "RK: Vengarse tras morir.               De 1 hora a 2 horas.\n"
+        "CK: Matar atropellando.                De 1 hora a 3 horas.\n"
+        "NRE: No rolear entorno.                De 1 hora a 5 horas.\n"
+        "NVVPJ: No valorar vida.                De 30 minutos a 1 hora.\n"
+        "ER: Evadir rol.                        De 1 hora a 2 hora.\n"
+        "FR: Forzar rol.                        De 30 minutos a 10 hora.");
+    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Reglas del servidor", reglasTexto, "Cerrar", "");
 }
 
 stock GuardarVentaAutosConfig() {
