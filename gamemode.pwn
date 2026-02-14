@@ -88,6 +88,7 @@
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_PRENDAS "prendas_config.txt"
+#define PATH_EDITMAP "editmap.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -163,6 +164,11 @@
 #define DIALOG_ADMIN_VIDA_CHALECO_VALOR 85
 #define DIALOG_CREAR_CASA_INTERIOR 86
 #define DIALOG_CREAR_CASA_PRECIO 87
+#define DIALOG_EDITMAP_MENU 88
+#define DIALOG_EDITMAP_ADD_MODEL 89
+#define DIALOG_EDITMAP_EDIT_LIST 90
+#define DIALOG_EDITMAP_DELETE_LIST 91
+#define DIALOG_EDITMAP_LISTA 92
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -172,6 +178,7 @@
 #define MAX_CAJAS 128
 #define MAX_PREPIEZA_POINTS 64
 #define MAX_PRENDAS 10
+#define MAX_EDITMAP_OBJECTS 500
 #define MAX_PRENDAS_USUARIO 5
 #define PRECIO_MAZO 10000
 #define PRECIO_TELEFONO 10000
@@ -390,6 +397,21 @@ new Float:PlayerPrendaRotZ[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleX[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleY[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleZ[MAX_PLAYERS][MAX_PRENDAS];
+
+enum eEditMapData {
+    bool:emActivo,
+    emModelo,
+    Float:emX,
+    Float:emY,
+    Float:emZ,
+    Float:emRX,
+    Float:emRY,
+    Float:emRZ,
+    emObj
+}
+new EditMapData[MAX_EDITMAP_OBJECTS][eEditMapData];
+new TotalEditMap;
+new EditMapEditandoSlot[MAX_PLAYERS] = {-1, ...};
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -666,6 +688,13 @@ stock CargarPuntosMovibles();
 stock ShowTelefonoMenu(playerid);
 stock ShowTelefonoVehiculosMenu(playerid);
 stock GetTelefonoVehiculoByListIndex(playerid, listindex);
+stock GuardarEditMap();
+stock CargarEditMap();
+stock ShowEditMapMenu(playerid);
+stock ShowEditMapEditList(playerid);
+stock ShowEditMapDeleteList(playerid);
+stock ShowEditMapViewList(playerid);
+stock GetEditMapSlotByListIndex(listindex);
 
 // ================= [ MAIN & INIT ] =================
 main() {
@@ -734,6 +763,7 @@ public OnGameModeInit() {
     CargarHornos();
     CargarCajasLoot();
     CargarPrepiezaPoints();
+    CargarEditMap();
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -1767,6 +1797,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/admm", true)) {
         if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
         return MostrarDialogoAdmin(playerid);
+    }
+
+    if(!strcmp(cmd, "/editmp", true)) {
+        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        return ShowEditMapMenu(playerid);
     }
 
     if(!strcmp(cmd, "/crearmina", true)) {
@@ -2949,6 +2984,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 6) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "Admin - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
         if(listitem == 7) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_ID, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID del jugador", "Siguiente", "Atras");
         if(listitem == 8) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_TIPO, DIALOG_STYLE_LIST, "Admin - Vida/Chaleco", "Vida\nChaleco", "Siguiente", "Atras");
+        if(listitem == 9) return ShowEditMapMenu(playerid);
         return 1;
     }
 
@@ -3060,6 +3096,72 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
         AdminVidaChalecoTargetPendiente[playerid] = id;
         return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_VALOR, DIALOG_STYLE_INPUT, "Admin - Vida/Chaleco", "Ingresa porcentaje (0-100)", "Aplicar", "Atras");
+    }
+
+    if(dialogid == DIALOG_EDITMAP_MENU) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "Ingresa ID del modelo GTA (objeto):", "Crear", "Atras");
+        if(listitem == 1) return ShowEditMapEditList(playerid);
+        if(listitem == 2) return ShowEditMapDeleteList(playerid);
+        if(listitem == 3) return ShowEditMapViewList(playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_EDITMAP_ADD_MODEL) {
+        if(!response) return ShowEditMapMenu(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new modelid = strval(inputtext);
+        if(modelid < 300 || modelid > 20000) return ShowPlayerDialog(playerid, DIALOG_EDITMAP_ADD_MODEL, DIALOG_STYLE_INPUT, "EditMap - Agregar", "ID invalido. Ingresa un modelo valido (300-20000):", "Crear", "Atras");
+        if(TotalEditMap >= MAX_EDITMAP_OBJECTS) return SendClientMessage(playerid, -1, "Limite de objetos EditMap alcanzado.");
+
+        new Float:px, Float:py, Float:pz;
+        GetPlayerPos(playerid, px, py, pz);
+
+        new slot = TotalEditMap;
+        EditMapData[slot][emActivo] = true;
+        EditMapData[slot][emModelo] = modelid;
+        EditMapData[slot][emX] = px;
+        EditMapData[slot][emY] = py + 2.0;
+        EditMapData[slot][emZ] = pz;
+        EditMapData[slot][emRX] = 0.0;
+        EditMapData[slot][emRY] = 0.0;
+        EditMapData[slot][emRZ] = 0.0;
+        EditMapData[slot][emObj] = CreateObject(modelid, EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ], 0.0, 0.0, 0.0);
+        TotalEditMap++;
+        EditMapEditandoSlot[playerid] = slot;
+        EditObject(playerid, EditMapData[slot][emObj]);
+        SendClientMessage(playerid, 0x66FF66FF, "Objeto creado. Ajusta posicion/rotacion y confirma para guardar.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_EDITMAP_EDIT_LIST) {
+        if(!response) return ShowEditMapMenu(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new slot = GetEditMapSlotByListIndex(listitem);
+        if(slot == -1) return SendClientMessage(playerid, -1, "Objeto invalido.");
+        EditMapEditandoSlot[playerid] = slot;
+        EditObject(playerid, EditMapData[slot][emObj]);
+        SendClientMessage(playerid, 0x66FF66FF, "Editando objeto seleccionado. Confirma para guardar.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_EDITMAP_DELETE_LIST) {
+        if(!response) return ShowEditMapMenu(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new slot = GetEditMapSlotByListIndex(listitem);
+        if(slot == -1) return SendClientMessage(playerid, -1, "Objeto invalido.");
+        if(EditMapData[slot][emObj] != 0) DestroyObject(EditMapData[slot][emObj]);
+        EditMapData[slot][emActivo] = false;
+        EditMapData[slot][emObj] = 0;
+        GuardarEditMap();
+        SendClientMessage(playerid, 0xFFAA00FF, "Objeto eliminado del editmap.");
+        return ShowEditMapDeleteList(playerid);
+    }
+
+    if(dialogid == DIALOG_EDITMAP_LISTA) {
+        if(!response) return ShowEditMapMenu(playerid);
+        return ShowEditMapMenu(playerid);
     }
 
     if(dialogid == DIALOG_ADMIN_VIDA_CHALECO_VALOR) {
@@ -3862,6 +3964,7 @@ stock ActualizarNivelPJ(playerid) {
 public ChequearLimitesMapa() {
     new Float:p[3], Float:h;
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
+        if(GetPlayerInterior(i) != 0 || GetPlayerVirtualWorld(i) != 0 || PlayerInCasa[i] != -1) continue;
         GetPlayerPos(i, p[0], p[1], p[2]);
         if(p[0] > LIMITE_X_MAX || p[0] < LIMITE_X_MIN || p[1] > LIMITE_Y_MAX || p[1] < LIMITE_Y_MIN) {
             GameTextForPlayer(i, "~r~REGRESA!", 1000, 3);
@@ -3875,6 +3978,7 @@ public AutoGuardadoGlobal() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i)) GuardarCuenta(i);
     GuardarCasas();
     GuardarPuntosMovibles();
+    GuardarEditMap();
     return 1;
 }
 
@@ -5148,7 +5252,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco\nEditmap", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -5535,5 +5639,132 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
         SendClientMessage(playerid, 0x00FF00FF, "Posicion de prenda guardada.");
     }
     PrendaMoveIndex[playerid] = -1;
+    return 1;
+}
+
+public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:response, Float:fX, Float:fY, Float:fZ, Float:fRotX, Float:fRotY, Float:fRotZ) {
+    #pragma unused playerobject
+    #pragma unused objectid
+    new slot = EditMapEditandoSlot[playerid];
+    if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo]) return 1;
+
+    if(response == EDIT_RESPONSE_FINAL) {
+        EditMapData[slot][emX] = fX;
+        EditMapData[slot][emY] = fY;
+        EditMapData[slot][emZ] = fZ;
+        EditMapData[slot][emRX] = fRotX;
+        EditMapData[slot][emRY] = fRotY;
+        EditMapData[slot][emRZ] = fRotZ;
+        if(EditMapData[slot][emObj] != 0) SetObjectPos(EditMapData[slot][emObj], fX, fY, fZ);
+        if(EditMapData[slot][emObj] != 0) SetObjectRot(EditMapData[slot][emObj], fRotX, fRotY, fRotZ);
+        GuardarEditMap();
+        SendClientMessage(playerid, 0x66FF66FF, "Objeto de editmap guardado.");
+    } else if(response == EDIT_RESPONSE_CANCEL) {
+        if(EditMapData[slot][emObj] != 0) SetObjectPos(EditMapData[slot][emObj], EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ]);
+        if(EditMapData[slot][emObj] != 0) SetObjectRot(EditMapData[slot][emObj], EditMapData[slot][emRX], EditMapData[slot][emRY], EditMapData[slot][emRZ]);
+        SendClientMessage(playerid, 0xFFAA00FF, "Edicion cancelada.");
+    }
+    EditMapEditandoSlot[playerid] = -1;
+    return 1;
+}
+
+stock ShowEditMapMenu(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_EDITMAP_MENU, DIALOG_STYLE_LIST, "EditMap Admin", "Agregar modelo\nEditar modelo\nEliminar modelo\nVer lista", "Seleccionar", "Cerrar");
+}
+
+stock GetEditMapSlotByListIndex(listindex) {
+    new cur;
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) continue;
+        if(cur == listindex) return i;
+        cur++;
+    }
+    return -1;
+}
+
+stock ShowEditMapEditList(playerid) {
+    new list[4096], line[96], count;
+    list[0] = EOS;
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) continue;
+        format(line, sizeof(line), "Slot %d | Model %d", i, EditMapData[i][emModelo]);
+        if(count > 0) strcat(list, "\n");
+        strcat(list, line);
+        count++;
+    }
+    if(!count) return SendClientMessage(playerid, -1, "No hay objetos en editmap.");
+    return ShowPlayerDialog(playerid, DIALOG_EDITMAP_EDIT_LIST, DIALOG_STYLE_LIST, "EditMap - Editar", list, "Editar", "Atras");
+}
+
+stock ShowEditMapDeleteList(playerid) {
+    new list[4096], line[96], count;
+    list[0] = EOS;
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) continue;
+        format(line, sizeof(line), "Slot %d | Model %d", i, EditMapData[i][emModelo]);
+        if(count > 0) strcat(list, "\n");
+        strcat(list, line);
+        count++;
+    }
+    if(!count) return SendClientMessage(playerid, -1, "No hay objetos para eliminar.");
+    return ShowPlayerDialog(playerid, DIALOG_EDITMAP_DELETE_LIST, DIALOG_STYLE_LIST, "EditMap - Eliminar", list, "Eliminar", "Atras");
+}
+
+stock ShowEditMapViewList(playerid) {
+    new list[4096], line[128], count;
+    list[0] = EOS;
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) continue;
+        format(line, sizeof(line), "Slot %d | Model %d | %.1f %.1f %.1f", i, EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ]);
+        if(count > 0) strcat(list, "\n");
+        strcat(list, line);
+        count++;
+    }
+    if(!count) return SendClientMessage(playerid, -1, "No hay objetos cargados.");
+    return ShowPlayerDialog(playerid, DIALOG_EDITMAP_LISTA, DIALOG_STYLE_LIST, "EditMap - Lista", list, "Volver", "Atras");
+}
+
+stock GuardarEditMap() {
+    new File:h = fopen(PATH_EDITMAP, io_write);
+    if(!h) return 0;
+
+    new line[160];
+    for(new i = 0; i < TotalEditMap; i++) {
+        if(!EditMapData[i][emActivo]) continue;
+        format(line, sizeof(line), "%d %f %f %f %f %f %f\n", EditMapData[i][emModelo], EditMapData[i][emX], EditMapData[i][emY], EditMapData[i][emZ], EditMapData[i][emRX], EditMapData[i][emRY], EditMapData[i][emRZ]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarEditMap() {
+    new File:h = fopen(PATH_EDITMAP, io_read);
+    if(!h) return 0;
+
+    new line[160];
+    TotalEditMap = 0;
+    while(fread(h, line) && TotalEditMap < MAX_EDITMAP_OBJECTS) {
+        new idx;
+        new modelid = strval(strtok(line, idx));
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+        new Float:rx = floatstr(strtok(line, idx));
+        new Float:ry = floatstr(strtok(line, idx));
+        new Float:rz = floatstr(strtok(line, idx));
+
+        EditMapData[TotalEditMap][emActivo] = true;
+        EditMapData[TotalEditMap][emModelo] = modelid;
+        EditMapData[TotalEditMap][emX] = x;
+        EditMapData[TotalEditMap][emY] = y;
+        EditMapData[TotalEditMap][emZ] = z;
+        EditMapData[TotalEditMap][emRX] = rx;
+        EditMapData[TotalEditMap][emRY] = ry;
+        EditMapData[TotalEditMap][emRZ] = rz;
+        EditMapData[TotalEditMap][emObj] = CreateObject(modelid, x, y, z, rx, ry, rz);
+        TotalEditMap++;
+    }
+    fclose(h);
     return 1;
 }
