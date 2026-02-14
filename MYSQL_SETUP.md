@@ -1,5 +1,12 @@
 # Migración de Kame House a MySQL (todo persistente en DB)
 
+## 0) Importante para tu panel (sin Python)
+No necesitas **Python** para esto. Todo se hace con:
+- **Qawno/Pawno** para compilar `gamemode.pwn` y generar `gamemode.amx`.
+- **phpMyAdmin** (o el gestor MySQL de tu hosting) para crear tablas.
+
+Si en tu panel no existe nada de Python, no pasa nada: **no se usa** en esta guía.
+
 Esta guía deja **cuentas + configuraciones del mapa** en MySQL: casas, puntos movibles, minas, hornos, cajas, prepiezas, prendas, editmap, venta de autos y rutas.
 
 ## 1) Configurar conexión en la gamemode
@@ -167,11 +174,24 @@ TRUNCATE TABLE editmap;
 TRUNCATE TABLE venta_autos_config;
 ```
 
-## 4) Subir y arrancar
-1. Compila la gamemode.
-2. Reinicia servidor.
-3. Verifica en consola: `"[MYSQL] Conexion establecida correctamente."`
-4. Entra al server y valida que crea/carga datos normalmente.
+## 4) Compilar en Qawno/Pawno (generar AMX sin errores)
+1. Asegúrate de tener estos archivos en `gamemodes/`:
+   - `gamemode.pwn`
+   - `a_mysql.inc`
+2. Abre `gamemode.pwn` en Qawno/Pawno y guarda (`Ctrl+S`) para compilar.
+3. Debe generarse `gamemode.amx` en la misma carpeta de `gamemode.pwn`.
+
+Si no genera `.amx`, revisa:
+- Que no falte `a_mysql.inc`.
+- Que no estés compilando otro archivo distinto.
+- Que tengas permisos de escritura en la carpeta `gamemodes/`.
+
+## 5) Subir y arrancar servidor
+1. Sube **ambos** archivos: `gamemode.pwn` y `gamemode.amx`.
+2. En `server.cfg`, apunta `gamemode0` al nombre correcto de tu AMX.
+3. Reinicia servidor.
+4. Verifica en consola: `"[MYSQL] Conexion establecida correctamente."`
+5. Entra al server y valida que crea/carga datos normalmente.
 
 ## Nota de operación
 - Con esta versión, las configuraciones principales del mapa ya se guardan/cargan por MySQL.
