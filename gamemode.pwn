@@ -178,6 +178,13 @@
 #define DIALOG_ADMIN_SANCION_MINUTOS 97
 #define DIALOG_ADMIN_UNSAN_ID 98
 #define DIALOG_ADMIN_UNSAN_MOTIVO 99
+#define DIALOG_MOD_MENU 100
+#define DIALOG_ADMIN_ADD_MOD_ID 101
+#define DIALOG_ADMIN_REMOVE_MOD_ID 102
+
+#define RANGO_NINGUNO 0
+#define RANGO_DUENO 1
+#define RANGO_MOD 2
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -1355,7 +1362,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!cmdtext[idx]) return SendClientMessage(playerid, -1, "Uso: /g [mensaje]");
         new string[144], name[MAX_PLAYER_NAME];
         GetPlayerName(playerid, name, sizeof(name));
-        format(string, sizeof(string), "[GLOBAL] %s: %s", name, cmdtext[idx]);
+        new prefijo[16];
+        GetPrefijoGlobal(playerid, prefijo, sizeof(prefijo));
+        if(prefijo[0]) format(string, sizeof(string), "[GLOBAL] %s %s: %s", prefijo, name, cmdtext[idx]);
+        else format(string, sizeof(string), "[GLOBAL] %s: %s", name, cmdtext[idx]);
         SendClientMessageToAll(0x00FFFFFF, string);
         return 1;
     }
@@ -1661,10 +1671,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(PlayerAdmin[playerid] < 1) return 0;
+    if(!EsStaff(playerid)) return 0;
 
     if(!strcmp(cmd, "/crearparada", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new Float:p[3], File:h = fopen(PATH_RUTAS, io_append), line[64];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
         format(line, 64, "%f %f %f\n", p[0], p[1], p[2]);
@@ -1677,7 +1687,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/crearparadapizza", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new Float:p[3], File:h = fopen(PATH_RUTAS_PIZZA, io_append), line[64];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
         format(line, sizeof(line), "%f %f %f\n", p[0], p[1], p[2]);
@@ -1690,7 +1700,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/crearparadabasura", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new Float:p[3], File:h = fopen(PATH_RUTAS_BASURA, io_append), line[64];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
         format(line, sizeof(line), "%f %f %f\n", p[0], p[1], p[2]);
@@ -1705,7 +1715,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
 
     if(!strcmp(cmd, "/ventagas", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         if(GasTotalPuntos >= MAX_GAS_POINTS) return SendClientMessage(playerid, -1, "Limite de gasolineras alcanzado.");
         new Float:gx, Float:gy, Float:gz;
         GetPlayerPos(playerid, gx, gy, gz);
@@ -1724,12 +1734,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
 
     if(!strcmp(cmd, "/agregarauto", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         return SendClientMessage(playerid, -1, "Acercate al concesionario y usa la tecla Y para editar el catalogo.");
     }
 
     if(!strcmp(cmd, "/kick", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], id, razon[64];
         format(tmp, 32, "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /kick [id] [razon]");
@@ -1738,14 +1748,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
         new str[128], n1[24], n2[24];
         GetPlayerName(playerid, n1, 24); GetPlayerName(id, n2, 24);
-        format(str, 128, "AdmCmd: %s expulso a %s. Razon: %s", n1, n2, razon);
+        format(str, 128, "SERVER: %s expulso a %s. Razon: %s", n1, n2, razon);
         SendClientMessageToAll(0xFF0000FF, str);
         Kick(id);
         return 1;
     }
 
     if(!strcmp(cmd, "/dardinero", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], id, monto;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dardinero [id] [monto]");
@@ -1762,13 +1772,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new str[128], n1[MAX_PLAYER_NAME], n2[MAX_PLAYER_NAME];
         GetPlayerName(playerid, n1, sizeof(n1));
         GetPlayerName(id, n2, sizeof(n2));
-        format(str, sizeof(str), "AdmCmd: %s dio $%d a %s.", n1, monto, n2);
+        format(str, sizeof(str), "SERVER: %s dio $%d a %s.", n1, monto, n2);
         SendClientMessageToAll(0x00FF00FF, str);
         return 1;
     }
 
     if(!strcmp(cmd, "/dararma", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new tmp[32], id, arma, muni;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /dararma [id] [arma] [muni]");
@@ -1790,13 +1800,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/adminarmas", true) || !strcmp(cmd, "/adminarma", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         return SendClientMessage(playerid, -1, "Acercate a la armeria y usa la tecla Y para editar armas.");
     }
 
     if(!strcmp(cmd, "/admm", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
-        return MostrarDialogoAdmin(playerid);
+        if(EsDueno(playerid)) return MostrarDialogoAdmin(playerid);
+        if(EsModerador(playerid)) return MostrarDialogoMod(playerid);
+        return SendClientMessage(playerid, -1, "No eres staff.");
     }
 
     if(!strcmp(cmd, "/reglas", true)) {
@@ -1804,12 +1815,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/editmp", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         return ShowEditMapMenu(playerid);
     }
 
     if(!strcmp(cmd, "/crearmina", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(TotalMinas >= MAX_MINAS) return SendClientMessage(playerid, -1, "Limite de minas alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
@@ -1821,7 +1832,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/crearhorno", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(TotalHornos >= MAX_HORNOS) return SendClientMessage(playerid, -1, "Limite de hornos alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         HornoData[TotalHornos][hornoActivo] = true; HornoData[TotalHornos][hornoX] = x; HornoData[TotalHornos][hornoY] = y; HornoData[TotalHornos][hornoZ] = z;
@@ -1832,7 +1843,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/crearcaja", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(TotalCajas >= MAX_CAJAS) return SendClientMessage(playerid, -1, "Limite de cajas alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         CajaDataLoot[TotalCajas][cajaActiva] = true; CajaDataLoot[TotalCajas][cajaX] = x; CajaDataLoot[TotalCajas][cajaY] = y; CajaDataLoot[TotalCajas][cajaZ] = z + 0.25;
@@ -1843,7 +1854,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/crearprepiezas", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(TotalPrepiezaPoints >= MAX_PREPIEZA_POINTS) return SendClientMessage(playerid, -1, "Limite alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         PrepiezaPoints[TotalPrepiezaPoints][ppActivo] = true; PrepiezaPoints[TotalPrepiezaPoints][ppX] = x; PrepiezaPoints[TotalPrepiezaPoints][ppY] = y; PrepiezaPoints[TotalPrepiezaPoints][ppZ] = z;
@@ -1871,26 +1882,26 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/admprendas", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         ShowPrendasAdminMenu(playerid);
         return 1;
     }
 
     if(!strcmp(cmd, "/mover", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nCamper (eliminado)\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
     if(!strcmp(cmd, "/tp", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
         if(AdminMapPos[playerid][0] == 0.0) return SendClientMessage(playerid, -1, "Marca el mapa.");
         SetPlayerPos(playerid, AdminMapPos[playerid][0], AdminMapPos[playerid][1], AdminMapPos[playerid][2]);
         return 1;
     }
 
     if(!strcmp(cmd, "/ir", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
         new tmp[32], id;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /ir [id]");
@@ -1902,6 +1913,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/traer", true)) {
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
         new tmp[32], id;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /traer [id]");
@@ -1914,6 +1926,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/kill", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         new tmp[32], id;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /kill [id]");
@@ -1924,6 +1937,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/cord", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         new Float:x, Float:y, Float:z, str[128];
         GetPlayerPos(playerid, x, y, z);
         format(str, sizeof(str), "Coords: %.4f %.4f %.4f", x, y, z);
@@ -1932,12 +1946,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/sacarveh", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
         new tmp[32], vid;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
         if(!tmp[0]) return SendClientMessage(playerid, -1, "Uso: /sacarveh [idveh]");
         vid = strval(tmp);
-        if(vid < 1 || vid >= MAX_VEHICLES || !IsValidVehicle(vid)) return SendClientMessage(playerid, -1, "Vehiculo invalido.");
+        if(vid >= 400 && vid <= 611) {
+            new encontrado = INVALID_VEHICLE_ID;
+            for(new v = 1; v < MAX_VEHICLES; v++) {
+                if(IsValidVehicle(v) && GetVehicleModel(v) == vid) { encontrado = v; break; }
+            }
+            if(encontrado == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No hay vehiculo activo con ese modelo.");
+            vid = encontrado;
+        }
+        if(vid < 1 || vid >= MAX_VEHICLES || !IsValidVehicle(vid)) return SendClientMessage(playerid, -1, "Vehiculo invalido. Usa ID de vehiculo o modelo GTA (400-611).");
         if(VehTempRestoreTimer[vid] != -1) return SendClientMessage(playerid, -1, "Ese vehiculo ya esta temporalmente retirado.");
         GetVehiclePos(vid, TempVehPos[vid][0], TempVehPos[vid][1], TempVehPos[vid][2]);
         GetVehicleZAngle(vid, TempVehPos[vid][3]);
@@ -1956,7 +1978,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/rc", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
         if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes conducir un vehiculo.");
         new veh = GetPlayerVehicleID(playerid);
         RepairVehicle(veh);
@@ -1966,6 +1988,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/fly", true)) {
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
         AdminFlyActivo[playerid] = !AdminFlyActivo[playerid];
         if(AdminFlyActivo[playerid]) {
             SetPlayerSpecialAction(playerid, SPECIAL_ACTION_USEJETPACK);
@@ -1979,7 +2002,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     // Comandos de casas (solo admin para crear)
     if(!strcmp(cmd, "/crearcasa", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         if(TotalCasas >= MAX_CASAS) return SendClientMessage(playerid, -1, "Maximo de casas alcanzado.");
         return ShowCrearCasaInteriorDialog(playerid);
     }
@@ -2025,7 +2048,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/eliminarcasa", true)) {
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         new casa = GetClosestCasa(playerid);
         if(casa == -1) return SendClientMessage(playerid, -1, "No estas cerca de una casa.");
 
@@ -2163,6 +2186,17 @@ stock sscanf_manual(const string[], &Float:x, &Float:y, &Float:z) {
     z = floatstr(strtok(string, idx));
 }
 
+stock bool:EsDueno(playerid) { return PlayerAdmin[playerid] == RANGO_DUENO; }
+stock bool:EsModerador(playerid) { return PlayerAdmin[playerid] == RANGO_MOD; }
+stock bool:EsStaff(playerid) { return PlayerAdmin[playerid] == RANGO_DUENO || PlayerAdmin[playerid] == RANGO_MOD; }
+
+stock GetPrefijoGlobal(playerid, prefijo[], len) {
+    if(EsDueno(playerid)) format(prefijo, len, "[Dueño]");
+    else if(EsModerador(playerid)) format(prefijo, len, "[MOD]");
+    else prefijo[0] = EOS;
+    return 1;
+}
+
 public OnPlayerClickMap(playerid, Float:fX, Float:fY, Float:fZ) {
     AdminMapPos[playerid][0] = fX; AdminMapPos[playerid][1] = fY; AdminMapPos[playerid][2] = fZ;
     if(PlayerAdmin[playerid] >= 1) SendClientMessage(playerid, -1, "{FFFF00}Punto marcado. Usa /tp para ir al punto.");
@@ -2174,7 +2208,10 @@ public OnPlayerText(playerid, text[]) {
     new string[144], name[MAX_PLAYER_NAME], Float:p[3];
     GetPlayerName(playerid, name, sizeof(name));
     GetPlayerPos(playerid, p[0], p[1], p[2]);
-    format(string, sizeof(string), "%s dice: %s", name, text);
+    new prefijo[16];
+    GetPrefijoGlobal(playerid, prefijo, sizeof(prefijo));
+    if(prefijo[0]) format(string, sizeof(string), "%s %s dice: %s", prefijo, name, text);
+    else format(string, sizeof(string), "%s dice: %s", name, text);
     for(new i = 0; i < MAX_PLAYERS; i++) {
         if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL, p[0], p[1], p[2])) SendClientMessage(i, -1, string);
     }
@@ -2433,7 +2470,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_MOVER_MENU) {
         if(!response) return 1;
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(listitem < 0 || listitem >= _:totalPuntosMovibles) return SendClientMessage(playerid, -1, "Punto invalido.");
 
         new Float:px, Float:py, Float:pz, nombre[48], msg[144];
@@ -2989,7 +3026,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_MENU) {
         if(!response) return 1;
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
         if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_MINERAL_TIPO, DIALOG_STYLE_INPUT, "Admin - Dar minerales", "Tipo mineral (piedra/cobre/hierro/madera/polvora/prepieza/carbon)", "Siguiente", "Atras");
         if(listitem == 2) {
@@ -3008,12 +3045,27 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 9) return ShowEditMapMenu(playerid);
         if(listitem == 10) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
         if(listitem == 11) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
+        if(listitem == 12) return ShowPlayerDialog(playerid, DIALOG_ADMIN_ADD_MOD_ID, DIALOG_STYLE_INPUT, "Asignar Moderador", "Ingresa ID del jugador que sera Moderador", "Asignar", "Atras");
+        if(listitem == 13) return ShowPlayerDialog(playerid, DIALOG_ADMIN_REMOVE_MOD_ID, DIALOG_STYLE_INPUT, "Eliminar Moderador", "Ingresa ID del Moderador a eliminar", "Eliminar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_MOD_MENU) {
+        if(!response) return 1;
+        if(!EsModerador(playerid)) return SendClientMessage(playerid, -1, "No eres Moderador.");
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "MOD - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "MOD - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "MOD - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
+        if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID+1000, DIALOG_STYLE_INPUT, "MOD - Traer jugador", "Ingresa ID del jugador", "Traer", "Atras");
+        if(listitem == 4) { new cmdTp[] = "/tp"; return OnPlayerCommandText(playerid, cmdTp); }
+        if(listitem == 5) { new cmdFly[] = "/fly"; return OnPlayerCommandText(playerid, cmdFly); }
+        if(listitem == 6) { new cmdRc[] = "/rc"; return OnPlayerCommandText(playerid, cmdRc); }
         return 1;
     }
 
     if(dialogid == DIALOG_ADMIN_CREAR_MENU) {
         if(!response) return MostrarDialogoAdmin(playerid);
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(listitem == 0) {
             new cmdCrearParada[] = "/crearparada";
             return OnPlayerCommandText(playerid, cmdCrearParada);
@@ -3047,6 +3099,16 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return OnPlayerCommandText(playerid, cmdVentagas);
         }
         return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_UNSAN_ID+1000) {
+        if(!response) return MostrarDialogoMod(playerid);
+        if(!EsModerador(playerid)) return SendClientMessage(playerid, -1, "No eres Moderador.");
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        new cmdTraer[24];
+        format(cmdTraer, sizeof(cmdTraer), "/traer %d", id);
+        return OnPlayerCommandText(playerid, cmdTraer);
     }
 
     if(dialogid == DIALOG_ADMIN_DAR_DINERO_ID) {
@@ -3184,7 +3246,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_SANCION_ID) {
         if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
-        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!EsStaff(playerid)) return 1;
         new id = strval(inputtext);
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
         SancionAdminIdPendiente[playerid] = id;
@@ -3193,7 +3255,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_SANCION_MINUTOS) {
         if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_ID, DIALOG_STYLE_INPUT, "Admin - Sancionar", "Ingresa ID del jugador", "Siguiente", "Atras");
-        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!EsStaff(playerid)) return 1;
         new minutos = strval(inputtext);
         new id = SancionAdminIdPendiente[playerid];
         if(!IsPlayerConnected(id) || minutos <= 0) return SendClientMessage(playerid, -1, "Datos invalidos para sancionar.");
@@ -3202,7 +3264,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_UNSAN_ID) {
         if(!response) return MostrarDialogoAdmin(playerid);
-        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!EsStaff(playerid)) return 1;
         new id = strval(inputtext);
         if(!IsPlayerConnected(id) || !PlayerSancionado[id]) return SendClientMessage(playerid, -1, "ID invalido o el jugador no esta sancionado.");
         UnsanTargetPendiente[playerid] = id;
@@ -3211,7 +3273,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ADMIN_UNSAN_MOTIVO) {
         if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
-        if(PlayerAdmin[playerid] < 1) return 1;
+        if(!EsStaff(playerid)) return 1;
         new id = UnsanTargetPendiente[playerid];
         if(!IsPlayerConnected(id) || !PlayerSancionado[id]) return SendClientMessage(playerid, -1, "El jugador ya no esta sancionado.");
         if(!inputtext[0]) return SendClientMessage(playerid, -1, "Debes indicar un motivo.");
@@ -3219,9 +3281,36 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new msg[160], admName[MAX_PLAYER_NAME], tarName[MAX_PLAYER_NAME];
         GetPlayerName(playerid, admName, sizeof(admName));
         GetPlayerName(id, tarName, sizeof(tarName));
-        format(msg, sizeof(msg), "AdmCmd: %s libero de sancion a %s. Motivo: %s", admName, tarName, inputtext);
+        format(msg, sizeof(msg), "SERVER: %s libero de sancion a %s. Motivo: %s", admName, tarName, inputtext);
         SendClientMessageToAll(0x66FF66FF, msg);
         return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_ADD_MOD_ID) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        PlayerAdmin[id] = RANGO_MOD;
+        GuardarCuenta(id);
+        SendClientMessage(playerid, 0x66FF66FF, "Moderador asignado correctamente.");
+        new nombreNuevo[MAX_PLAYER_NAME], anuncio[180];
+        GetPlayerName(id, nombreNuevo, sizeof(nombreNuevo));
+        format(anuncio, sizeof(anuncio), "Ahora Kame-House tiene un nuevo Moderador (%s). Felicidades!", nombreNuevo);
+        SendClientMessageToAll(0x66CCFFFF, anuncio);
+        return MostrarDialogoAdmin(playerid);
+    }
+
+    if(dialogid == DIALOG_ADMIN_REMOVE_MOD_ID) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        PlayerAdmin[id] = RANGO_NINGUNO;
+        GuardarCuenta(id);
+        SendClientMessage(playerid, 0x66FF66FF, "Moderador eliminado correctamente.");
+        SendClientMessage(id, 0xFFAA00FF, "Tu rango de Moderador fue removido por un Dueño.");
+        return MostrarDialogoAdmin(playerid);
     }
 
     if(dialogid == DIALOG_EDITMAP_EDIT_LIST) {
@@ -3532,7 +3621,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_VENTA_AUTOS_ADMIN_MENU) {
         if(!response) return 1;
-        if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
         if(!IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
 
         if(listitem == 0) {
@@ -4398,7 +4487,7 @@ stock ShowVentaAutosBuyMenu(playerid) {
 }
 
 stock ShowVentaAutosAdminMenu(playerid) {
-    if(PlayerAdmin[playerid] < 1) return SendClientMessage(playerid, -1, "No eres admin.");
+    if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Dueño.");
     if(!IsNearVentaAutos(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el concesionario para editarlo.");
     ShowPlayerDialog(playerid, DIALOG_VENTA_AUTOS_ADMIN_MENU, DIALOG_STYLE_LIST, "Concesionario Admin", "Agregar/actualizar auto\nQuitar auto", "Seleccionar", "Cerrar");
     return 1;
@@ -4429,7 +4518,7 @@ stock GetVentaAutoByAnyListIndex(listindex) {
 }
 
 stock ShowAdminEditHint(playerid, const nombreSistema[]) {
-    if(PlayerAdmin[playerid] < 1) return 0;
+    if(!EsStaff(playerid)) return 0;
     new msg[96];
     format(msg, sizeof(msg), "Admin: usa la tecla Y aqui para editar %s.", nombreSistema);
     SendClientMessage(playerid, 0xFFE082FF, msg);
@@ -5481,7 +5570,12 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "Panel Admin", "Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco\nEditmap\nSancionar\nQuitar sancion", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{FFD700}✦ Panel Dueño ✦", "{FFFFFF}Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco\nEditmap\nSancionar\nQuitar sancion\nAsignar Moderador\nEliminar Moderador", "Abrir", "Cerrar");
+    return 1;
+}
+
+stock MostrarDialogoMod(playerid) {
+    ShowPlayerDialog(playerid, DIALOG_MOD_MENU, DIALOG_STYLE_LIST, "{66CCFF}✦ Panel Moderador ✦", "{FFFFFF}Sancionar\nQuitar sancion\nIr a jugador (ID)\nTraer jugador (ID)\nTeleport a marca (/tp)\nFly\nReparar vehiculo (/rc)", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -6049,7 +6143,7 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     new msg[160], admName[MAX_PLAYER_NAME], tarName[MAX_PLAYER_NAME];
     GetPlayerName(adminid, admName, sizeof(admName));
     GetPlayerName(targetid, tarName, sizeof(tarName));
-    format(msg, sizeof(msg), "AdmCmd: %s sanciono a %s por %s durante %d minutos.", admName, tarName, conceptoNombre, minutos);
+    format(msg, sizeof(msg), "SERVER: %s sanciono a %s por %s durante %d minutos.", admName, tarName, conceptoNombre, minutos);
     SendClientMessageToAll(0xFF4444FF, msg);
     SendClientMessage(targetid, 0xFF4444FF, "Has sido sancionado. Permaneceras congelado hasta terminar tu tiempo.");
     return 1;
