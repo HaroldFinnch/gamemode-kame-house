@@ -5784,7 +5784,8 @@ stock GetEditMapSlotByListIndex(listindex) {
 }
 
 stock ShowEditMapEditList(playerid) {
-    new list[4096], line[96], count;
+    static list[4096], line[96];
+    new count;
     list[0] = EOS;
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
@@ -5798,7 +5799,8 @@ stock ShowEditMapEditList(playerid) {
 }
 
 stock ShowEditMapDeleteList(playerid) {
-    new list[4096], line[96], count;
+    static list[4096], line[96];
+    new count;
     list[0] = EOS;
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
@@ -5812,7 +5814,8 @@ stock ShowEditMapDeleteList(playerid) {
 }
 
 stock ShowEditMapViewList(playerid) {
-    new list[4096], line[128], count;
+    static list[4096], line[128];
+    new count;
     list[0] = EOS;
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
