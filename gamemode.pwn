@@ -246,7 +246,9 @@ new PlayerPassword[MAX_PLAYERS][16];
 new PlayerAdmin[MAX_PLAYERS];
 new PlayerHambre[MAX_PLAYERS];
 new PlayerText:BarraHambre[MAX_PLAYERS];
+new PlayerText:BarraHambreFondo[MAX_PLAYERS];
 new PlayerText:BarraGas[MAX_PLAYERS];
+new PlayerText:BarraGasFondo[MAX_PLAYERS];
 new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
 new PlayerBankMoney[MAX_PLAYERS];
@@ -728,6 +730,7 @@ stock CrearPuntosFijos();
 stock ShowMaleteroMaletero(playerid, vehid);
 stock PlayerTieneAccesoVehiculo(playerid, vehid);
 stock GetNearbyOwnedVehicle(playerid);
+stock ActualizarBarrasEstado(playerid);
 stock CuentaArmasMaletero(vehid);
 stock FormatearBarraEstado(const etiqueta[], valor, dest[], len);
 stock InitGasSystem();
@@ -1577,11 +1580,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
         if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
 
-        new msg[96], hud[32];
+        new msg[96];
         format(msg, sizeof(msg), "Compraste comida por $%d. Hambre actual: %d/100", PRECIO_COMIDA, PlayerHambre[playerid]);
         SendClientMessage(playerid, 0x00FF00FF, msg);
-        FormatearBarraEstado("Hambre", PlayerHambre[playerid], hud, sizeof(hud));
-        PlayerTextDrawSetString(playerid, BarraHambre[playerid], hud);
+        ActualizarBarrasEstado(playerid);
         return 1;
     }
 
@@ -2394,18 +2396,41 @@ public OnPlayerConnect(playerid) {
     TogglePlayerSpectating(playerid, true);
     TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
-    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 505.0, 150.0, "Hambre: [||||||||||]");
-    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.3, 1.2);
+
+    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 518.0, 150.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 1.1);
+    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 603.0, 0.0);
+    PlayerTextDrawAlignment(playerid, BarraHambreFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, BarraHambreFondo[playerid], 0x00000099);
+    PlayerTextDrawUseBox(playerid, BarraHambreFondo[playerid], true);
+    PlayerTextDrawBoxColour(playerid, BarraHambreFondo[playerid], 0x00000099);
+    PlayerTextDrawFont(playerid, BarraHambreFondo[playerid], TEXT_DRAW_FONT_1);
+
+    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 518.0, 150.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 1.1);
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 603.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
-    PlayerTextDrawSetShadow(playerid, BarraHambre[playerid], 1);
+    PlayerTextDrawUseBox(playerid, BarraHambre[playerid], true);
+    PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 505.0, 164.0, "Gas: [||||||||||]");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.3, 1.2);
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 518.0, 164.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 1.1);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 603.0, 0.0);
+    PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x00000099);
+    PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
+    PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x00000099);
+    PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
+
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 518.0, 164.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 1.1);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 603.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_GAS);
-    PlayerTextDrawSetShadow(playerid, BarraGas[playerid], 1);
+    PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
+    PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
     PlayerInCasa[playerid] = -1;
     CasaInteriorPendiente[playerid] = -1;
@@ -2538,12 +2563,10 @@ public OnPlayerSpawn(playerid) {
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
         if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
     }
-    new hambreHud[32], gasHud[32];
-    FormatearBarraEstado("Hambre", PlayerHambre[playerid], hambreHud, sizeof(hambreHud));
-    FormatearBarraEstado("Gas", 100, gasHud, sizeof(gasHud));
-    PlayerTextDrawSetString(playerid, BarraHambre[playerid], hambreHud);
-    PlayerTextDrawSetString(playerid, BarraGas[playerid], gasHud);
+    ActualizarBarrasEstado(playerid);
+    PlayerTextDrawShow(playerid, BarraHambreFondo[playerid]);
     PlayerTextDrawShow(playerid, BarraHambre[playerid]);
+    PlayerTextDrawShow(playerid, BarraGasFondo[playerid]);
     PlayerTextDrawHide(playerid, BarraGas[playerid]);
     return 1;
 }
@@ -4483,9 +4506,7 @@ public BajarHambre() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
         if(PlayerHambre[i] > 0) {
             PlayerHambre[i]--;
-            new estado[32];
-            FormatearBarraEstado("Hambre", PlayerHambre[i], estado, sizeof(estado));
-            PlayerTextDrawSetString(i, BarraHambre[i], estado);
+            ActualizarBarrasEstado(i);
         } else { new Float:h; GetPlayerHealth(i, h); SetPlayerHealth(i, h-2.0); }
     }
     return 1;
@@ -4689,7 +4710,6 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
                 return 1;
             }
             if(!GasInitVehiculo[vehid]) { GasInitVehiculo[vehid] = true; GasVehiculo[vehid] = 70 + random(31); }
-            PlayerTextDrawShow(playerid, BarraGas[playerid]);
             ActualizarGasTextoVehiculo(playerid);
             if(newstate == PLAYER_STATE_DRIVER && TrabajandoBasurero[playerid] > 0 && BasureroTieneBolsa[playerid]) {
                 if(vehid == BasureroVehiculo[playerid]) {
@@ -4709,6 +4729,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
         }
     } else {
         UltimoVehiculoGasMostrado[playerid] = INVALID_VEHICLE_ID;
+        PlayerTextDrawHide(playerid, BarraGasFondo[playerid]);
         PlayerTextDrawHide(playerid, BarraGas[playerid]);
     }
     return 1;
@@ -5439,13 +5460,28 @@ stock PlayerTieneAccesoVehiculo(playerid, vehid) {
 }
 
 stock GetNearbyOwnedVehicle(playerid) {
+    if(IsPlayerInAnyVehicle(playerid)) {
+        new actual = GetPlayerVehicleID(playerid);
+        if(PlayerTieneAccesoVehiculo(playerid, actual)) return actual;
+    }
+
+    new closest = INVALID_VEHICLE_ID;
+    new Float:minDist = 6.0;
+    new Float:px, Float:py, Float:pz;
+    GetPlayerPos(playerid, px, py, pz);
+
     for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(!IsValidVehicle(v)) continue;
         if(!PlayerTieneAccesoVehiculo(playerid, v)) continue;
         new Float:vx, Float:vy, Float:vz;
         GetVehiclePos(v, vx, vy, vz);
-        if(IsPlayerInRangeOfPoint(playerid, 4.0, vx, vy, vz)) return v;
+        new Float:dist = GetDistanceBetweenPoints(px, py, pz, vx, vy, vz);
+        if(dist <= minDist) {
+            minDist = dist;
+            closest = v;
+        }
     }
-    return INVALID_VEHICLE_ID;
+    return closest;
 }
 
 stock CuentaArmasMaletero(vehid) {
@@ -5526,6 +5562,26 @@ stock ShowMaleteroMaletero(playerid, vehid) {
     return 1;
 }
 
+stock ActualizarBarrasEstado(playerid) {
+    new hambre = PlayerHambre[playerid];
+    if(hambre < 0) hambre = 0;
+    if(hambre > 100) hambre = 100;
+
+    new gas = 100;
+    if(IsPlayerInAnyVehicle(playerid)) {
+        new veh = GetPlayerVehicleID(playerid);
+        if(veh != INVALID_VEHICLE_ID) gas = GasVehiculo[veh];
+    }
+    if(gas < 0) gas = 0;
+    if(gas > 100) gas = 100;
+
+    new Float:anchoMax = 85.0;
+    new Float:inicio = 518.0;
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicio + (anchoMax * float(hambre) / 100.0), 0.0);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicio + (anchoMax * float(gas) / 100.0), 0.0);
+    return 1;
+}
+
 stock ActualizarGasTextoVehiculo(playerid) {
     if(!IsPlayerInAnyVehicle(playerid)) return 1;
     if(GetPlayerState(playerid) != PLAYER_STATE_DRIVER && GetPlayerState(playerid) != PLAYER_STATE_PASSENGER) return 1;
@@ -5533,8 +5589,8 @@ stock ActualizarGasTextoVehiculo(playerid) {
     if(veh == INVALID_VEHICLE_ID) return 1;
     UltimoVehiculoGasMostrado[playerid] = veh;
     if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 70 + random(31); }
-    new gt[32]; FormatearBarraEstado("Gas", GasVehiculo[veh], gt, sizeof(gt));
-    PlayerTextDrawSetString(playerid, BarraGas[playerid], gt);
+    ActualizarBarrasEstado(playerid);
+    PlayerTextDrawShow(playerid, BarraGasFondo[playerid]);
     PlayerTextDrawShow(playerid, BarraGas[playerid]);
     return 1;
 }
@@ -6732,9 +6788,11 @@ stock ShowEditMapViewList(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_EDITMAP_LISTA, DIALOG_STYLE_LIST, "EditMap - Lista", list, "Opciones", "Atras");
 }
 
-stock GuardarEditMap() {
-    fcreatedir(DIR_DATA);
-    new File:h = fopen(PATH_EDITMAP, io_write);
+stock GuardarEditMapEnRuta(const ruta[]) {
+    new tmpPath[96];
+    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
+
+    new File:h = fopen(tmpPath, io_write);
     if(!h) return 0;
 
     new line[220];
@@ -6754,7 +6812,17 @@ stock GuardarEditMap() {
         fwrite(h, line);
     }
     fclose(h);
-    return 1;
+
+    fremove(ruta);
+    if(frename(tmpPath, ruta)) return 1;
+    return 0;
+}
+
+stock GuardarEditMap() {
+    fcreatedir(DIR_DATA);
+    new okMain = GuardarEditMapEnRuta(PATH_EDITMAP);
+    new okLegacy = GuardarEditMapEnRuta(PATH_EDITMAP_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock CargarEditMap() {
