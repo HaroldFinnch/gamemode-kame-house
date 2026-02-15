@@ -2009,7 +2009,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nCamper (eliminado)\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2500,7 +2500,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(strlen(inputtext) < 3) return SendClientMessage(playerid, -1, "Escribe una duda valida.");
         new nombre[MAX_PLAYER_NAME], msg[192];
         GetPlayerName(playerid, nombre, sizeof(nombre));
-        format(msg, sizeof(msg), "[DUDAS] (%s y %d) %s", nombre, playerid, inputtext);
+        format(msg, sizeof(msg), "[DUDAS] (%s - %d) %s", nombre, playerid, inputtext);
         SendClientMessageToAll(0x66CCFFFF, msg);
         return 1;
     }
@@ -2882,7 +2882,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             list[0] = EOS;
             for(new i = 0; i < MAX_PRENDAS; i++) {
                 if(!PrendasData[i][prendaActiva]) continue;
-                format(line, sizeof(line), "%d) %s (Stock: %d)", i, PrendasData[i][prendaNombre], PrendasData[i][prendaStock]);
+                format(line, sizeof(line), "%d) %s (Disponibilidad: %s)", i, PrendasData[i][prendaNombre], PrendasData[i][prendaStock] > 0 ? "[Disponible]" : "[No Disponible]");
                 if(strlen(list) > 0) strcat(list, "\n");
                 strcat(list, line);
                 count++;
@@ -3188,24 +3188,24 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_ADMIN_MENU) {
         if(!response) return 1;
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
-        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_MINERAL_TIPO, DIALOG_STYLE_INPUT, "Admin - Dar minerales", "Tipo mineral (piedra/cobre/hierro/madera/polvora/prepieza/carbon)", "Siguiente", "Atras");
-        if(listitem == 2) {
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "Admin - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
+        if(listitem == 1) {
             new cmdMover[] = "/mover";
             return OnPlayerCommandText(playerid, cmdMover);
         }
-        if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
-        if(listitem == 4) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
-        if(listitem == 5) {
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
+        if(listitem == 4) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
+        if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
+        if(listitem == 6) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_DINERO_ID, DIALOG_STYLE_INPUT, "Admin - Dar dinero", "Ingresa ID del jugador", "Siguiente", "Cancelar");
+        if(listitem == 7) return ShowPlayerDialog(playerid, DIALOG_ADMIN_DAR_MINERAL_TIPO, DIALOG_STYLE_INPUT, "Admin - Dar minerales", "Tipo mineral (piedra/cobre/hierro/madera/polvora/prepieza/carbon)", "Siguiente", "Atras");
+        if(listitem == 8) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_TIPO, DIALOG_STYLE_LIST, "Admin - Vida/Chaleco", "Vida\nChaleco", "Siguiente", "Atras");
+        if(listitem == 9) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_ID, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID del jugador", "Siguiente", "Atras");
+        if(listitem == 10) {
             new cmdAdmPrendas[] = "/admprendas";
             return OnPlayerCommandText(playerid, cmdAdmPrendas);
         }
-        if(listitem == 6) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "Admin - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
-        if(listitem == 7) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SKIN_ID, DIALOG_STYLE_INPUT, "Admin - Cambiar skin", "Ingresa ID del jugador", "Siguiente", "Atras");
-        if(listitem == 8) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VIDA_CHALECO_TIPO, DIALOG_STYLE_LIST, "Admin - Vida/Chaleco", "Vida\nChaleco", "Siguiente", "Atras");
-        if(listitem == 9) return ShowEditMapMenu(playerid);
-        if(listitem == 10) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
-        if(listitem == 11) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
+        if(listitem == 11) return ShowEditMapMenu(playerid);
         if(listitem == 12) return ShowPlayerDialog(playerid, DIALOG_ADMIN_ADD_MOD_ID, DIALOG_STYLE_INPUT, "Asignar Moderador", "Ingresa ID del jugador que sera Moderador", "Asignar", "Atras");
         if(listitem == 13) return ShowPlayerDialog(playerid, DIALOG_ADMIN_REMOVE_MOD_ID, DIALOG_STYLE_INPUT, "Eliminar Moderador", "Ingresa ID del Moderador a eliminar", "Eliminar", "Atras");
         return 1;
@@ -3214,10 +3214,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_MOD_MENU) {
         if(!response) return 1;
         if(!EsModerador(playerid)) return SendClientMessage(playerid, -1, "No eres Moderador.");
-        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "MOD - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
-        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "MOD - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
-        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "MOD - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
-        if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID+1000, DIALOG_STYLE_INPUT, "MOD - Traer jugador", "Ingresa ID del jugador", "Traer", "Atras");
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_IR_JUGADOR_ID, DIALOG_STYLE_INPUT, "MOD - Ir a jugador", "Ingresa ID del jugador", "Ir", "Atras");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID+1000, DIALOG_STYLE_INPUT, "MOD - Traer jugador", "Ingresa ID del jugador", "Traer", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "MOD - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
+        if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "MOD - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
         if(listitem == 4) { new cmdTp[] = "/tp"; return OnPlayerCommandText(playerid, cmdTp); }
         if(listitem == 5) { new cmdFly[] = "/fly"; return OnPlayerCommandText(playerid, cmdFly); }
         if(listitem == 6) { new cmdRc[] = "/rc"; return OnPlayerCommandText(playerid, cmdRc); }
@@ -4719,7 +4719,7 @@ stock ShowVentaAutosBuyMenu(playerid) {
     body[0] = EOS;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
         if(!VentaAutosData[i][vaActiva] || VentaAutosData[i][vaStock] <= 0) continue;
-        format(line, sizeof(line), "Modelo %d | Precio:$%d | Stock:%d\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock]);
+        format(line, sizeof(line), "Modelo %d | Precio:$%d | [Disponible]\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio]);
         strcat(body, line);
         count++;
     }
@@ -4740,7 +4740,7 @@ stock ShowVentaAutosRemoveMenu(playerid) {
     body[0] = EOS;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
         if(!VentaAutosData[i][vaActiva]) continue;
-        format(line, sizeof(line), "Modelo %d | Precio:$%d | Stock:%d\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock]);
+        format(line, sizeof(line), "Modelo %d | Precio:$%d | %s\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock] > 0 ? "[Disponible]" : "[No Disponible]");
         strcat(body, line);
         count++;
     }
@@ -4834,7 +4834,7 @@ stock ShowArmeriaArmasDisponibles(playerid) {
     for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
         if(!ArmeriaItems[i][aiActiva]) continue;
         GetWeaponNameGM(ArmeriaItems[i][aiArma], nombreArma, sizeof(nombreArma));
-        format(line, sizeof(line), "%s | Arma $%d | Stock:%d\n", nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiStockArma]);
+        format(line, sizeof(line), "%s | Arma $%d | %s\n", nombreArma, ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiStockArma] > 0 ? "[Disponible]" : "[No Disponible]");
         strcat(body, line);
         count++;
     }
@@ -5169,7 +5169,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
-        case puntoMaletero: format(dest, len, "Camper eliminado");
+        case puntoMaletero: format(dest, len, "Reservado");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
@@ -5223,7 +5223,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
         }
         case puntoMaletero: {
-            // Sistema camper eliminado: no crear pickup ni label.
+            // Punto reservado: no crear pickup ni label.
         }
         case puntoPintura: {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -5894,12 +5894,12 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{FFD700}* Panel Owner *", "{FFFFFF}Dar dinero\nDar minerales\nMover puntos y CP\nCrear puntos/sistemas\nComandos admin\nAdministrar prendas\nIr a jugador (ID)\nCambiar skin\nDar vida/chaleco\nEditmap\nSancionar\nQuitar sancion\nAsignar Moderador\nEliminar Moderador", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}✦ Panel Owner ✦", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador", "Abrir", "Cerrar");
     return 1;
 }
 
 stock MostrarDialogoMod(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_MOD_MENU, DIALOG_STYLE_LIST, "{66CCFF}* Panel Moderador *", "{FFFFFF}Sancionar\nQuitar sancion\nIr a jugador (ID)\nTraer jugador (ID)\nTeleport a marca (/tp)\nFly\nReparar vehiculo (/rc)", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_MOD_MENU, DIALOG_STYLE_LIST, "{85C1E9}✦ Panel Moderador ✦", "{58D68D}Ir a jugador (ID)\n{58D68D}Traer jugador (ID)\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{5DADE2}Teleport a marca (/tp)\n{5DADE2}Fly\n{5DADE2}Reparar vehiculo (/rc)", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -6153,7 +6153,7 @@ stock ShowPrendasMenu(playerid) {
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
         if(!PrendasData[i][prendaActiva]) continue;
-        format(line, sizeof(line), "%s - $%d (Stock: %d)", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio], PrendasData[i][prendaStock]);
+        format(line, sizeof(line), "%s - $%d (%s)", PrendasData[i][prendaNombre], PrendasData[i][prendaPrecio], PrendasData[i][prendaStock] > 0 ? "[Disponible]" : "[No Disponible]");
         if(PlayerPrendaComprada[playerid][i]) {
             if(PlayerPrendaActiva[playerid][i]) strcat(line, " {66FF66}(EQUIPADA)");
             else strcat(line, " {FFAA00}(COMPRADA)");
