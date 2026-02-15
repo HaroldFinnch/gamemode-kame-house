@@ -23,7 +23,7 @@
 
 #define PAGO_BASE_CAMIONERO   1700
 #define PAGO_BASE_PIZZERO       50
-#define PAGO_BASE_BASURERO     650
+#define PAGO_BASE_BASURERO     100
 
 #define NIVEL_MAX_TRABAJO    10
 #define PROGRESO_CAMIONERO_POR_NIVEL 30
@@ -1681,7 +1681,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new mazoPct = MazoDurabilidad[playerid];
         if(mazoPct < 0) mazoPct = 0;
         if(mazoPct > 100) mazoPct = 100;
-        format(inv, sizeof(inv), "{33CCFF}--- INVENTARIO ---\n{66FF66}Hierba:{FFFFFF} %d\n{FF66CC}Flor:{FFFFFF} %d\n{A9A9A9}Hierro:{FFFFFF} %d\n{B87333}Cobre:{FFFFFF} %d\n{C0C0C0}Piedra:{FFFFFF} %d\n{8B4513}Madera:{FFFFFF} %d\n{FFD700}Polvora:{FFFFFF} %d\n{555555}Carbon:{FFFFFF} %d\n{99CCFF}Prepiezas:{FFFFFF} %d\n{99FF99}Dinero:{FFFFFF} $%d\n{66CC66}Banco:{FFFFFF} $%d\n{FFCC66}Mazo:{FFFFFF} %d%%", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? mazoPct : 0);
+        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF} %d\n{FF66CC}Flor:{FFFFFF} %d\n{A9A9A9}Hierro:{FFFFFF} %d\n{B87333}Cobre:{FFFFFF} %d\n{C0C0C0}Piedra:{FFFFFF} %d\n{8B4513}Madera:{FFFFFF} %d\n{FFD700}Polvora:{FFFFFF} %d\n{555555}Carbon:{FFFFFF} %d\n{99CCFF}Prepiezas:{FFFFFF} %d\n{99FF99}Dinero:{FFFFFF} $%d\n{66CC66}Banco:{FFFFFF} $%d\n{FFCC66}Mazo:{FFFFFF} %d%%", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? mazoPct : 0);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -5573,7 +5573,7 @@ stock InitGasSystem() {
         MaleteroSemillaHierbaVeh[v] = 0;
         MaleteroSemillaFlorVeh[v] = 0;
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[v][w] = 0;
-            for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[v][ms] = 0; MaleteroArmaSlotAmmoVeh[v][ms] = 0; }
+        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[v][ms] = 0; MaleteroArmaSlotAmmoVeh[v][ms] = 0; }
     }
     for(new i = 0; i < MAX_PLAYERS; i++) { VehSharedTo[i] = INVALID_VEHICLE_ID; VehSharedUntil[i] = 0; }
     return 1;
