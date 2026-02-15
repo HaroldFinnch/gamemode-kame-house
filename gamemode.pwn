@@ -3797,8 +3797,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             InicializarSistemaBandasPVE();
             SendClientMessage(playerid, 0x66FF66FF, "[Bandas PVE] Sistema activado.");
         } else if(listitem == 1) {
-            BandasPVEActivas = false;
-            LimpiarBandasPVE();
+            DesactivarSistemaBandasPVE();
             SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Sistema desactivado.");
         } else if(listitem == 2) {
             if(!BandasPVEActivas) return SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Activa el sistema antes de reiniciar.");
@@ -4848,6 +4847,29 @@ stock LimpiarBandasPVE() {
     return 1;
 }
 
+stock AplicarAnimacionBandero(actorid, weaponid) {
+    if(actorid == INVALID_ACTOR_ID) return 0;
+
+    // Equipamos el arma para que se vea en el actor.
+    SetActorArmedWeapon(actorid, weaponid);
+
+    // Animaciones vanilla de pandillero en reposo.
+    static const animsGang[][20] = {
+        "IDLE_GANG1",
+        "IDLE_GANG2",
+        "IDLE_GANG3",
+        "IDLE_GANG4"
+    };
+    ApplyActorAnimation(actorid, "PED", animsGang[random(sizeof(animsGang))], 4.1, true, false, false, true, 0);
+    return 1;
+}
+
+stock DesactivarSistemaBandasPVE() {
+    BandasPVEActivas = false;
+    LimpiarBandasPVE();
+    return 1;
+}
+
 stock CrearGrupoBandaPVE(slot) {
     if(slot < 0 || slot >= MAX_BANDAS_PVE) return 0;
     if(TotalBandaSpawns <= 0) return 0;
@@ -4886,7 +4908,7 @@ stock CrearGrupoBandaPVE(slot) {
         BandaArma[slot][m] = armasDisponibles[random(sizeof(armasDisponibles))];
         BandaVivo[slot][m] = true;
         SetActorHealth(BandaActorId[slot][m], VIDA_BANDERO_PVE);
-        ApplyActorAnimation(BandaActorId[slot][m], "PED", "WALK_gang1", 4.1, true, true, true, true, 0);
+        AplicarAnimacionBandero(BandaActorId[slot][m], BandaArma[slot][m]);
     }
     return 1;
 }
@@ -4974,7 +4996,9 @@ public ProcesarBandasPVE() {
         new Float:danio = BANDA_DANO_MIN + float(random(floatround((BANDA_DANO_MAX - BANDA_DANO_MIN) * 10.0) + 1)) / 10.0;
         SetPlayerHealth(objetivo, vida - danio);
         for(new m = 0; m < BandaGrupoMiembros[g]; m++) {
-            if(BandaVivo[g][m] && BandaActorId[g][m] != INVALID_ACTOR_ID) ApplyActorAnimation(BandaActorId[g][m], "PED", "WALK_gang1", 4.1, true, true, true, true, 0);
+            if(!BandaVivo[g][m] || BandaActorId[g][m] == INVALID_ACTOR_ID) continue;
+            // Mantenemos el arma visible y animaciones de pandilla vanilla.
+            AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m]);
         }
     }
     return 1;
