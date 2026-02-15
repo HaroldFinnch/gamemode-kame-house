@@ -230,7 +230,7 @@
 
 #define MAX_AUTOS_NORMALES_JUGADOR 2
 #define MAX_VEHICULOS_TOTALES_JUGADOR 2
-#define CUENTA_DATA_VERSION 4
+#define CUENTA_DATA_VERSION 5
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -435,6 +435,7 @@ new Float:PlayerPrendaRotZ[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleX[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleY[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleZ[MAX_PLAYERS][MAX_PRENDAS];
+new PlayerPrendaModelo[MAX_PLAYERS][MAX_PRENDAS];
 
 enum eEditMapData {
     bool:emActivo,
@@ -618,6 +619,8 @@ stock bool:EsLineaPrendaCuenta(const line[]);
 stock ResolverPathCuenta(playerid, dest[], len);
 stock File:AbrirCuentaEscritura(playerid, dest[], len);
 stock MigrarArchivoLegacy(const legacyPath[], const newPath[]);
+stock CargarPrendaJugadorDesdeLinea(playerid, idxPrenda, const line[]);
+stock ReconciliarPrendasJugador(playerid);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
@@ -931,7 +934,7 @@ public OnGameModeInit() {
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
     if(h) {
-        new str[256];
+        new str[512];
         while(fread(h, str) && TotalCasas < MAX_CASAS) {
             new idx = 0;
             CasaData[TotalCasas][cX] = floatstr(strtok(str, idx));
@@ -2471,6 +2474,7 @@ public OnPlayerConnect(playerid) {
         PlayerPrendaOffX[playerid][pi] = 0.0; PlayerPrendaOffY[playerid][pi] = 0.0; PlayerPrendaOffZ[playerid][pi] = 0.0;
         PlayerPrendaRotX[playerid][pi] = 0.0; PlayerPrendaRotY[playerid][pi] = 0.0; PlayerPrendaRotZ[playerid][pi] = 0.0;
         PlayerPrendaScaleX[playerid][pi] = 0.0; PlayerPrendaScaleY[playerid][pi] = 0.0; PlayerPrendaScaleZ[playerid][pi] = 0.0;
+        PlayerPrendaModelo[playerid][pi] = 0;
         RemovePlayerAttachedObject(playerid, pi);
     }
 
@@ -2892,6 +2896,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             GuardarPrendasConfig();
             PlayerPrendaComprada[playerid][idxPrenda] = 1;
             PlayerPrendaActiva[playerid][idxPrenda] = 1;
+            PlayerPrendaModelo[playerid][idxPrenda] = PrendasData[idxPrenda][prendaModelo];
             AplicarPrendaJugador(playerid, idxPrenda);
             GuardarCuenta(playerid);
             SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
@@ -3129,6 +3134,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 3) {
             QuitarPrendaJugador(playerid, idxp);
             PlayerPrendaComprada[playerid][idxp] = 0;
+            PlayerPrendaModelo[playerid][idxp] = 0;
             PlayerPrendaBone[playerid][idxp] = 0;
             PlayerPrendaOffX[playerid][idxp] = 0.0;
             PlayerPrendaOffY[playerid][idxp] = 0.0;
@@ -4302,35 +4308,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                                         break;
                                     }
                                     if(!EsLineaPrendaCuenta(line)) continue;
-                                    new idxp = 0;
-                                    PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
-                                    PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
-                                    PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
-                                    PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                    CargarPrendaJugadorDesdeLinea(playerid, pi, line);
                                 }
                             } else {
                                 if(EsLineaPrendaCuenta(line)) {
-                                    new idxp = 0;
-                                    PlayerPrendaComprada[playerid][0] = strval(strtok(line, idxp));
-                                    PlayerPrendaActiva[playerid][0] = strval(strtok(line, idxp));
-                                    PlayerPrendaBone[playerid][0] = strval(strtok(line, idxp));
-                                    PlayerPrendaOffX[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffY[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaOffZ[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotX[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotY[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaRotZ[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleX[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleY[playerid][0] = floatstr(strtok(line, idxp));
-                                    PlayerPrendaScaleZ[playerid][0] = floatstr(strtok(line, idxp));
+                                    CargarPrendaJugadorDesdeLinea(playerid, 0, line);
                                     for(new pi = 1; pi < MAX_PRENDAS; pi++) {
                                         if(!fread(h, line)) break;
                                         LimpiarLinea(line);
@@ -4339,19 +4321,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                                             break;
                                         }
                                         if(!EsLineaPrendaCuenta(line)) continue;
-                                        idxp = 0;
-                                        PlayerPrendaComprada[playerid][pi] = strval(strtok(line, idxp));
-                                        PlayerPrendaActiva[playerid][pi] = strval(strtok(line, idxp));
-                                        PlayerPrendaBone[playerid][pi] = strval(strtok(line, idxp));
-                                        PlayerPrendaOffX[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaOffY[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaOffZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaRotX[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaRotY[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaRotZ[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaScaleX[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaScaleY[playerid][pi] = floatstr(strtok(line, idxp));
-                                        PlayerPrendaScaleZ[playerid][pi] = floatstr(strtok(line, idxp));
+                                        CargarPrendaJugadorDesdeLinea(playerid, pi, line);
                                     }
                                 } else {
                                     CargarVehiculosJugadorDesdeLinea(playerid, h, line);
@@ -4360,6 +4330,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         }
                     }
                 }
+                ReconciliarPrendasJugador(playerid);
 
                 ActualizarNivelPJ(playerid);
                 SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
@@ -4391,11 +4362,12 @@ public GuardarCuenta(playerid) {
             fwrite(h, line);
 
             for(new pi = 0; pi < MAX_PRENDAS; pi++) {
-                format(line, sizeof(line), "\n%d %d %d %f %f %f %f %f %f %f %f %f",
+                if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaModelo[playerid][pi] <= 0) PlayerPrendaModelo[playerid][pi] = PrendasData[pi][prendaModelo];
+                format(line, sizeof(line), "\n%d %d %d %f %f %f %f %f %f %f %f %f %d",
                     PlayerPrendaComprada[playerid][pi], PlayerPrendaActiva[playerid][pi], PlayerPrendaBone[playerid][pi],
                     PlayerPrendaOffX[playerid][pi], PlayerPrendaOffY[playerid][pi], PlayerPrendaOffZ[playerid][pi],
                     PlayerPrendaRotX[playerid][pi], PlayerPrendaRotY[playerid][pi], PlayerPrendaRotZ[playerid][pi],
-                    PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi]);
+                    PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi], PlayerPrendaModelo[playerid][pi]);
                 fwrite(h, line);
             }
 
@@ -4858,6 +4830,8 @@ stock GetVentaAutoByAnyListIndex(listindex) {
 
 stock ActualizarLabelVentaSkins() {
     if(VentaSkinsLabel != Text3D:-1) { Delete3DTextLabel(VentaSkinsLabel); VentaSkinsLabel = Text3D:-1; }
+    if(VentaSkinsPickup != 0) { DestroyPickup(VentaSkinsPickup); VentaSkinsPickup = 0; }
+    VentaSkinsPickup = CreatePickup(1275, 1, VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2], 0);
     new disponibles;
     for(new i = 0; i < MAX_SKINS_VENTA; i++) if(VentaSkinsData[i][vsActiva]) disponibles++;
     new texto[128];
@@ -5321,8 +5295,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
         }
         case puntoVentaSkins: {
-            PuntoPickup[punto] = CreatePickup(1275, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{FF66CC}CP Venta de skins\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            // Este punto usa su propio pickup/label (VentaSkinsPickup y VentaSkinsLabel).
         }
         case puntoMaletero: {
             // Punto reservado: no crear pickup ni label.
@@ -5790,7 +5763,78 @@ stock bool:EsLineaPrendaCuenta(const line[]) {
     for(new i = 0; line[i] != EOS; i++) {
         if(line[i] == ' ') espacios++;
     }
-    return espacios == 11;
+    return espacios == 11 || espacios == 12;
+}
+
+stock CargarPrendaJugadorDesdeLinea(playerid, idxPrenda, const line[]) {
+    if(idxPrenda < 0 || idxPrenda >= MAX_PRENDAS) return 0;
+
+    new idxp = 0;
+    PlayerPrendaComprada[playerid][idxPrenda] = strval(strtok(line, idxp));
+    PlayerPrendaActiva[playerid][idxPrenda] = strval(strtok(line, idxp));
+    PlayerPrendaBone[playerid][idxPrenda] = strval(strtok(line, idxp));
+    PlayerPrendaOffX[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaOffY[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaOffZ[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaRotX[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaRotY[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaRotZ[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaScaleX[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaScaleY[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+    PlayerPrendaScaleZ[playerid][idxPrenda] = floatstr(strtok(line, idxp));
+
+    new model = strval(strtok(line, idxp));
+    if(model <= 0) model = PrendasData[idxPrenda][prendaModelo];
+    PlayerPrendaModelo[playerid][idxPrenda] = model;
+    return 1;
+}
+
+stock ReconciliarPrendasJugador(playerid) {
+    for(new i = 0; i < MAX_PRENDAS; i++) {
+        if(!PlayerPrendaComprada[playerid][i]) continue;
+
+        if(PlayerPrendaModelo[playerid][i] <= 0) {
+            PlayerPrendaModelo[playerid][i] = PrendasData[i][prendaModelo];
+            continue;
+        }
+
+        if(PrendasData[i][prendaModelo] == PlayerPrendaModelo[playerid][i]) continue;
+
+        for(new j = 0; j < MAX_PRENDAS; j++) {
+            if(PlayerPrendaComprada[playerid][j]) continue;
+            if(PrendasData[j][prendaModelo] != PlayerPrendaModelo[playerid][i]) continue;
+
+            PlayerPrendaComprada[playerid][j] = PlayerPrendaComprada[playerid][i];
+            PlayerPrendaActiva[playerid][j] = PlayerPrendaActiva[playerid][i];
+            PlayerPrendaBone[playerid][j] = PlayerPrendaBone[playerid][i];
+            PlayerPrendaOffX[playerid][j] = PlayerPrendaOffX[playerid][i];
+            PlayerPrendaOffY[playerid][j] = PlayerPrendaOffY[playerid][i];
+            PlayerPrendaOffZ[playerid][j] = PlayerPrendaOffZ[playerid][i];
+            PlayerPrendaRotX[playerid][j] = PlayerPrendaRotX[playerid][i];
+            PlayerPrendaRotY[playerid][j] = PlayerPrendaRotY[playerid][i];
+            PlayerPrendaRotZ[playerid][j] = PlayerPrendaRotZ[playerid][i];
+            PlayerPrendaScaleX[playerid][j] = PlayerPrendaScaleX[playerid][i];
+            PlayerPrendaScaleY[playerid][j] = PlayerPrendaScaleY[playerid][i];
+            PlayerPrendaScaleZ[playerid][j] = PlayerPrendaScaleZ[playerid][i];
+            PlayerPrendaModelo[playerid][j] = PlayerPrendaModelo[playerid][i];
+
+            PlayerPrendaComprada[playerid][i] = 0;
+            PlayerPrendaActiva[playerid][i] = 0;
+            PlayerPrendaBone[playerid][i] = 0;
+            PlayerPrendaOffX[playerid][i] = 0.0;
+            PlayerPrendaOffY[playerid][i] = 0.0;
+            PlayerPrendaOffZ[playerid][i] = 0.0;
+            PlayerPrendaRotX[playerid][i] = 0.0;
+            PlayerPrendaRotY[playerid][i] = 0.0;
+            PlayerPrendaRotZ[playerid][i] = 0.0;
+            PlayerPrendaScaleX[playerid][i] = 0.0;
+            PlayerPrendaScaleY[playerid][i] = 0.0;
+            PlayerPrendaScaleZ[playerid][i] = 0.0;
+            PlayerPrendaModelo[playerid][i] = 0;
+            break;
+        }
+    }
+    return 1;
 }
 
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
@@ -6348,7 +6392,8 @@ stock AplicarPrendaJugador(playerid, idx) {
     new Float:scX = PlayerPrendaScaleX[playerid][idx] > 0.0 ? PlayerPrendaScaleX[playerid][idx] : PrendasData[idx][prendaScaleX];
     new Float:scY = PlayerPrendaScaleY[playerid][idx] > 0.0 ? PlayerPrendaScaleY[playerid][idx] : PrendasData[idx][prendaScaleY];
     new Float:scZ = PlayerPrendaScaleZ[playerid][idx] > 0.0 ? PlayerPrendaScaleZ[playerid][idx] : PrendasData[idx][prendaScaleZ];
-    SetPlayerAttachedObject(playerid, idx, PrendasData[idx][prendaModelo], bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
+    new model = PlayerPrendaModelo[playerid][idx] > 0 ? PlayerPrendaModelo[playerid][idx] : PrendasData[idx][prendaModelo];
+    SetPlayerAttachedObject(playerid, idx, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
     return 1;
 }
 
