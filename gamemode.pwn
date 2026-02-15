@@ -97,6 +97,7 @@
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_BANDAS_SPAWNS "bandas_spawns.txt"
 #define PATH_FACCIONES "scriptfiles/kame_house/facciones.txt"
+#define PATH_FACCIONES_LEGACY "facciones.txt"
 #define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
 #define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
@@ -489,6 +490,7 @@ enum ePuntoMovible {
     puntoPintura,
     puntoMinero,
     puntoPrendas,
+    puntoFacciones,
     totalPuntosMovibles
 }
 new Float:PuntoPos[totalPuntosMovibles][3];
@@ -1100,6 +1102,7 @@ public OnGameModeInit() {
     PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
     PuntoPos[puntoMinero][0] = PuntoPos[puntoCamionero][0] + 6.0; PuntoPos[puntoMinero][1] = PuntoPos[puntoCamionero][1]; PuntoPos[puntoMinero][2] = PuntoPos[puntoCamionero][2];
     PuntoPos[puntoPrendas][0] = PuntoPos[puntoSemilleria][0] + 6.0; PuntoPos[puntoPrendas][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoPrendas][2] = PuntoPos[puntoSemilleria][2];
+    PuntoPos[puntoFacciones][0] = POS_FACCION_X; PuntoPos[puntoFacciones][1] = POS_FACCION_Y; PuntoPos[puntoFacciones][2] = POS_FACCION_Z;
     VentaAutosActiva = true;
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
@@ -1111,6 +1114,7 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
     MigrarArchivoLegacy(PATH_VENTA_SKINS_LEGACY, PATH_VENTA_SKINS);
     MigrarArchivoLegacy(PATH_ARMERIA_LEGACY, PATH_ARMERIA);
+    MigrarArchivoLegacy(PATH_FACCIONES_LEGACY, PATH_FACCIONES);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
     CargarVentaSkinsConfig();
@@ -1163,7 +1167,7 @@ public OnGameModeInit() {
             strmid(CasaData[TotalCasas][cOwner], ownerTok, 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
             strmid(CasaData[TotalCasas][cFriends], friendsTok, 0, 128, 128);
 
-            CasaPickup[TotalCasas] = CreatePickup(strcmp(CasaData[TotalCasas][cOwner], "None") == 0 ? 1273 : 1559, 2, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ], 0);
+            CasaPickup[TotalCasas] = CreatePickup(strcmp(CasaData[TotalCasas][cOwner], "None") == 0 ? 1273 : 1559, strcmp(CasaData[TotalCasas][cOwner], "None") == 0 ? 2 : 23, CasaData[TotalCasas][cX], CasaData[TotalCasas][cY], CasaData[TotalCasas][cZ], 0);
 
             new labelstr[64];
             if(!strcmp(CasaData[TotalCasas][cOwner], "None")) {
@@ -1262,7 +1266,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return ShowVentaSkinsBuyMenu(playerid);
     }
 
-    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_FACCION_X, POS_FACCION_Y, POS_FACCION_Z)) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2])) {
         return MostrarMenuFaccionesCP(playerid);
     }
 
@@ -1938,7 +1942,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
         return 1;
     }
 
@@ -2058,7 +2062,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", name, CasaInteriorNombre[CasaData[casa][cInteriorSlot] - 1]);
         Update3DTextLabelText(CasaLabel[casa], 0x00FF00FF, labelstr);
         if(CasaPickup[casa] != 0) DestroyPickup(CasaPickup[casa]);
-        CasaPickup[casa] = CreatePickup(1559, 2, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ], 0);
+        CasaPickup[casa] = CreatePickup(1559, 23, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ], 0);
         SendClientMessage(playerid, 0x00FF00FF, "Casa comprada exitosamente.");
         EnviarEntornoAccion(playerid, "firma papeles y compra una propiedad de la ciudad.");
         GuardarCasas();
@@ -2291,7 +2295,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House\nFacciones Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2499,7 +2503,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
         // Recrear pickups/labels con indices y mundos correctos
         for(new i = 0; i < TotalCasas; i++) {
-            CasaPickup[i] = CreatePickup(strcmp(CasaData[i][cOwner], "None") == 0 ? 1273 : 1559, 2, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ], 0);
+            CasaPickup[i] = CreatePickup(strcmp(CasaData[i][cOwner], "None") == 0 ? 1273 : 1559, strcmp(CasaData[i][cOwner], "None") == 0 ? 2 : 23, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ], 0);
 
             new labelstr[64];
             if(!strcmp(CasaData[i][cOwner], "None")) format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", CasaData[i][cPrecio], CasaInteriorNombre[CasaData[i][cInteriorSlot] - 1]);
@@ -3046,7 +3050,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         else if(listitem == 8) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
         else if(listitem == 9) SetPlayerCheckpoint(playerid, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2], 6.0);
         else if(listitem == 10) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
-        else if(listitem == 11) {
+        else if(listitem == 11) SetPlayerCheckpoint(playerid, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2], 6.0);
+        else if(listitem == 12) {
             new horno = GetHornoMasCercano(playerid);
             if(horno == -1) return SendClientMessage(playerid, -1, "No hay hornos disponibles en el mapa.");
             SetPlayerCheckpoint(playerid, HornoData[horno][hornoX], HornoData[horno][hornoY], HornoData[horno][hornoZ], 4.0);
@@ -3100,6 +3105,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 9: puntoMover = puntoPintura;
             case 10: puntoMover = puntoMinero;
             case 11: puntoMover = puntoPrendas;
+            case 12: puntoMover = puntoFacciones;
             default: return SendClientMessage(playerid, -1, "Punto invalido.");
         }
 
@@ -3124,6 +3130,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             VentaSkinsPos[2] = pz;
             ActualizarLabelVentaSkins();
             GuardarVentaSkinsConfig();
+        }
+        if(puntoMover == puntoFacciones) {
+            if(FaccionCPPickup != 0) DestroyPickup(FaccionCPPickup);
+            FaccionCPPickup = CreatePickup(1274, 23, px, py, pz, 0);
+            if(FaccionCPLabel != Text3D:-1) Delete3DTextLabel(FaccionCPLabel);
+            FaccionCPLabel = Create3DTextLabel("CP Facciones Kame House\nPresiona H", 0x9B59B6FF, px, py, pz + 0.8, 20.0, 0);
         }
         GetPuntoMovibleNombre(puntoMover, nombre, sizeof(nombre));
         format(msg, sizeof(msg), "Moviste %s a tu posicion. El GPS ya usa la nueva ubicacion.", nombre);
@@ -5044,7 +5056,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 for(new f = 0; f < MAX_FACCIONES; f++) {
                     if(!FaccionData[f][facActiva]) continue;
                     for(new m = 0; m < MAX_MIEMBROS_FACCION; m++) {
-                        if(FaccionData[f][facMiembros][m] != -1 && !strcmp(FaccionMiembroNombre[f][m], nombreCuenta, true)) {
+                        if(FaccionMiembroNombre[f][m][0] && !strcmp(FaccionMiembroNombre[f][m], nombreCuenta, true)) {
                             FaccionData[f][facMiembros][m] = playerid;
                             PlayerFaccionId[playerid] = f;
                             PlayerFaccionRango[playerid] = FaccionData[f][facRangos][m];
@@ -5163,6 +5175,7 @@ stock CargarPuntosMovibles() {
 
 public BajarHambre() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
+        ActualizarLabelJugadorFaccion(i);
         if(PlayerHambre[i] > 0) {
             PlayerHambre[i]--;
             ActualizarBarrasEstado(i);
@@ -5661,6 +5674,7 @@ stock ActualizarNivelPJ(playerid) {
 public ChequearLimitesMapa() {
     new Float:p[3], Float:h;
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
+        ActualizarLabelJugadorFaccion(i);
         if(GetPlayerInterior(i) != 0 || GetPlayerVirtualWorld(i) != 0 || PlayerInCasa[i] != -1) continue;
         GetPlayerPos(i, p[0], p[1], p[2]);
         if(p[0] > LIMITE_X_MAX || p[0] < LIMITE_X_MIN || p[1] > LIMITE_Y_MAX || p[1] < LIMITE_Y_MIN) {
@@ -6515,6 +6529,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoPintura: format(dest, len, "Tuning Kame House");
         case puntoMinero: format(dest, len, "Trabajo minero");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
+        case puntoFacciones: format(dest, len, "Facciones Kame House");
         default: format(dest, len, "Punto");
     }
     return 1;
@@ -6581,6 +6596,14 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoPrendas: {
             PuntoPickup[punto] = CreatePickup(2704, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{00CCFF}Prendas Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoFacciones: {
+            PuntoPickup[punto] = 0;
+            PuntoLabel[punto] = Text3D:-1;
+            if(FaccionCPPickup != 0) DestroyPickup(FaccionCPPickup);
+            FaccionCPPickup = CreatePickup(1274, 23, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            if(FaccionCPLabel != Text3D:-1) Delete3DTextLabel(FaccionCPLabel);
+            FaccionCPLabel = Create3DTextLabel("CP Facciones Kame House\nPresiona H", 0x9B59B6FF, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.8, 20.0, 0);
         }
         case totalPuntosMovibles: {
             return 1;
@@ -7167,6 +7190,7 @@ stock CargarPrendaJugadorDesdeLinea(playerid, idxPrenda, const line[]) {
     new nombreParseado[32];
     if(idxp < strlen(line)) strmid(nombreParseado, line, idxp, idxp + 32, 32);
     else format(nombreParseado, sizeof(nombreParseado), "");
+    while(nombreParseado[0] == ' ' || nombreParseado[0] == '	') strdel(nombreParseado, 0, 1);
     LimpiarLinea(nombreParseado);
     if(strlen(nombreParseado) > 0) format(PlayerPrendaNombre[playerid][idxPrenda], 32, "%s", nombreParseado);
     else format(PlayerPrendaNombre[playerid][idxPrenda], 32, "%s", PrendasData[idxPrenda][prendaNombre]);
@@ -7865,7 +7889,8 @@ stock ShowPrendaUsuarioMenu(playerid) {
         if(!PlayerPrendaComprada[playerid][i]) continue;
         new nombrePrenda[32];
         ObtenerNombrePrendaJugador(playerid, i, nombrePrenda, sizeof(nombrePrenda));
-        format(line, sizeof(line), "%d) %s%s", i, nombrePrenda, PlayerPrendaActiva[playerid][i] ? " {66FF66}(Visible)" : " {FFAA00}(Oculta)");
+        LimpiarLinea(nombrePrenda);
+        format(line, sizeof(line), "%d) %s %s", i, nombrePrenda, PlayerPrendaActiva[playerid][i] ? "{66FF66}(Visible)" : "{FFAA00}(Oculta)");
         if(strlen(list) > 0) strcat(list, "\n");
         strcat(list, line);
         count++;
@@ -8498,14 +8523,17 @@ stock ActualizarLabelJugadorFaccion(playerid) {
         new hexColor[8];
         colorLabel = FaccionData[PlayerFaccionId[playerid]][facColor];
         ConvertirColorAHexRGB(colorLabel, hexColor, sizeof(hexColor));
-        format(bloqueFaccion, sizeof(bloqueFaccion), " {%s}[%s]{FFFFFF}", hexColor, FaccionData[PlayerFaccionId[playerid]][facNombre]);
+        format(bloqueFaccion, sizeof(bloqueFaccion), "{%s}[%s]{FFFFFF}", hexColor, FaccionData[PlayerFaccionId[playerid]][facNombre]);
     }
     if(EsDueno(playerid)) {
-        format(texto, sizeof(texto), "{F7D154}[Owner]{FFFFFF}%s {58D68D}[$%s]", bloqueFaccion, dineroCorto);
+        if(bloqueFaccion[0]) format(texto, sizeof(texto), "{F7D154}[Owner]{FFFFFF} %s {58D68D}[$%s]", bloqueFaccion, dineroCorto);
+        else format(texto, sizeof(texto), "{F7D154}[Owner]{FFFFFF} {58D68D}[$%s]", dineroCorto);
     } else if(EsModerador(playerid)) {
-        format(texto, sizeof(texto), "{85C1E9}[MOD]{FFFFFF}%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
+        if(bloqueFaccion[0]) format(texto, sizeof(texto), "{85C1E9}[MOD]{FFFFFF} %s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{85C1E9}[MOD]{FFFFFF} {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", GetNivelPJ(playerid), dineroCorto);
     } else {
-        format(texto, sizeof(texto), "%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
+        if(bloqueFaccion[0]) format(texto, sizeof(texto), "%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", GetNivelPJ(playerid), dineroCorto);
     }
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, colorLabel, 0.0, 0.0, 0.0, 30.0, 0);
     Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.62);
@@ -8602,8 +8630,8 @@ stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1) {
 stock InicializarSistemaFacciones() {
     CargarFacciones();
     if(FaccionCPPickup != 0) DestroyPickup(FaccionCPPickup);
-    FaccionCPPickup = CreatePickup(1274, 23, POS_FACCION_X, POS_FACCION_Y, POS_FACCION_Z, 0);
+    FaccionCPPickup = CreatePickup(1274, 23, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2], 0);
     if(FaccionCPLabel != Text3D:-1) Delete3DTextLabel(FaccionCPLabel);
-    FaccionCPLabel = Create3DTextLabel("CP Facciones Kame House\nPresiona H", 0x9B59B6FF, POS_FACCION_X, POS_FACCION_Y, POS_FACCION_Z + 0.8, 20.0, 0);
+    FaccionCPLabel = Create3DTextLabel("CP Facciones Kame House\nPresiona H", 0x9B59B6FF, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2] + 0.8, 20.0, 0);
     return 1;
 }
