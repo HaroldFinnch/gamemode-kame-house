@@ -2,6 +2,8 @@
 #include <string>
 #include <file>
 
+#pragma dynamic 32768
+
 // ================= [ CONFIGURACION EDITABLE ] =================
 #define SKIN_POR_DEFECTO    229
 #define VIDA_AL_LOGUEAR     100.0
@@ -92,6 +94,7 @@
 #define PATH_HORNOS "hornos.txt"
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
+#define PATH_BANDAS_SPAWNS "bandas_spawns.txt"
 #define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
 #define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
@@ -206,6 +209,7 @@
 #define DIALOG_RD_TARGET 109
 #define DIALOG_RD_RESPUESTA 110
 #define DIALOG_ADMIN_BANDAS_MENU 116
+#define DIALOG_ADMIN_BANDAS_SPAWN_BORRAR 117
 
 #define RANGO_NINGUNO 0
 #define RANGO_DUENO 1
@@ -235,8 +239,9 @@
 #define GAS_PRECIO_POR_PUNTO 10
 #define GAS_CONSUMO_POR_MINUTO 5
 
-#define MAX_BANDAS_PVE 5
+#define MAX_BANDAS_PVE 30
 #define MAX_BANDEROS_POR_GRUPO 5
+#define MAX_BANDA_SPAWNS 30
 #define MIN_BANDEROS_POR_GRUPO 3
 #define VIDA_BANDERO_PVE 200.0
 #define BANDA_RANGO_VISION 35.0
@@ -370,18 +375,8 @@ static const Float:CasaInteriorPos[5][3] = {
     {2233.80, -1115.36, 1050.88}
 };
 
-static const Float:BandaSpawnsLS[][4] = {
-    {1958.40, -1115.20, 26.60, 90.0},
-    {2215.70, -1723.30, 13.30, 180.0},
-    {2060.30, -1901.10, 13.20, 0.0},
-    {1688.40, -2102.40, 13.10, 45.0},
-    {1510.50, -1678.10, 13.10, 270.0},
-    {2485.20, -1965.30, 13.30, 160.0},
-    {2624.80, -1124.70, 67.80, 340.0},
-    {1095.40, -1360.80, 13.30, 250.0},
-    {844.70, -1378.20, 13.30, 45.0},
-    {2780.40, -1820.30, 9.80, 120.0}
-};
+new Float:BandaSpawnPos[MAX_BANDA_SPAWNS][4];
+new TotalBandaSpawns;
 
 // Sistema de armeria
 #define MAX_ARMAS_TIENDA 20
@@ -513,6 +508,8 @@ new Float:BandaVida[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new BandaArma[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new bool:BandaVivo[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new BandaGrupoAtacandoA[MAX_BANDAS_PVE] = {-1, ...};
+new BandaSpawnAsignado[MAX_BANDAS_PVE] = {-1, ...};
+new UltimoControlArmaProhibidaTick[MAX_PLAYERS];
 
 #define MAX_AUTOS_VENTA 20
 enum eVentaAuto {
@@ -854,6 +851,11 @@ stock CrearGrupoBandaPVE(slot);
 stock RespawnBandasPVE();
 stock EncontrarBanderoCercano(Float:x, Float:y, Float:z, &grupo, &miembro);
 stock GetNombreArmaPVE(weaponid, dest[], len);
+stock CargarBandasSpawns();
+stock GuardarBandasSpawns();
+stock EnviarEntornoAccion(playerid, const accion[]);
+stock LimpiarIconosBandasParaJugador(playerid);
+stock bool:EsArmaProhibida(weaponid);
 
 stock ResetMaleteroVehiculo(vehid, ownerid = -1) {
     if(vehid <= 0 || vehid >= MAX_VEHICLES) return 0;
@@ -990,6 +992,7 @@ public OnGameModeInit() {
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
 
     CargarPuntosMovibles();
+    CargarBandasSpawns();
     MigrarArchivoLegacy(PATH_PRENDAS_LEGACY, PATH_PRENDAS);
     MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
     MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
@@ -1685,11 +1688,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(veh == INVALID_VEHICLE_ID) return 1;
         if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 100; }
         if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
-        if(GasRefuelTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas repostando.");
+        if(GasRefuelTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas llenando el tanque de gasolina.");
         new faltante = 100 - GasVehiculo[veh];
         if(faltante <= 0) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
         new costo = faltante * GAS_PRECIO_POR_PUNTO;
-        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para repostar.");
+        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para llenar el tanque.");
         new segundos = floatround(float(faltante) / 10.0, floatround_ceil);
         if(segundos < 1) segundos = 1;
         if(segundos > 10) segundos = 10;
@@ -1698,8 +1701,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GasRefuelCost[playerid] = costo;
         GasRefuelTimer[playerid] = SetTimerEx("FinalizarRepostaje", segundos * 1000, false, "d", playerid);
         new tx[140];
-        format(tx, sizeof(tx), "Repostando %.0f litros... espera %d segundo(s). Costo: $%d.", float(faltante), segundos, costo);
+        format(tx, sizeof(tx), "Llenando tanque de gasolina: %.0f litros... espera %d segundo(s). Costo: $%d.", float(faltante), segundos, costo);
         SendClientMessage(playerid, 0xFFCC00FF, tx);
+        EnviarEntornoAccion(playerid, "detiene su vehiculo en la gasolinera y comienza a llenar el tanque.");
         return 1;
     }
 
@@ -1865,8 +1869,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No hay vehiculo valido cerca.");
         if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes llaves de este vehiculo.");
         VehLocked[vehid] = !VehLocked[vehid];
-        if(VehLocked[vehid]) SendClientMessage(playerid, 0xFFAA00FF, "Vehiculo bloqueado.");
-        else SendClientMessage(playerid, 0x00FF00FF, "Vehiculo desbloqueado.");
+        if(VehLocked[vehid]) {
+            SendClientMessage(playerid, 0xFFAA00FF, "Vehiculo bloqueado.");
+            EnviarEntornoAccion(playerid, "saca una llave de su bolsillo y asegura la puerta del vehiculo.");
+        } else {
+            SendClientMessage(playerid, 0x00FF00FF, "Vehiculo desbloqueado.");
+            EnviarEntornoAccion(playerid, "saca una llave de su bolsillo y quita el seguro de la puerta del vehiculo.");
+        }
         return 1;
     }
 
@@ -1885,6 +1894,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         VehSharedTo[id] = vehid;
         VehSharedUntil[id] = GetTickCount() + (mins * 60000);
         SendClientMessage(playerid, 0x00FF00FF, "Acceso temporal compartido.");
+        EnviarEntornoAccion(playerid, "entrega una copia de llave temporal para un vehiculo.");
         SendClientMessage(id, 0x00FF00FF, "Recibiste acceso temporal a un vehiculo con /llave.");
         return 1;
     }
@@ -1906,11 +1916,58 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(CasaPickup[casa] != 0) DestroyPickup(CasaPickup[casa]);
         CasaPickup[casa] = CreatePickup(1559, 2, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ], 0);
         SendClientMessage(playerid, 0x00FF00FF, "Casa comprada exitosamente.");
+        EnviarEntornoAccion(playerid, "firma papeles y compra una propiedad de la ciudad.");
         GuardarCasas();
         return 1;
     }
 
-    if(!EsStaff(playerid)) return 0;
+
+    if(!strcmp(cmd, "/crearbanda", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+        if(TotalBandaSpawns >= MAX_BANDA_SPAWNS) return SendClientMessage(playerid, -1, "Limite de spawns de bandas alcanzado.");
+        new Float:x, Float:y, Float:z, Float:a;
+        GetPlayerPos(playerid, x, y, z);
+        GetPlayerFacingAngle(playerid, a);
+        BandaSpawnPos[TotalBandaSpawns][0] = x;
+        BandaSpawnPos[TotalBandaSpawns][1] = y;
+        BandaSpawnPos[TotalBandaSpawns][2] = z;
+        BandaSpawnPos[TotalBandaSpawns][3] = a;
+        TotalBandaSpawns++;
+        GuardarBandasSpawns();
+        RespawnBandasPVE();
+        SendClientMessage(playerid, 0x66FF66FF, "Spawn de banda creado en tu posicion.");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/borrarbanda", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+        if(TotalBandaSpawns <= 0) return SendClientMessage(playerid, -1, "No hay spawns de banda para borrar.");
+        new Float:px, Float:py, Float:pz;
+        GetPlayerPos(playerid, px, py, pz);
+        new cercano = -1;
+        new Float:minDist = 12.0;
+        for(new i = 0; i < TotalBandaSpawns; i++) {
+            new Float:dist = GetDistanceBetweenPoints(px, py, pz, BandaSpawnPos[i][0], BandaSpawnPos[i][1], BandaSpawnPos[i][2]);
+            if(dist < minDist) {
+                minDist = dist;
+                cercano = i;
+            }
+        }
+        if(cercano == -1) return SendClientMessage(playerid, -1, "No hay spawn de banda cercano (12m).");
+        for(new j = cercano; j < TotalBandaSpawns - 1; j++) {
+            BandaSpawnPos[j][0] = BandaSpawnPos[j + 1][0];
+            BandaSpawnPos[j][1] = BandaSpawnPos[j + 1][1];
+            BandaSpawnPos[j][2] = BandaSpawnPos[j + 1][2];
+            BandaSpawnPos[j][3] = BandaSpawnPos[j + 1][3];
+        }
+        TotalBandaSpawns--;
+        GuardarBandasSpawns();
+        RespawnBandasPVE();
+        SendClientMessage(playerid, 0xFFAA00FF, "Spawn de banda eliminado.");
+        return 1;
+    }
+
+    if(!EsStaff(playerid)) return SendClientMessage(playerid, 0xFF4444FF, "[SEERVER] Comando no encontrado en Kame House RP");
 
     if(!strcmp(cmd, "/crearparada", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
@@ -2264,6 +2321,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         SetPlayerVirtualWorld(playerid, 0);
         SetCameraBehindPlayer(playerid);
         SendClientMessage(playerid, -1, "Has salido de la casa.");
+        EnviarEntornoAccion(playerid, "abre la puerta y sale de su vivienda.");
         return 1;
     }
 
@@ -2347,7 +2405,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    return 0;
+    return SendClientMessage(playerid, 0xFF4444FF, "[SEERVER] Comando no encontrado en Kame House RP");
 }
 
 stock bool:PlayerTieneAccesoCasa(playerid, casa) {
@@ -2479,6 +2537,7 @@ public OnPlayerConnect(playerid) {
     TogglePlayerSpectating(playerid, true);
     TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
+    UltimoControlArmaProhibidaTick[playerid] = 0;
 
     BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 510.0, 150.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.7);
@@ -2636,6 +2695,7 @@ public OnPlayerSpawn(playerid) {
     SetDefaultCJAnimations(playerid);
     SetPlayerHealth(playerid, VIDA_AL_LOGUEAR);
     SetPlayerArmour(playerid, CHALECO_AL_LOGUEAR);
+    LimpiarIconosBandasParaJugador(playerid);
 
     new Float:sx = 2494.24, Float:sy = -1671.19, Float:sz = 13.33;
     if(GetPVarType(playerid, "SpawnX") == PLAYER_VARTYPE_FLOAT) {
@@ -3455,7 +3515,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new cmdMover[] = "/mover";
             return OnPlayerCommandText(playerid, cmdMover);
         }
-        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera\nSpawn de banda\nBorrar spawn de banda", "Crear", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
         if(listitem == 4) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
         if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
@@ -3472,7 +3532,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 13) return ShowPlayerDialog(playerid, DIALOG_ADMIN_REMOVE_MOD_ID, DIALOG_STYLE_INPUT, "Eliminar Moderador", "Ingresa ID del Moderador a eliminar", "Eliminar", "Atras");
         if(listitem == 14) {
             new textoBandas[144];
-            format(textoBandas, sizeof(textoBandas), "Sistema De Bandas PVE: %s\n\nActivar sistema\nDesactivar sistema\nReiniciar bandas", BandasPVEActivas ? "ACTIVO" : "INACTIVO");
+            format(textoBandas, sizeof(textoBandas), "Sistema de Bandas PVE: %s\nSpawns cargados: %d/%d\n\nActivar sistema\nDesactivar sistema\nReiniciar bandas\nAgregar spawn aqui\nBorrar spawn cercano", BandasPVEActivas ? "ACTIVO" : "INACTIVO", TotalBandaSpawns, MAX_BANDA_SPAWNS);
             return ShowPlayerDialog(playerid, DIALOG_ADMIN_BANDAS_MENU, DIALOG_STYLE_LIST, "Admin - Bandas", textoBandas, "Seleccionar", "Atras");
         }
         if(listitem == 15) {
@@ -3530,6 +3590,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 7) {
             new cmdVentagas[] = "/ventagas";
             return OnPlayerCommandText(playerid, cmdVentagas);
+        }
+        if(listitem == 8) {
+            new cmdCrearBanda[] = "/crearbanda";
+            return OnPlayerCommandText(playerid, cmdCrearBanda);
+        }
+        if(listitem == 9) {
+            new cmdBorrarBanda[] = "/borrarbanda";
+            return OnPlayerCommandText(playerid, cmdBorrarBanda);
         }
         return 1;
     }
@@ -3736,6 +3804,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(!BandasPVEActivas) return SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Activa el sistema antes de reiniciar.");
             RespawnBandasPVE();
             SendClientMessage(playerid, 0x66CCFFFF, "[Bandas PVE] Bandas reiniciadas.");
+        } else if(listitem == 3) {
+            new cmdCrearBanda[] = "/crearbanda";
+            return OnPlayerCommandText(playerid, cmdCrearBanda);
+        } else if(listitem == 4) {
+            new cmdBorrarBanda[] = "/borrarbanda";
+            return OnPlayerCommandText(playerid, cmdBorrarBanda);
         }
         return MostrarDialogoAdmin(playerid);
     }
@@ -4617,7 +4691,8 @@ public GuardarCuenta(playerid) {
 
             format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
-                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);            fwrite(h, line);
+                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);
+            fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
             fwrite(h, line);
@@ -4760,6 +4835,7 @@ stock LimpiarBandasPVE() {
         BandaGrupoMiembros[g] = 0;
         BandaUltimaAccionTick[g] = 0;
         BandaGrupoAtacandoA[g] = -1;
+        BandaSpawnAsignado[g] = -1;
         for(new m = 0; m < MAX_BANDEROS_POR_GRUPO; m++) {
             if(BandaActorId[g][m] != INVALID_ACTOR_ID) DestroyActor(BandaActorId[g][m]);
             BandaActorId[g][m] = INVALID_ACTOR_ID;
@@ -4768,21 +4844,24 @@ stock LimpiarBandasPVE() {
             BandaVivo[g][m] = false;
         }
     }
+    for(new i = 0; i < MAX_PLAYERS; i++) if(IsPlayerConnected(i)) LimpiarIconosBandasParaJugador(i);
     return 1;
 }
 
 stock CrearGrupoBandaPVE(slot) {
     if(slot < 0 || slot >= MAX_BANDAS_PVE) return 0;
-    new idxSpawn = random(sizeof(BandaSpawnsLS));
+    if(TotalBandaSpawns <= 0) return 0;
+    new idxSpawn = random(TotalBandaSpawns);
     new miembros = MIN_BANDEROS_POR_GRUPO + random((MAX_BANDEROS_POR_GRUPO - MIN_BANDEROS_POR_GRUPO) + 1);
     BandaGrupoActivo[slot] = true;
     BandaGrupoMiembros[slot] = miembros;
     BandaUltimaAccionTick[slot] = GetTickCount();
     BandaGrupoAtacandoA[slot] = -1;
+    BandaSpawnAsignado[slot] = idxSpawn;
 
-    BandaGrupoCentro[slot][0] = BandaSpawnsLS[idxSpawn][0];
-    BandaGrupoCentro[slot][1] = BandaSpawnsLS[idxSpawn][1];
-    BandaGrupoCentro[slot][2] = BandaSpawnsLS[idxSpawn][2];
+    BandaGrupoCentro[slot][0] = BandaSpawnPos[idxSpawn][0];
+    BandaGrupoCentro[slot][1] = BandaSpawnPos[idxSpawn][1];
+    BandaGrupoCentro[slot][2] = BandaSpawnPos[idxSpawn][2];
 
     static const armasDisponibles[] = {25, 17, 22, 29, 23, 3};
 
@@ -4799,7 +4878,7 @@ stock CrearGrupoBandaPVE(slot) {
         new Float:x = BandaGrupoCentro[slot][0] + ox;
         new Float:y = BandaGrupoCentro[slot][1] + oy;
         new Float:z = BandaGrupoCentro[slot][2];
-        new Float:a = BandaSpawnsLS[idxSpawn][3] + float(random(90) - 45);
+        new Float:a = BandaSpawnPos[idxSpawn][3] + float(random(90) - 45);
         new skin = 102 + random(3);
 
         BandaActorId[slot][m] = CreateActor(skin, x, y, z, a);
@@ -4807,6 +4886,7 @@ stock CrearGrupoBandaPVE(slot) {
         BandaArma[slot][m] = armasDisponibles[random(sizeof(armasDisponibles))];
         BandaVivo[slot][m] = true;
         SetActorHealth(BandaActorId[slot][m], VIDA_BANDERO_PVE);
+        ApplyActorAnimation(BandaActorId[slot][m], "PED", "WALK_gang1", 4.1, true, true, true, true, 0);
     }
     return 1;
 }
@@ -4880,6 +4960,11 @@ public ProcesarBandasPVE() {
         }
 
         BandaGrupoAtacandoA[g] = objetivo;
+        for(new i = 0; i < MAX_PLAYERS; i++) {
+            if(!IsPlayerConnected(i) || !IsPlayerLoggedIn[i]) continue;
+            if(objetivo == -1) RemovePlayerMapIcon(i, 60 + g);
+            else SetPlayerMapIcon(i, 60 + g, BandaGrupoCentro[g][0], BandaGrupoCentro[g][1], BandaGrupoCentro[g][2], 0, 0xFF0000FF, MAPICON_LOCAL);
+        }
         if(objetivo == -1) continue;
 
         BandaUltimaAccionTick[g] = now;
@@ -4888,9 +4973,79 @@ public ProcesarBandasPVE() {
         if(vida <= 0.0) continue;
         new Float:danio = BANDA_DANO_MIN + float(random(floatround((BANDA_DANO_MAX - BANDA_DANO_MIN) * 10.0) + 1)) / 10.0;
         SetPlayerHealth(objetivo, vida - danio);
-        if(random(100) < 25) GameTextForPlayer(objetivo, "~r~Banda Ballas te esta disparando", 800, 3);
+        for(new m = 0; m < BandaGrupoMiembros[g]; m++) {
+            if(BandaVivo[g][m] && BandaActorId[g][m] != INVALID_ACTOR_ID) ApplyActorAnimation(BandaActorId[g][m], "PED", "WALK_gang1", 4.1, true, true, true, true, 0);
+        }
     }
     return 1;
+}
+
+
+stock CargarBandasSpawns() {
+    TotalBandaSpawns = 0;
+    new File:h = fopen(PATH_BANDAS_SPAWNS, io_read);
+    new line[128];
+    if(h) {
+        while(fread(h, line)) {
+            LimpiarLinea(line);
+            if(!line[0]) continue;
+            if(TotalBandaSpawns >= MAX_BANDA_SPAWNS) break;
+            new Float:x, Float:y, Float:z, Float:a;
+            new idx = 0;
+            x = floatstr(strtok(line, idx));
+            y = floatstr(strtok(line, idx));
+            z = floatstr(strtok(line, idx));
+            a = floatstr(strtok(line, idx));
+            BandaSpawnPos[TotalBandaSpawns][0] = x;
+            BandaSpawnPos[TotalBandaSpawns][1] = y;
+            BandaSpawnPos[TotalBandaSpawns][2] = z;
+            BandaSpawnPos[TotalBandaSpawns][3] = a;
+            TotalBandaSpawns++;
+        }
+        fclose(h);
+    }
+    if(TotalBandaSpawns == 0) {
+        BandaSpawnPos[0][0] = 1958.40; BandaSpawnPos[0][1] = -1115.20; BandaSpawnPos[0][2] = 26.60; BandaSpawnPos[0][3] = 90.0;
+        BandaSpawnPos[1][0] = 2215.70; BandaSpawnPos[1][1] = -1723.30; BandaSpawnPos[1][2] = 13.30; BandaSpawnPos[1][3] = 180.0;
+        BandaSpawnPos[2][0] = 2060.30; BandaSpawnPos[2][1] = -1901.10; BandaSpawnPos[2][2] = 13.20; BandaSpawnPos[2][3] = 0.0;
+        BandaSpawnPos[3][0] = 1688.40; BandaSpawnPos[3][1] = -2102.40; BandaSpawnPos[3][2] = 13.10; BandaSpawnPos[3][3] = 45.0;
+        BandaSpawnPos[4][0] = 1510.50; BandaSpawnPos[4][1] = -1678.10; BandaSpawnPos[4][2] = 13.10; BandaSpawnPos[4][3] = 270.0;
+        TotalBandaSpawns = 5;
+        GuardarBandasSpawns();
+    }
+    return 1;
+}
+
+stock GuardarBandasSpawns() {
+    new File:h = fopen(PATH_BANDAS_SPAWNS, io_write);
+    if(!h) return 0;
+    new line[128];
+    for(new i = 0; i < TotalBandaSpawns; i++) {
+        format(line, sizeof(line), "%f %f %f %f\n", BandaSpawnPos[i][0], BandaSpawnPos[i][1], BandaSpawnPos[i][2], BandaSpawnPos[i][3]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock EnviarEntornoAccion(playerid, const accion[]) {
+    new string[196], name[MAX_PLAYER_NAME], Float:p[3];
+    GetPlayerName(playerid, name, sizeof(name));
+    GetPlayerPos(playerid, p[0], p[1], p[2]);
+    format(string, sizeof(string), "[ENTORNO] %s %s", name, accion);
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, p[0], p[1], p[2])) SendClientMessage(i, 0x33CC33FF, string);
+    }
+    return 1;
+}
+
+stock LimpiarIconosBandasParaJugador(playerid) {
+    for(new g = 0; g < MAX_BANDAS_PVE; g++) RemovePlayerMapIcon(playerid, 60 + g);
+    return 1;
+}
+
+stock bool:EsArmaProhibida(weaponid) {
+    return weaponid == 16 || weaponid == 17 || weaponid == 18 || weaponid == 35 || weaponid == 36 || weaponid == 37 || weaponid == 38 || weaponid == 39;
 }
 
 stock GetNivelPJ(playerid) {
@@ -5115,7 +5270,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
                 if(engine != 0) SetVehicleParamsEx(vehid, 0, lights, alarm, doors, bonnet, boot, objective);
                 SetVehicleVelocity(vehid, 0.0, 0.0, 0.0);
                 UltimoAvisoGasCeroTick[playerid] = GetTickCount();
-                SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a una gasolinera y usa /llenar para repostar.");
+                SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a una gasolinera y usa /llenar para llenar el tanque.");
             }
         }
     } else {
@@ -5163,6 +5318,26 @@ public OnPlayerUpdate(playerid) {
             format(labelText, sizeof(labelText), "[SANCIONADO]\nMotivo: %s\nTiempo: %02d:%02d", conceptoNombre, mins, secs);
             if(SancionLabel[playerid] != Text3D:-1) Update3DTextLabelText(SancionLabel[playerid], 0xFF3333FF, labelText);
             SetPlayerDrunkLevel(playerid, 0);
+        }
+    }
+    if(!EsStaff(playerid) && GetTickCount() - UltimoControlArmaProhibidaTick[playerid] > 1000) {
+        UltimoControlArmaProhibidaTick[playerid] = GetTickCount();
+        new armaActual = GetPlayerWeapon(playerid);
+        if(EsArmaProhibida(armaActual)) {
+            ResetPlayerWeapons(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "[ANTI-CHEAT] Arma pesada prohibida detectada. Has sido expulsado.");
+            Kick(playerid);
+            return 1;
+        }
+        for(new slot = 0; slot < 13; slot++) {
+            new wid, ammo;
+            GetPlayerWeaponData(playerid, slot, wid, ammo);
+            if(ammo > 0 && EsArmaProhibida(wid)) {
+                ResetPlayerWeapons(playerid);
+                SendClientMessage(playerid, 0xFF0000FF, "[ANTI-CHEAT] Arma pesada prohibida detectada. Has sido expulsado.");
+                Kick(playerid);
+                return 1;
+            }
         }
     }
     if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
@@ -5356,7 +5531,6 @@ stock ShowVentaSkinsRemoveMenu(playerid) {
 }
 
 stock ShowAdminEditHint(playerid, const nombreSistema[]) {
-    if(!EsStaff(playerid)) return 0;
     new msg[96];
     format(msg, sizeof(msg), "Admin: usa la tecla Y aqui para editar %s.", nombreSistema);
     SendClientMessage(playerid, 0xFFE082FF, msg);
@@ -6050,7 +6224,7 @@ public FinalizarRepostaje(playerid) {
     TogglePlayerControllable(playerid, true);
 
     new msg[128];
-    format(msg, sizeof(msg), "Repostaje completado: +%d litros por $%d.", faltante, costo);
+    format(msg, sizeof(msg), "Tanque de gasolina llenado: +%d litros por $%d.", faltante, costo);
     SendClientMessage(playerid, 0x00FF00FF, msg);
     return 1;
 }
@@ -7337,21 +7511,21 @@ stock RemoverSancionJugador(targetid) {
 
 stock ShowReglasDialog(playerid) {
     new reglasTexto[1024];
-    reglasTexto[0] = '\0';
+    reglasTexto[0] = EOS;
 
-    strcat(reglasTexto, "{F7D154}✦ REGLAS DEL SERVIDOR ✦\n\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{58D68D}PG{FFFFFF}: Acciones irreales. {F5B041}(10 min - 1 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{EC7063}DM{FFFFFF}: Matar sin rol. {F5B041}(1 h - 3 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{5DADE2}MG{FFFFFF}: Usar info OOC. {F5B041}(10 min - 30 min)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{AF7AC5}RK{FFFFFF}: Vengarse tras morir. {F5B041}(1 h - 2 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{F1948A}CK{FFFFFF}: Matar atropellando. {F5B041}(1 h - 3 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{7FB3D5}NRE{FFFFFF}: No rolear entorno. {F5B041}(1 h - 5 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{F8C471}NVVPJ{FFFFFF}: No valorar vida. {F5B041}(30 min - 1 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{AAB7B8}ER{FFFFFF}: Evadir rol. {F5B041}(1 h - 2 h)\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{73C6B6}FR{FFFFFF}: Forzar rol. {F5B041}(30 min - 10 h)\n\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "{AAAAAA}Tip: Mantén rol serio y evita sanciones.", sizeof(reglasTexto));
+    strcat(reglasTexto, "{F7D154}REGLAS DEL SERVIDOR\n\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{58D68D}PG{FFFFFF}: Acciones irreales. (10 min - 1 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{EC7063}DM{FFFFFF}: Matar sin rol. (1 h - 3 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{5DADE2}MG{FFFFFF}: Usar info OOC. (10 min - 30 min)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{AF7AC5}RK{FFFFFF}: Vengarse tras morir. (1 h - 2 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{F1948A}CK{FFFFFF}: Matar atropellando. (1 h - 3 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{7FB3D5}NRE{FFFFFF}: No rolear entorno. (1 h - 5 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{F8C471}NVVPJ{FFFFFF}: No valorar vida del personaje. (30 min - 1 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{AAB7B8}ER{FFFFFF}: Evadir rol. (1 h - 2 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{73C6B6}FR{FFFFFF}: Forzar rol. (30 min - 10 h)\n\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{AAAAAA}Mantener rol serio mejora la experiencia de todos.", sizeof(reglasTexto));
 
-    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{F7D154}Reglamento Kame House", reglasTexto, "Entendido", "Cerrar");
+    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Reglamento Kame House", reglasTexto, "Entendido", "Cerrar");
 }
 
 stock GuardarVentaAutosConfig() {
