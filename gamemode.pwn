@@ -79,6 +79,7 @@
 #define DIALOG_LOGIN        2
 #define DIR_DATA            "scriptfiles/kame_house"
 #define DIR_USUARIOS        "scriptfiles/kame_house/usuarios"
+#define DIR_USUARIOS_LEGACY "usuarios"
 #define PATH_USUARIOS       "scriptfiles/kame_house/usuarios/%s.ini"
 #define PATH_USUARIOS_LEGACY "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
@@ -607,6 +608,7 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]);
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h);
 stock bool:EsLineaPrendaCuenta(const line[]);
 stock ResolverPathCuenta(playerid, dest[], len);
+stock File:AbrirCuentaEscritura(playerid, dest[], len);
 stock MigrarArchivoLegacy(const legacyPath[], const newPath[]);
 forward BajarHambre();
 forward ChequearLimitesMapa();
@@ -789,6 +791,27 @@ stock ResolverPathCuenta(playerid, dest[], len) {
     if(fexist(pathNuevo)) return format(dest, len, "%s", pathNuevo);
     if(fexist(pathLegacy)) return format(dest, len, "%s", pathLegacy);
     return format(dest, len, "%s", pathNuevo);
+}
+
+stock File:AbrirCuentaEscritura(playerid, dest[], len) {
+    new name[MAX_PLAYER_NAME], pathNuevo[64], pathLegacy[64];
+    GetPlayerName(playerid, name, sizeof(name));
+    format(pathNuevo, sizeof(pathNuevo), PATH_USUARIOS, name);
+    format(pathLegacy, sizeof(pathLegacy), PATH_USUARIOS_LEGACY, name);
+
+    fcreatedir(DIR_DATA);
+    fcreatedir(DIR_USUARIOS);
+
+    new File:h = fopen(pathNuevo, io_write);
+    if(h) {
+        format(dest, len, "%s", pathNuevo);
+        return h;
+    }
+
+    fcreatedir(DIR_USUARIOS_LEGACY);
+    h = fopen(pathLegacy, io_write);
+    if(h) format(dest, len, "%s", pathLegacy);
+    return h;
 }
 
 stock MigrarArchivoLegacy(const legacyPath[], const newPath[]) {
@@ -4060,9 +4083,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return Kick(playerid);
         if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}La clave debe tener al menos 3 caracteres.\n{AAAAAA}Ingresa una clave valida:", "Registrar", "Salir");
         strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
-        fcreatedir(DIR_DATA);
-        fcreatedir(DIR_USUARIOS);
-        new File:h = fopen(path, io_write);
+        new File:h = AbrirCuentaEscritura(playerid, path, sizeof(path));
         if(h) {
             format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", PlayerPassword[playerid], DINERO_INICIAL);
             fwrite(h, line); fclose(h);
@@ -4271,12 +4292,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
 public GuardarCuenta(playerid) {
     if(IsPlayerLoggedIn[playerid]) {
-        new name[MAX_PLAYER_NAME], path[64], line[256], Float:p[3];
-        GetPlayerName(playerid, name, sizeof(name));
-        format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
-        fcreatedir(DIR_DATA);
-        fcreatedir(DIR_USUARIOS);
-        new File:h = fopen(path, io_write);
+        new path[64], line[256], Float:p[3];
+        GetPlayerPos(playerid, p[0], p[1], p[2]);
+        new File:h = AbrirCuentaEscritura(playerid, path, sizeof(path));
         if(h) {
             if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
             format(line, 256, "%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n%d",
