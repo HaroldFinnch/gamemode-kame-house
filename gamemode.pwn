@@ -428,6 +428,8 @@ enum eFaccionData {
     facRangos[MAX_MIEMBROS_FACCION]
 }
 new FaccionData[MAX_FACCIONES][eFaccionData];
+new FaccionOwnerNombre[MAX_FACCIONES][MAX_PLAYER_NAME];
+new FaccionMiembroNombre[MAX_FACCIONES][MAX_MIEMBROS_FACCION][MAX_PLAYER_NAME];
 new PlayerFaccionId[MAX_PLAYERS] = {-1, ...};
 new PlayerFaccionRango[MAX_PLAYERS];
 new InvitacionFaccionId[MAX_PLAYERS] = {-1, ...};
@@ -729,6 +731,7 @@ new AdminVidaChalecoTargetPendiente[MAX_PLAYERS] = {-1, ...};
 
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
+forward strtok_sep(const string[], &index, separator = " "[0]);
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
 forward GuardarCasas();
 forward GuardarCuenta(playerid);
@@ -925,10 +928,22 @@ stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
 stock ActualizarLabelJugadorFaccion(playerid);
 stock EliminarFaccion(fid);
+stock strtok_sep(const string[], &index, separator = " "[0]) {
+    new length = strlen(string), offset = index, result[128], pos = 0;
+    while(offset < length && (string[offset] <= ' ' || string[offset] == separator)) offset++;
+    while(offset < length && string[offset] > ' ' && string[offset] != separator && pos < sizeof(result) - 1) {
+        result[pos++] = string[offset++];
+    }
+    result[pos] = EOS;
+    index = offset;
+    return result;
+}
+
 stock BuscarFaccionLibre();
 stock bool:AgregarMiembroFaccion(fid, playerid, rango);
 stock RemoverMiembroFaccion(fid, playerid);
 stock ActualizarMiembrosFaccion(fid);
+stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1);
 stock GuardarEditMap();
 stock CargarEditMap();
 stock ShowEditMapMenu(playerid);
@@ -1928,8 +1943,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/ayuda", true)) {
-        if(PlayerAdmin[playerid] >= 1) ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nCasas y plantado\nEconomia\nAdmin", "Ver", "Cerrar");
-        else ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nCasas y plantado\nEconomia", "Ver", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nSistemas\nRol y reglas", "Ver", "Cerrar");
         return 1;
     }
 
@@ -2947,7 +2961,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         format(FaccionData[fid][facNombre], 17, "%s", nombre);
         FaccionData[fid][facOwner] = playerid;
         FaccionData[fid][facColor] = (FaccionCrearCompraColor[playerid] && FaccionCrearColorPendiente[playerid] != -1) ? FaccionColoresValor[FaccionCrearColorPendiente[playerid]] : 0x95A5A6FF;
-        for(new m=0;m<MAX_MIEMBROS_FACCION;m++){ FaccionData[fid][facMiembros][m] = -1; FaccionData[fid][facRangos][m]=0; }
+        GuardarNombreJugadorEnFaccion(playerid, fid);
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++){ FaccionData[fid][facMiembros][m] = -1; FaccionData[fid][facRangos][m]=0; FaccionMiembroNombre[fid][m][0] = EOS; }
         AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_OWNER);
         DeletePVar(playerid, "FaccionNombreTmp");
         GuardarFacciones();
@@ -3013,10 +3028,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas.\n- Comandos: H en mina, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion en armeria.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "{33CCFF}/comprar /abrircasa /salir{FFFFFF}\n{66FF99}/plantar /inventario{FFFFFF}\nPresiona {FFFF00}H {FFFFFF}para cosechar\nMaximo {FFD166}5 plantas{FFFFFF} por jugador en su casa", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "{FFD166}/saldo /comprar{FFFFFF}\n{FF6666}/pagar deshabilitado{FFFFFF}\nCada hora recibes pago segun {33CCFF}nivel PJ", "Cerrar", "");
-        if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, /gps (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 3) return ShowReglasDialog(playerid);
         return 1;
     }
     if(dialogid == DIALOG_GPS) {
@@ -5025,14 +5039,20 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
                 PlayerFaccionId[playerid] = -1;
                 PlayerFaccionRango[playerid] = 0;
+                new nombreCuenta[MAX_PLAYER_NAME];
+                GetPlayerName(playerid, nombreCuenta, sizeof(nombreCuenta));
                 for(new f = 0; f < MAX_FACCIONES; f++) {
                     if(!FaccionData[f][facActiva]) continue;
                     for(new m = 0; m < MAX_MIEMBROS_FACCION; m++) {
-                        if(FaccionData[f][facMiembros][m] == playerid) {
+                        if(FaccionData[f][facMiembros][m] != -1 && !strcmp(FaccionMiembroNombre[f][m], nombreCuenta, true)) {
+                            FaccionData[f][facMiembros][m] = playerid;
                             PlayerFaccionId[playerid] = f;
                             PlayerFaccionRango[playerid] = FaccionData[f][facRangos][m];
+                            GuardarNombreJugadorEnFaccion(playerid, f, m);
+                            break;
                         }
                     }
+                    if(PlayerFaccionId[playerid] != -1) break;
                 }
 
                 ActualizarNivelPJ(playerid);
@@ -6580,7 +6600,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Comandos de chat:{FFFFFF} /g /m /d /duda /rd\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono\n{FFD166}Trabajo y puntos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon\n\n{AAAAAA}Tip: si eres staff usa {FFD166}/admm {AAAAAA}para herramientas administrativas.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -8396,6 +8416,7 @@ stock bool:AgregarMiembroFaccion(fid, playerid, rango) {
         if(FaccionData[fid][facMiembros][i] != -1) continue;
         FaccionData[fid][facMiembros][i] = playerid;
         FaccionData[fid][facRangos][i] = rango;
+        GuardarNombreJugadorEnFaccion(playerid, fid, i);
         PlayerFaccionId[playerid] = fid;
         PlayerFaccionRango[playerid] = rango;
         ActualizarLabelJugadorFaccion(playerid);
@@ -8410,6 +8431,7 @@ stock RemoverMiembroFaccion(fid, playerid) {
         if(FaccionData[fid][facMiembros][i] != playerid) continue;
         FaccionData[fid][facMiembros][i] = -1;
         FaccionData[fid][facRangos][i] = 0;
+        FaccionMiembroNombre[fid][i][0] = EOS;
     }
     PlayerFaccionId[playerid] = -1;
     PlayerFaccionRango[playerid] = 0;
@@ -8441,6 +8463,7 @@ stock EliminarFaccion(fid) {
         }
         FaccionData[fid][facMiembros][i] = -1;
         FaccionData[fid][facRangos][i] = 0;
+        FaccionMiembroNombre[fid][i][0] = EOS;
     }
     if(ownerid != -1) {
         PlayerFaccionId[ownerid] = -1;
@@ -8451,6 +8474,7 @@ stock EliminarFaccion(fid) {
     FaccionData[fid][facOwner] = -1;
     FaccionData[fid][facNombre][0] = EOS;
     FaccionData[fid][facColor] = 0;
+    FaccionOwnerNombre[fid][0] = EOS;
     return 1;
 }
 
@@ -8467,12 +8491,13 @@ stock MostrarPanelFaccionOwner(playerid) {
 stock ActualizarLabelJugadorFaccion(playerid) {
     if(!IsPlayerConnected(playerid)) return 0;
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
-    new texto[160], dineroCorto[16], bloqueFaccion[48];
+    new texto[192], dineroCorto[16], bloqueFaccion[64], colorLabel = 0xFFFFFFFF;
     FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
     bloqueFaccion[0] = EOS;
     if(PlayerFaccionId[playerid] != -1) {
-        new hexColor[7];
-        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], hexColor, sizeof(hexColor));
+        new hexColor[8];
+        colorLabel = FaccionData[PlayerFaccionId[playerid]][facColor];
+        ConvertirColorAHexRGB(colorLabel, hexColor, sizeof(hexColor));
         format(bloqueFaccion, sizeof(bloqueFaccion), " {%s}[%s]{FFFFFF}", hexColor, FaccionData[PlayerFaccionId[playerid]][facNombre]);
     }
     if(EsDueno(playerid)) {
@@ -8482,20 +8507,20 @@ stock ActualizarLabelJugadorFaccion(playerid) {
     } else {
         format(texto, sizeof(texto), "%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
     }
-    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 25.0, 0);
-    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 1.1);
+    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, colorLabel, 0.0, 0.0, 0.0, 30.0, 0);
+    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.62);
     return 1;
 }
 
 stock GuardarFacciones() {
     new File:h = fopen(PATH_FACCIONES, io_write);
     if(!h) return 0;
-    new line[512], part[24];
+    new line[1024], part[96];
     for(new f=0; f<MAX_FACCIONES; f++) {
         if(!FaccionData[f][facActiva]) continue;
-        format(line, sizeof(line), "%d %s %d %d", f, FaccionData[f][facNombre], FaccionData[f][facOwner], FaccionData[f][facColor]);
+        format(line, sizeof(line), "%d|%s|%d|%d|%s", f, FaccionData[f][facNombre], FaccionData[f][facOwner], FaccionData[f][facColor], FaccionOwnerNombre[f]);
         for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
-            format(part, sizeof(part), " %d %d", FaccionData[f][facMiembros][m], FaccionData[f][facRangos][m]);
+            format(part, sizeof(part), "|%d|%d|%s", FaccionData[f][facMiembros][m], FaccionData[f][facRangos][m], FaccionMiembroNombre[f][m]);
             strcat(line, part);
         }
         strcat(line, "\n");
@@ -8511,26 +8536,66 @@ stock CargarFacciones() {
         FaccionData[f][facNombre][0] = EOS;
         FaccionData[f][facOwner] = -1;
         FaccionData[f][facColor] = 0x95A5A6FF;
-        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) { FaccionData[f][facMiembros][m] = -1; FaccionData[f][facRangos][m] = 0; }
+        FaccionOwnerNombre[f][0] = EOS;
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
+            FaccionData[f][facMiembros][m] = -1;
+            FaccionData[f][facRangos][m] = 0;
+            FaccionMiembroNombre[f][m][0] = EOS;
+        }
     }
-    new File:h = fopen(PATH_FACCIONES, io_read), line[512];
+
+    new File:h = fopen(PATH_FACCIONES, io_read), line[1024];
     if(!h) return GuardarFacciones();
+
     while(fread(h, line)) {
         LimpiarLinea(line);
         if(!line[0]) continue;
-        new idx = 0;
-        new fid = strval(strtok(line, idx));
+
+        new idx = 0, fid = strval(strtok_sep(line, idx, '|' ));
         if(fid < 0 || fid >= MAX_FACCIONES) continue;
+
         FaccionData[fid][facActiva] = true;
-        format(FaccionData[fid][facNombre], 17, "%s", strtok(line, idx));
-        FaccionData[fid][facOwner] = strval(strtok(line, idx));
-        FaccionData[fid][facColor] = strval(strtok(line, idx));
+        format(FaccionData[fid][facNombre], 17, "%s", strtok_sep(line, idx, '|' ));
+        FaccionData[fid][facOwner] = strval(strtok_sep(line, idx, '|' ));
+        FaccionData[fid][facColor] = strval(strtok_sep(line, idx, '|' ));
+        format(FaccionOwnerNombre[fid], MAX_PLAYER_NAME, "%s", strtok_sep(line, idx, '|' ));
+
         for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
-            FaccionData[fid][facMiembros][m] = strval(strtok(line, idx));
-            FaccionData[fid][facRangos][m] = strval(strtok(line, idx));
+            FaccionData[fid][facMiembros][m] = strval(strtok_sep(line, idx, '|' ));
+            FaccionData[fid][facRangos][m] = strval(strtok_sep(line, idx, '|' ));
+            format(FaccionMiembroNombre[fid][m], MAX_PLAYER_NAME, "%s", strtok_sep(line, idx, '|' ));
+        }
+
+        if(!FaccionOwnerNombre[fid][0] && FaccionData[fid][facOwner] != -1) {
+            format(FaccionOwnerNombre[fid], MAX_PLAYER_NAME, "ID_%d", FaccionData[fid][facOwner]);
+        }
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
+            if(FaccionData[fid][facMiembros][m] != -1 && !FaccionMiembroNombre[fid][m][0]) {
+                format(FaccionMiembroNombre[fid][m], MAX_PLAYER_NAME, "ID_%d", FaccionData[fid][facMiembros][m]);
+            }
         }
     }
     fclose(h);
+    return 1;
+}
+
+stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1) {
+    if(fid < 0 || fid >= MAX_FACCIONES || !IsPlayerConnected(playerid)) return 0;
+    new nombre[MAX_PLAYER_NAME];
+    GetPlayerName(playerid, nombre, sizeof(nombre));
+
+    if(FaccionData[fid][facOwner] == playerid) format(FaccionOwnerNombre[fid], MAX_PLAYER_NAME, "%s", nombre);
+
+    if(miembroSlot >= 0 && miembroSlot < MAX_MIEMBROS_FACCION) {
+        format(FaccionMiembroNombre[fid][miembroSlot], MAX_PLAYER_NAME, "%s", nombre);
+        return 1;
+    }
+
+    for(new i=0; i<MAX_MIEMBROS_FACCION; i++) {
+        if(FaccionData[fid][facMiembros][i] != playerid) continue;
+        format(FaccionMiembroNombre[fid][i], MAX_PLAYER_NAME, "%s", nombre);
+        break;
+    }
     return 1;
 }
 
