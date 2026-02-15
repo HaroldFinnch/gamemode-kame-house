@@ -4850,8 +4850,9 @@ stock LimpiarBandasPVE() {
 stock AplicarAnimacionBandero(actorid, weaponid) {
     if(actorid == INVALID_ACTOR_ID) return 0;
 
-    // Equipamos el arma para que se vea en el actor.
-    SetActorArmedWeapon(actorid, weaponid);
+    // SA-MP no expone una native estandar para equipar arma en actores.
+    // Mantenemos weaponid para futuras extensiones y aplicamos solo animacion.
+    #pragma unused weaponid
 
     // Animaciones vanilla de pandillero en reposo.
     static const animsGang[][20] = {
@@ -5353,8 +5354,9 @@ public OnPlayerUpdate(playerid) {
             Kick(playerid);
             return 1;
         }
-        for(new slot = 0; slot < 13; slot++) {
-            new wid, ammo;
+        for(new t_WEAPON_SLOT:slot = t_WEAPON_SLOT:0; _:slot < 13; slot++) {
+            new t_WEAPON:wid;
+            new ammo;
             GetPlayerWeaponData(playerid, slot, wid, ammo);
             if(ammo > 0 && EsArmaProhibida(wid)) {
                 ResetPlayerWeapons(playerid);
