@@ -169,6 +169,11 @@
 #define DIALOG_TELEFONO_CALC_OPERACION 77
 #define DIALOG_TELEFONO_CALC_VALOR2 78
 #define DIALOG_TELEFONO_LLAMAR_VEHICULO 79
+#define DIALOG_TELEFONO_CUENTA_MENU 111
+#define DIALOG_TELEFONO_CUENTA_CLAVE_ACTUAL 112
+#define DIALOG_TELEFONO_CUENTA_CLAVE_NUEVA 113
+#define DIALOG_TELEFONO_CUENTA_CORREO 114
+#define DIALOG_ADMIN_MODO_DIOS 115
 #define DIALOG_ADMIN_IR_JUGADOR_ID 80
 #define DIALOG_ADMIN_SKIN_ID 81
 #define DIALOG_ADMIN_SKIN_VALOR 82
@@ -232,7 +237,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 2
 #define MAX_VEHICULOS_TOTALES_JUGADOR 2
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 5
+#define CUENTA_DATA_VERSION 6
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -248,13 +253,17 @@ new PlayerAdmin[MAX_PLAYERS];
 new PlayerHambre[MAX_PLAYERS];
 new PlayerText:BarraHambre[MAX_PLAYERS];
 new PlayerText:BarraHambreFondo[MAX_PLAYERS];
+new PlayerText:TextoBarraHambre[MAX_PLAYERS];
 new PlayerText:BarraGas[MAX_PLAYERS];
 new PlayerText:BarraGasFondo[MAX_PLAYERS];
+new PlayerText:TextoBarraGas[MAX_PLAYERS];
 new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
 new PlayerBankMoney[MAX_PLAYERS];
 new BankTransferTarget[MAX_PLAYERS] = {-1, ...};
 new PlayerTiempoJugadoMin[MAX_PLAYERS];
+new PlayerCorreo[MAX_PLAYERS][64];
+new bool:AdminModoDios[MAX_PLAYERS];
 
 // Variables Camionero
 new TrabajandoCamionero[MAX_PLAYERS];
@@ -1738,7 +1747,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano\n{FFFF66}Restaurar vehiculos ocultos\n{00FFFF}Localizar uno de mis vehiculos", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
         return 1;
     }
 
@@ -2428,36 +2437,48 @@ public OnPlayerConnect(playerid) {
     TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
 
-    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 518.0, 150.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.9);
-    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 588.0, 0.0);
+    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 510.0, 150.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.7);
+    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 565.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambreFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraHambreFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawFont(playerid, BarraHambreFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 518.0, 150.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.9);
-    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 588.0, 0.0);
+    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 496.0, 149.0, "H");
+    PlayerTextDrawLetterSize(playerid, TextoBarraHambre[playerid], 0.18, 0.75);
+    PlayerTextDrawAlignment(playerid, TextoBarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, TextoBarraHambre[playerid], 0xFFFFFFFF);
+    PlayerTextDrawFont(playerid, TextoBarraHambre[playerid], TEXT_DRAW_FONT_1);
+
+    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 510.0, 150.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.7);
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 565.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawUseBox(playerid, BarraHambre[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 518.0, 164.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.9);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 588.0, 0.0);
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 492.0, 162.5, "Gas");
+    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.18, 0.75);
+    PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
+    PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
+
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 510.0, 163.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.7);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 565.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x00000099);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 518.0, 164.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.9);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 588.0, 0.0);
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 510.0, 163.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.7);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 565.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
@@ -2484,6 +2505,8 @@ public OnPlayerConnect(playerid) {
     PlayerBankMoney[playerid] = 0;
     BankTransferTarget[playerid] = -1;
     PlayerTiempoJugadoMin[playerid] = 0;
+    AdminModoDios[playerid] = false;
+    format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
     GasRefuelTimer[playerid] = -1;
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
     GasRefuelCost[playerid] = 0;
@@ -2595,8 +2618,10 @@ public OnPlayerSpawn(playerid) {
         if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
     }
     ActualizarBarrasEstado(playerid);
+    PlayerTextDrawShow(playerid, TextoBarraHambre[playerid]);
     PlayerTextDrawShow(playerid, BarraHambreFondo[playerid]);
     PlayerTextDrawShow(playerid, BarraHambre[playerid]);
+    PlayerTextDrawShow(playerid, TextoBarraGas[playerid]);
     PlayerTextDrawShow(playerid, BarraGasFondo[playerid]);
     PlayerTextDrawHide(playerid, BarraGas[playerid]);
     return 1;
@@ -2714,16 +2739,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new horno = GetHornoMasCercano(playerid);
             if(horno == -1) return SendClientMessage(playerid, -1, "No hay hornos disponibles en el mapa.");
             SetPlayerCheckpoint(playerid, HornoData[horno][hornoX], HornoData[horno][hornoY], HornoData[horno][hornoZ], 4.0);
-        }
-        else if(listitem == 12) {
-            new restaurados = RestaurarVehiculosJugador(playerid);
-            new msg[96];
-            format(msg, sizeof(msg), "GPS: %d vehiculo(s) restaurado(s) en su ultima posicion.", restaurados);
-            SendClientMessage(playerid, 0x00FF00FF, msg);
-            return 1;
-        }
-        else if(listitem == 13) {
-            return ShowGPSVehiculosMenu(playerid);
         }
         GPSCheckpointActivo[playerid] = true;
         SendClientMessage(playerid, 0x00FFFFFF, "GPS actualizado en tu mapa.");
@@ -2885,6 +2900,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_ID, DIALOG_STYLE_INPUT, "Telefono - Enviar mensaje", "Ingresa el ID del jugador:", "Siguiente", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR1, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el primer valor:", "Siguiente", "Atras");
         if(listitem == 4) return ShowTelefonoVehiculosMenu(playerid);
+        if(listitem == 5) {
+            new cmdGps[] = "/gps";
+            return OnPlayerCommandText(playerid, cmdGps);
+        }
+        if(listitem == 6) {
+            new restaurados = RestaurarVehiculosJugador(playerid);
+            new msg[96];
+            format(msg, sizeof(msg), "Telefono: %d vehiculo(s) restaurado(s).", restaurados);
+            return SendClientMessage(playerid, 0x00FF00FF, msg);
+        }
+        if(listitem == 7) return ShowGPSVehiculosMenu(playerid);
+        if(listitem == 8) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_MENU, DIALOG_STYLE_LIST, "Telefono - Cuenta", "Cambiar clave\nCorreo", "Abrir", "Atras");
         return 1;
     }
 
@@ -2955,6 +2982,37 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         TelefonoVehiculoSeleccionado[playerid] = veh;
         SendClientMessage(playerid, 0x66CCFFFF, "Llamada procesada. Tu vehiculo llegara en 5 segundos.");
         SetTimerEx("TeleportVehiculoLlamado", 5000, false, "d", playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CUENTA_MENU) {
+        if(!response) return ShowTelefonoMenu(playerid);
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_CLAVE_ACTUAL, DIALOG_STYLE_PASSWORD, "Telefono - Cambiar clave", "Escribe tu clave actual:", "Siguiente", "Atras");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_CORREO, DIALOG_STYLE_INPUT, "Telefono - Correo", "Escribe tu correo electronico:", "Guardar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CUENTA_CLAVE_ACTUAL) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_MENU, DIALOG_STYLE_LIST, "Telefono - Cuenta", "Cambiar clave\nCorreo", "Abrir", "Atras");
+        if(strcmp(inputtext, PlayerPassword[playerid], false) != 0) return SendClientMessage(playerid, 0xFF4444FF, "La clave actual no coincide.");
+        return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_CLAVE_NUEVA, DIALOG_STYLE_PASSWORD, "Telefono - Cambiar clave", "Escribe tu nueva clave (min. 3):", "Guardar", "Atras");
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CUENTA_CLAVE_NUEVA) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_CLAVE_ACTUAL, DIALOG_STYLE_PASSWORD, "Telefono - Cambiar clave", "Escribe tu clave actual:", "Siguiente", "Atras");
+        if(strlen(inputtext) < 3) return SendClientMessage(playerid, -1, "La nueva clave debe tener al menos 3 caracteres.");
+        strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
+        GuardarCuenta(playerid);
+        SendClientMessage(playerid, 0x66FF66FF, "Clave actualizada correctamente.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TELEFONO_CUENTA_CORREO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CUENTA_MENU, DIALOG_STYLE_LIST, "Telefono - Cuenta", "Cambiar clave\nCorreo", "Abrir", "Atras");
+        if(strlen(inputtext) < 5 || strfind(inputtext, "@") == -1) return SendClientMessage(playerid, -1, "Correo invalido.");
+        format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "%s", inputtext);
+        GuardarCuenta(playerid);
+        SendClientMessage(playerid, 0x66FF66FF, "Correo guardado correctamente.");
         return 1;
     }
 
@@ -3369,6 +3427,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 11) return ShowEditMapMenu(playerid);
         if(listitem == 12) return ShowPlayerDialog(playerid, DIALOG_ADMIN_ADD_MOD_ID, DIALOG_STYLE_INPUT, "Asignar Moderador", "Ingresa ID del jugador que sera Moderador", "Asignar", "Atras");
         if(listitem == 13) return ShowPlayerDialog(playerid, DIALOG_ADMIN_REMOVE_MOD_ID, DIALOG_STYLE_INPUT, "Eliminar Moderador", "Ingresa ID del Moderador a eliminar", "Eliminar", "Atras");
+        if(listitem == 14) {
+            new texto[96];
+            format(texto, sizeof(texto), "Activo\nInactivo\n\nEstado actual: %s", AdminModoDios[playerid] ? "Activo" : "Inactivo");
+            return ShowPlayerDialog(playerid, DIALOG_ADMIN_MODO_DIOS, DIALOG_STYLE_LIST, "Admin - Modo Dios", texto, "Seleccionar", "Atras");
+        }
         return 1;
     }
 
@@ -3608,6 +3671,21 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         format(msg, sizeof(msg), "SERVER: %s libero de sancion a %s. Motivo: %s", admName, tarName, inputtext);
         SendClientMessageToAll(0x66FF66FF, msg);
         return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_MODO_DIOS) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+        if(listitem == 0) {
+            AdminModoDios[playerid] = true;
+            SetPlayerHealth(playerid, 100.0);
+            SetPlayerArmour(playerid, 100.0);
+            SendClientMessage(playerid, 0x66FF66FF, "Modo Dios activado.");
+        } else if(listitem == 1) {
+            AdminModoDios[playerid] = false;
+            SendClientMessage(playerid, 0xFFAA00FF, "Modo Dios desactivado.");
+        }
+        return MostrarDialogoAdmin(playerid);
     }
 
     if(dialogid == DIALOG_ADMIN_ADD_MOD_ID) {
@@ -4392,6 +4470,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         if(dataVersion >= 3) {
                             if(fread(h, line)) PlayerTieneTelefono[playerid] = strval(line) != 0;
                         }
+                        format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
+                        if(dataVersion >= 6) {
+                            if(fread(h, line)) {
+                                LimpiarLinea(line);
+                                format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "%s", line);
+                            }
+                        }
 
                         if(fread(h, line)) {
                             LimpiarLinea(line);
@@ -4453,7 +4538,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
 public GuardarCuenta(playerid) {
     if(IsPlayerLoggedIn[playerid]) {
-        new path[64], line[256], Float:p[3];
+        new path[128], line[256], Float:p[3];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
         new File:h = AbrirCuentaEscritura(playerid, path, sizeof(path));
         if(h) {
@@ -4465,7 +4550,9 @@ public GuardarCuenta(playerid) {
 
             format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
-                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);
+                PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0);            fwrite(h, line);
+
+            format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", CUENTA_SECCION_PRENDAS);
@@ -4772,6 +4859,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
         }
     } else {
         UltimoVehiculoGasMostrado[playerid] = INVALID_VEHICLE_ID;
+        PlayerTextDrawHide(playerid, TextoBarraGas[playerid]);
         PlayerTextDrawHide(playerid, BarraGasFondo[playerid]);
         PlayerTextDrawHide(playerid, BarraGas[playerid]);
     }
@@ -4792,6 +4880,10 @@ public OnVehicleDeath(vehicleid, killerid) {
 
 public OnPlayerUpdate(playerid) {
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
+    if(AdminModoDios[playerid]) {
+        SetPlayerHealth(playerid, 100.0);
+        SetPlayerArmour(playerid, 100.0);
+    }
     if(PlayerSancionado[playerid]) {
         new restante = SancionFinTick[playerid] - GetTickCount();
         if(restante <= 0) {
@@ -4802,8 +4894,6 @@ public OnPlayerUpdate(playerid) {
             SetPlayerHealth(playerid, 100.0);
             SetPlayerArmour(playerid, 100.0);
             DisableRemoteVehicleCollisions(playerid, true);
-            SetPlayerVirtualWorld(playerid, SANCION_VW_BASE + playerid);
-            SetPlayerInterior(playerid, 0);
             SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
             new mins = restante / 60000;
             new secs = (restante / 1000) % 60;
@@ -5209,7 +5299,7 @@ stock GetWeaponNameGM(weaponid, dest[], len) {
 }
 
 stock ShowTelefonoMenu(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENU, DIALOG_STYLE_LIST, "Telefono celular", "Hora\nFecha\nEnviar mensaje ($100)\nCalculadora\nLlamar vehiculo ($5000)", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENU, DIALOG_STYLE_LIST, "Telefono celular", "Hora\nFecha\nEnviar mensaje ($100)\nCalculadora\nLlamar vehiculo ($5000)\nGPS\nRestaurar vehiculos ocultos\nLocalizar mis vehiculos\nCuenta", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -5622,8 +5712,8 @@ stock ActualizarBarrasEstado(playerid) {
     if(gas < 0) gas = 0;
     if(gas > 100) gas = 100;
 
-    new Float:anchoMax = 70.0;
-    new Float:inicio = 518.0;
+    new Float:anchoMax = 55.0;
+    new Float:inicio = 510.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicio + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicio + (anchoMax * float(gas) / 100.0), 0.0);
     return 1;
@@ -5637,6 +5727,7 @@ stock ActualizarGasTextoVehiculo(playerid) {
     UltimoVehiculoGasMostrado[playerid] = veh;
     if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 70 + random(31); }
     ActualizarBarrasEstado(playerid);
+    PlayerTextDrawShow(playerid, TextoBarraGas[playerid]);
     PlayerTextDrawShow(playerid, BarraGasFondo[playerid]);
     PlayerTextDrawShow(playerid, BarraGas[playerid]);
     return 1;
@@ -6346,7 +6437,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}✦ Panel Owner ✦", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}✦ Panel Owner ✦", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -6950,8 +7041,6 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     SetPlayerHealth(targetid, 100.0);
     SetPlayerArmour(targetid, 100.0);
     DisableRemoteVehicleCollisions(targetid, true);
-    SetPlayerVirtualWorld(targetid, SANCION_VW_BASE + targetid);
-    SetPlayerInterior(targetid, 0);
 
     new conceptoNombre[16], labelText[128];
     GetConceptoSancionNombre(concepto, conceptoNombre, sizeof(conceptoNombre));
@@ -6989,18 +7078,19 @@ stock ShowReglasDialog(playerid) {
     new reglasTexto[1024];
     reglasTexto[0] = '\0';
 
-    strcat(reglasTexto, "Conceptos:                              Tiempo de Sancion:\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "PG: Acciones irreales.                 De 10 minutos a 1 hora.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "DM: Matar sin rol.                     De 1 hora a 3 horas.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "MG: Usar info OOC.                     De 10 minutos a 30 minutos.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "RK: Vengarse tras morir.               De 1 hora a 2 horas.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "CK: Matar atropellando.                De 1 hora a 3 horas.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "NRE: No rolear entorno.                De 1 hora a 5 horas.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "NVVPJ: No valorar vida.                De 30 minutos a 1 hora.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "ER: Evadir rol.                        De 1 hora a 2 hora.\n", sizeof(reglasTexto));
-    strcat(reglasTexto, "FR: Forzar rol.                        De 30 minutos a 10 hora.", sizeof(reglasTexto));
+    strcat(reglasTexto, "{F7D154}✦ REGLAS DEL SERVIDOR ✦\n\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{58D68D}PG{FFFFFF}: Acciones irreales. {F5B041}(10 min - 1 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{EC7063}DM{FFFFFF}: Matar sin rol. {F5B041}(1 h - 3 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{5DADE2}MG{FFFFFF}: Usar info OOC. {F5B041}(10 min - 30 min)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{AF7AC5}RK{FFFFFF}: Vengarse tras morir. {F5B041}(1 h - 2 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{F1948A}CK{FFFFFF}: Matar atropellando. {F5B041}(1 h - 3 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{7FB3D5}NRE{FFFFFF}: No rolear entorno. {F5B041}(1 h - 5 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{F8C471}NVVPJ{FFFFFF}: No valorar vida. {F5B041}(30 min - 1 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{AAB7B8}ER{FFFFFF}: Evadir rol. {F5B041}(1 h - 2 h)\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{73C6B6}FR{FFFFFF}: Forzar rol. {F5B041}(30 min - 10 h)\n\n", sizeof(reglasTexto));
+    strcat(reglasTexto, "{AAAAAA}Tip: Mantén rol serio y evita sanciones.", sizeof(reglasTexto));
 
-    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Reglas del servidor", reglasTexto, "Cerrar", "");
+    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{F7D154}Reglamento Kame House", reglasTexto, "Entendido", "Cerrar");
 }
 
 stock GuardarVentaAutosConfig() {
