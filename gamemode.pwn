@@ -231,6 +231,7 @@
 
 #define MAX_AUTOS_NORMALES_JUGADOR 2
 #define MAX_VEHICULOS_TOTALES_JUGADOR 2
+#define SANCION_VW_BASE 20000
 #define CUENTA_DATA_VERSION 5
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
@@ -4102,7 +4103,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         new item = GetVentaAutoByListIndex(listitem);
         if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
-        if(ContarAutosJugador(playerid) >= MAX_AUTOS_NORMALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 2 autos por jugador.");
+        if(ContarVehiculosTotalesJugador(playerid) >= MAX_AUTOS_NORMALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 2 autos por jugador.");
         if(GetPlayerMoney(playerid) < VentaAutosData[item][vaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
 
         new Float:px, Float:py, Float:pz, Float:pa;
@@ -4110,6 +4111,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         GetPlayerFacingAngle(playerid, pa);
         new veh = CreateVehicle(VentaAutosData[item][vaModelo], px + 3.0, py, pz, pa, -1, -1, 120);
         if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo crear el vehiculo.");
+        if(VehOwner[veh] != -1 && VehModelData[veh] >= 400 && VehModelData[veh] <= 611) {
+            DestroyVehicle(veh);
+            return SendClientMessage(playerid, -1, "No se pudo entregar el auto sin riesgo de perder tus vehiculos. Intenta nuevamente.");
+        }
         GivePlayerMoney(playerid, -VentaAutosData[item][vaPrecio]);
         PutPlayerInVehicle(playerid, veh, 0);
         VehOwner[veh] = playerid;
@@ -4797,8 +4802,8 @@ public OnPlayerUpdate(playerid) {
             SetPlayerHealth(playerid, 100.0);
             SetPlayerArmour(playerid, 100.0);
             DisableRemoteVehicleCollisions(playerid, true);
-            SetPlayerVirtualWorld(playerid, SancionPrevVW[playerid]);
-            SetPlayerInterior(playerid, SancionPrevInterior[playerid]);
+            SetPlayerVirtualWorld(playerid, SANCION_VW_BASE + playerid);
+            SetPlayerInterior(playerid, 0);
             SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
             new mins = restante / 60000;
             new secs = (restante / 1000) % 60;
@@ -6945,6 +6950,8 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     SetPlayerHealth(targetid, 100.0);
     SetPlayerArmour(targetid, 100.0);
     DisableRemoteVehicleCollisions(targetid, true);
+    SetPlayerVirtualWorld(targetid, SANCION_VW_BASE + targetid);
+    SetPlayerInterior(targetid, 0);
 
     new conceptoNombre[16], labelText[128];
     GetConceptoSancionNombre(concepto, conceptoNombre, sizeof(conceptoNombre));
@@ -6968,6 +6975,9 @@ stock RemoverSancionJugador(targetid) {
     SancionFinTick[targetid] = 0;
     TogglePlayerControllable(targetid, true);
     DisableRemoteVehicleCollisions(targetid, false);
+    SetPlayerVirtualWorld(targetid, SancionPrevVW[targetid]);
+    SetPlayerInterior(targetid, SancionPrevInterior[targetid]);
+    SetPlayerPos(targetid, SancionPos[targetid][0], SancionPos[targetid][1], SancionPos[targetid][2]);
     if(SancionLabel[targetid] != Text3D:-1) {
         Delete3DTextLabel(SancionLabel[targetid]);
         SancionLabel[targetid] = Text3D:-1;
