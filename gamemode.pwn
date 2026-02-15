@@ -817,6 +817,19 @@ stock ResetMaleteroVehiculo(vehid, ownerid = -1) {
     return 1;
 }
 
+stock bool:TieneDatosMaleteroVehiculo(vehid, ownerid) {
+    if(vehid <= 0 || vehid >= MAX_VEHICLES) return false;
+    if(MaleteroOwner[vehid] == ownerid) return true;
+    if(MaleteroHierbaVeh[vehid] > 0 || MaleteroFloresVeh[vehid] > 0 || MaleteroSemillaHierbaVeh[vehid] > 0 || MaleteroSemillaFlorVeh[vehid] > 0) return true;
+
+    new limiteSlots = MaleteroSlotsVeh[vehid];
+    if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
+    for(new ms = 0; ms < limiteSlots; ms++) {
+        if(MaleteroArmaSlotIdVeh[vehid][ms] > 0 && MaleteroArmaSlotAmmoVeh[vehid][ms] > 0) return true;
+    }
+    return false;
+}
+
 stock ResolverPathCuenta(playerid, dest[], len) {
     new name[MAX_PLAYER_NAME], pathNuevo[64], pathLegacy[64];
     GetPlayerName(playerid, name, sizeof(name));
@@ -1759,6 +1772,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/ga", true)) {
         new vehid = GetNearbyOwnedVehicle(playerid);
         if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Debes estar junto a un vehiculo propio.");
+        if(MaleteroOwner[vehid] == -1) MaleteroOwner[vehid] = playerid;
+        if(MaleteroSlotsVeh[vehid] < 1 || MaleteroSlotsVeh[vehid] > MAX_SLOTS_MALETERO) MaleteroSlotsVeh[vehid] = MAX_SLOTS_MALETERO;
         new WEAPON:arma = GetPlayerWeapon(playerid);
         if(_:arma <= 0 || _:arma >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "Debes tener un arma en mano.");
         new ammo = GetPlayerAmmo(playerid);
@@ -6077,10 +6092,12 @@ stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
             VehPosData[v][0] = x; VehPosData[v][1] = y; VehPosData[v][2] = z; VehPosData[v][3] = a;
         }
 
+        new bool:tieneMaletero = TieneDatosMaleteroVehiculo(v, playerid);
+
         format(line, sizeof(line), "\n%d %d %d %f %f %f %f %d %d %d %d %d %d %d %d",
             VehModelData[v], VehColor1Data[v], VehColor2Data[v], x, y, z, a,
             VehLocked[v] ? 1 : 0, GasVehiculo[v],
-            MaleteroOwner[v] == playerid ? 1 : 0, MaleteroSlotsVeh[v], MaleteroHierbaVeh[v], MaleteroFloresVeh[v], MaleteroSemillaHierbaVeh[v], MaleteroSemillaFlorVeh[v]);
+            tieneMaletero ? 1 : 0, MaleteroSlotsVeh[v], MaleteroHierbaVeh[v], MaleteroFloresVeh[v], MaleteroSemillaHierbaVeh[v], MaleteroSemillaFlorVeh[v]);
 
         new limiteSlots = MaleteroSlotsVeh[v];
         if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
