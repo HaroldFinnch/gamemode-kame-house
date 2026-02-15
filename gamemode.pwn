@@ -77,8 +77,10 @@
 
 #define DIALOG_REGISTRO     1
 #define DIALOG_LOGIN        2
-#define DIR_USUARIOS        "usuarios"
-#define PATH_USUARIOS       "usuarios/%s.ini"
+#define DIR_DATA            "scriptfiles/kame_house"
+#define DIR_USUARIOS        "scriptfiles/kame_house/usuarios"
+#define PATH_USUARIOS       "scriptfiles/kame_house/usuarios/%s.ini"
+#define PATH_USUARIOS_LEGACY "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
 #define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
 #define PATH_RUTAS_BASURA   "rutas_basurero.txt"
@@ -88,8 +90,10 @@
 #define PATH_HORNOS "hornos.txt"
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
-#define PATH_PRENDAS "prendas_config.txt"
-#define PATH_EDITMAP "editmap.txt"
+#define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
+#define PATH_PRENDAS_LEGACY "prendas_config.txt"
+#define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
+#define PATH_EDITMAP_LEGACY "editmap.txt"
 #define PATH_VENTA_AUTOS "venta_autos_config.txt"
 #define MAX_CASAS           50
 
@@ -579,6 +583,8 @@ stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h);
 stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]);
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h);
 stock bool:EsLineaPrendaCuenta(const line[]);
+stock ResolverPathCuenta(playerid, dest[], len);
+stock MigrarArchivoLegacy(const legacyPath[], const newPath[]);
 forward BajarHambre();
 forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
@@ -740,6 +746,36 @@ stock RemoverSancionJugador(targetid);
 stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
 
+stock ResolverPathCuenta(playerid, dest[], len) {
+    new name[MAX_PLAYER_NAME], pathNuevo[64], pathLegacy[64];
+    GetPlayerName(playerid, name, sizeof(name));
+    format(pathNuevo, sizeof(pathNuevo), PATH_USUARIOS, name);
+    format(pathLegacy, sizeof(pathLegacy), PATH_USUARIOS_LEGACY, name);
+    if(fexist(pathNuevo)) return format(dest, len, "%s", pathNuevo);
+    if(fexist(pathLegacy)) return format(dest, len, "%s", pathLegacy);
+    return format(dest, len, "%s", pathNuevo);
+}
+
+stock MigrarArchivoLegacy(const legacyPath[], const newPath[]) {
+    if(fexist(newPath) || !fexist(legacyPath)) return 0;
+
+    new File:hSrc = fopen(legacyPath, io_read);
+    if(!hSrc) return 0;
+
+    new File:hDst = fopen(newPath, io_write);
+    if(!hDst) {
+        fclose(hSrc);
+        return 0;
+    }
+
+    new line[256];
+    while(fread(hSrc, line)) fwrite(hDst, line);
+
+    fclose(hDst);
+    fclose(hSrc);
+    return 1;
+}
+
 // ================= [ MAIN & INIT ] =================
 main() {
     printf("Server KameHouse");
@@ -749,6 +785,7 @@ public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
     EnableStuntBonusForAll(false);
+    fcreatedir(DIR_DATA);
     fcreatedir(DIR_USUARIOS);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
 
@@ -793,6 +830,8 @@ public OnGameModeInit() {
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
 
     CargarPuntosMovibles();
+    MigrarArchivoLegacy(PATH_PRENDAS_LEGACY, PATH_PRENDAS);
+    MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
@@ -2343,9 +2382,8 @@ public OnPlayerConnect(playerid) {
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
 
-    new name[MAX_PLAYER_NAME], path[64];
-    GetPlayerName(playerid, name, sizeof(name));
-    format(path, sizeof(path), PATH_USUARIOS, name);
+    new path[64];
+    ResolverPathCuenta(playerid, path, sizeof(path));
     if(fexist(path)) ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "{33CCFF}Kame House - Login", "{FFFFFF}Bienvenido de nuevo a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Ingresa tu clave para continuar:", "Entrar", "Salir");
     else ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FFFFFF}Bienvenido a {66CCFF}Kame House{FFFFFF}.\n\n{AAAAAA}Crea una clave para tu cuenta:", "Registrar", "Salir");
     ActualizarNivelPJ(playerid);
@@ -3874,13 +3912,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return ShowBankMenu(playerid);
     }
 
-    new name[MAX_PLAYER_NAME], path[64], line[128];
-    GetPlayerName(playerid, name, sizeof(name));
-    format(path, sizeof(path), PATH_USUARIOS, name);
+    new path[64], line[128];
+    ResolverPathCuenta(playerid, path, sizeof(path));
     if(dialogid == DIALOG_REGISTRO) {
         if(!response) return Kick(playerid);
         if(strlen(inputtext) < 3) return ShowPlayerDialog(playerid, DIALOG_REGISTRO, DIALOG_STYLE_PASSWORD, "{66FF99}Kame House - Registro", "{FF6666}La clave debe tener al menos 3 caracteres.\n{AAAAAA}Ingresa una clave valida:", "Registrar", "Salir");
         strmid(PlayerPassword[playerid], inputtext, 0, sizeof(PlayerPassword[]), sizeof(PlayerPassword[]));
+        fcreatedir(DIR_DATA);
         fcreatedir(DIR_USUARIOS);
         new File:h = fopen(path, io_write);
         if(h) {
@@ -4094,6 +4132,8 @@ public GuardarCuenta(playerid) {
         new name[MAX_PLAYER_NAME], path[64], line[256], Float:p[3];
         GetPlayerName(playerid, name, sizeof(name));
         format(path, 64, PATH_USUARIOS, name); GetPlayerPos(playerid, p[0], p[1], p[2]);
+        fcreatedir(DIR_DATA);
+        fcreatedir(DIR_USUARIOS);
         new File:h = fopen(path, io_write);
         if(h) {
             if(PlayerSkinGuardada[playerid] < 0 || PlayerSkinGuardada[playerid] > 311) PlayerSkinGuardada[playerid] = SKIN_POR_DEFECTO;
@@ -4256,6 +4296,11 @@ public AutoGuardadoGlobal() {
     GuardarPuntosMovibles();
     GuardarEditMap();
     GuardarVentaAutosConfig();
+    return 1;
+}
+
+public OnGameModeExit() {
+    AutoGuardadoGlobal();
     return 1;
 }
 
