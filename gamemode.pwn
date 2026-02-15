@@ -196,7 +196,8 @@
 #define MAX_PRENDAS 10
 #define MAX_EDITMAP_OBJECTS 10000
 #define VEHICULO_TEMP_SIN_USO_MS 300000
-#define MAX_PRENDAS_USUARIO 5
+#define MAX_PRENDAS_USUARIO 10
+#define MAX_SLOTS_MALETERO 10
 #define PRECIO_MAZO 10000
 #define PRECIO_TELEFONO 10000
 #define COSTO_SMS 100
@@ -209,8 +210,8 @@
 #define GAS_PRECIO_POR_PUNTO 500
 #define GAS_CONSUMO_POR_MINUTO 5
 
-#define MAX_AUTOS_NORMALES_JUGADOR 3
-#define MAX_VEHICULOS_TOTALES_JUGADOR 4
+#define MAX_AUTOS_NORMALES_JUGADOR 2
+#define MAX_VEHICULOS_TOTALES_JUGADOR 2
 #define CUENTA_DATA_VERSION 4
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
@@ -867,15 +868,18 @@ public OnGameModeInit() {
 
 public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 {
-    #pragma unused oldkeys
+    new bool:presionoY = ((newkeys & KEY_YES) && !(oldkeys & KEY_YES));
+    new bool:presionoB = ((newkeys & KEY_LOOK_BEHIND) && !(oldkeys & KEY_LOOK_BEHIND));
+    new bool:presionoL = ((newkeys & KEY_SUBMISSION) && !(oldkeys & KEY_SUBMISSION));
+    new bool:presionoH = ((newkeys & KEY_CTRL_BACK) && !(oldkeys & KEY_CTRL_BACK));
 
-    if((newkeys & KEY_YES) && EsDueno(playerid)) { // Tecla Y (solo Owner)
+    if(presionoY && PlayerAdmin[playerid] >= 1) { // Tecla Y (staff)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
     }
 
-    if((newkeys & KEY_LOOK_BEHIND)) { // Tecla B
+    if(presionoB) { // Tecla B
         new vehMaletero = GetNearbyOwnedVehicle(playerid);
         if(vehMaletero != INVALID_VEHICLE_ID) {
             ShowMaleteroMaletero(playerid, vehMaletero);
@@ -883,12 +887,14 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         }
     }
 
-    if((newkeys & KEY_SUBMISSION)) { // Tecla L
-        if(EsDueno(playerid)) return MostrarDialogoAdmin(playerid);
-        if(EsModerador(playerid)) return MostrarDialogoMod(playerid);
+    if(presionoL) { // Tecla L
+        if(PlayerAdmin[playerid] >= 1) {
+            if(PlayerAdmin[playerid] == RANGO_MOD) return MostrarDialogoMod(playerid);
+            return MostrarDialogoAdmin(playerid);
+        }
     }
 
-    if(!(newkeys & KEY_CTRL_BACK)) return 1; // Tecla H
+    if(!presionoH) return 1; // Tecla H
 
     if(TrabajandoBasurero[playerid] > 0 && !IsPlayerInAnyVehicle(playerid) && BasureroRecolectando[playerid]) {
         BasureroRecolectando[playerid] = false;
@@ -1432,7 +1438,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 {33CCFF}Tiempo jugado: {FFFFFF}%d horas
 {33CCFF}Prox nivel en: {FFFFFF}%dh %dm
 {33CCFF}Pago por hora: {00FF00}$%d
-{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/3", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
+{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/2", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -2680,7 +2686,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         if(!PlayerPrendaComprada[playerid][idxPrenda]) {
             if(PrendasData[idxPrenda][prendaStock] <= 0) return SendClientMessage(playerid, -1, "Esta prenda esta agotada.");
-            if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
+            if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 10 prendas visibles.");
             if(GetPlayerMoney(playerid) < PrendasData[idxPrenda][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
             GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
             PrendasData[idxPrenda][prendaStock]--;
@@ -2697,7 +2703,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return SendClientMessage(playerid, 0xFFAA00FF, "Prenda oculta. Usa /prendas para volver a mostrarla.");
         }
 
-        if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
+        if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 10 prendas visibles.");
         PlayerPrendaActiva[playerid][idxPrenda] = 1;
         AplicarPrendaJugador(playerid, idxPrenda);
         SendClientMessage(playerid, 0x66FF66FF, "Prenda equipada.");
@@ -2908,7 +2914,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 QuitarPrendaJugador(playerid, idxp);
                 SendClientMessage(playerid, 0xFFAA00FF, "Prenda oculta.");
             } else {
-                if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 5 prendas visibles.");
+                if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 10 prendas visibles.");
                 PlayerPrendaActiva[playerid][idxp] = 1;
                 AplicarPrendaJugador(playerid, idxp);
                 SendClientMessage(playerid, 0x66FF66FF, "Prenda visible nuevamente.");
@@ -3730,7 +3736,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         new item = GetVentaAutoByListIndex(listitem);
         if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
-        if(ContarAutosJugador(playerid) >= MAX_AUTOS_NORMALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 3 autos por jugador.");
+        if(ContarAutosJugador(playerid) >= MAX_AUTOS_NORMALES_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 2 autos por jugador.");
         if(GetPlayerMoney(playerid) < VentaAutosData[item][vaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
 
         new Float:px, Float:py, Float:pz, Float:pa;
@@ -5064,7 +5070,7 @@ stock InitGasSystem() {
         VehColor1Data[v] = -1;
         VehColor2Data[v] = -1;
         MaleteroOwner[v] = -1;
-        MaleteroSlotsVeh[v] = 4;
+        MaleteroSlotsVeh[v] = MAX_SLOTS_MALETERO;
         MaleteroHierbaVeh[v] = 0;
         MaleteroFloresVeh[v] = 0;
         MaleteroSemillaHierbaVeh[v] = 0;
@@ -5363,6 +5369,7 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
         new gas = strval(strtok(line, idx));
         new isMaletero = strval(strtok(line, idx));
         new maleteroSlots = strval(strtok(line, idx));
+        if(maleteroSlots < 1 || maleteroSlots > MAX_SLOTS_MALETERO) maleteroSlots = MAX_SLOTS_MALETERO;
         new maleteroHierba = strval(strtok(line, idx));
         new maleteroFlores = strval(strtok(line, idx));
         new maleteroSemHierba = strval(strtok(line, idx));
