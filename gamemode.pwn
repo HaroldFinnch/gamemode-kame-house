@@ -731,7 +731,7 @@ new AdminVidaChalecoTargetPendiente[MAX_PLAYERS] = {-1, ...};
 
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
-forward strtok_sep(const string[], &index, separator = " "[0]);
+forward strtok_sep(const string[], &index, separator = ' ');
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
 forward GuardarCasas();
 forward GuardarCuenta(playerid);
@@ -928,7 +928,7 @@ stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
 stock ActualizarLabelJugadorFaccion(playerid);
 stock EliminarFaccion(fid);
-stock strtok_sep(const string[], &index, separator = " "[0]) {
+stock strtok_sep(const string[], &index, separator = ' ') {
     new length = strlen(string), offset = index, result[128], pos = 0;
     while(offset < length && (string[offset] <= ' ' || string[offset] == separator)) offset++;
     while(offset < length && string[offset] > ' ' && string[offset] != separator && pos < sizeof(result) - 1) {
