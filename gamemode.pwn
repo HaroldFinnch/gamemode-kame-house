@@ -34,6 +34,7 @@
 
 #define TIEMPO_CULTIVO_MIN   4
 #define TIEMPO_CULTIVO_MAX   5
+#define COOLDOWN_MINA_MS     600000
 
 #define SEMILLA_HIERBA_PRECIO 45
 #define SEMILLA_FLOR_PRECIO   65
@@ -138,6 +139,8 @@
 #define DIALOG_VENTA_AUTOS_ADD_STOCK 43
 #define DIALOG_VENTA_AUTOS_REMOVE_LIST 44
 #define DIALOG_PINTURA_COLOR 45
+#define DIALOG_TUNING_MENU 119
+#define DIALOG_CHATARRA_VEHICULO 120
 #define DIALOG_GPS_VEHICULOS 46
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
@@ -644,6 +647,11 @@ new CajaDataLoot[MAX_CAJAS][eCajaData];
 new TotalCajas;
 new CajaCooldownTick[MAX_PLAYERS][MAX_CAJAS];
 new MineroCooldownTick[MAX_PLAYERS][MAX_MINAS];
+new MinaCooldownTick[MAX_MINAS];
+new bool:MineroGPSActivo[MAX_PLAYERS];
+new bool:OmitirArmasEnProximoSpawn[MAX_PLAYERS];
+new TuningVehLista[MAX_PLAYERS][MAX_AUTOS_NORMALES_JUGADOR];
+new TuningVehCount[MAX_PLAYERS];
 
 enum ePrepiezaPoint {
     bool:ppActivo,
@@ -719,6 +727,12 @@ stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Flo
 stock CanceladoTrabajo(playerid);
 stock FormatTiempoRestante(ms, dest[], len);
 stock ActualizarLabelHorno(hornoidx);
+stock SetCheckpointMinaMasCercana(playerid);
+stock GetMinaDisponibleMasCercana(playerid, ignorar = -1);
+stock GetPrecioOriginalVehiculo(modelo);
+stock MostrarMenuTuning(playerid);
+stock MostrarListaVehiculosChatarra(playerid);
+stock EliminarVehiculoJugador(veh);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -1005,7 +1019,6 @@ public OnGameModeInit() {
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
 
     CargarPuntosMovibles();
-    CargarBandasSpawns();
     MigrarArchivoLegacy(PATH_PRENDAS_LEGACY, PATH_PRENDAS);
     MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
     MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
@@ -1083,10 +1096,8 @@ public OnGameModeInit() {
     SetTimer("SubirTiempoJugado", 60000, true);
     SetTimer("CheckInactiveVehicles", 10000, true);
     SetTimer("ActualizarTextosHornos", 1000, true);
-    SetTimer("ProcesarBandasPVE", 1000, true);
 
     InitGasSystem();
-    InicializarSistemaBandasPVE();
     return 1;
 }
 
@@ -1193,7 +1204,9 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
         if(TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Ya estas trabajando. Usa /dejartrabajo para cambiar.");
         MineroTrabajando[playerid] = true;
-        SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la Tienda Kame House y busca minas.");
+        MineroGPSActivo[playerid] = true;
+        SetCheckpointMinaMasCercana(playerid);
+        SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la Tienda Kame House, usa /mina y sigue el checkpoint.");
         return 1;
     }
 
@@ -1202,7 +1215,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
         if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de minero primero.");
         if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en Tienda Kame House.");
-        if(GetTickCount() < MineroCooldownTick[playerid][m]) { new left[24], msgcd[120]; FormatTiempoRestante(MineroCooldownTick[playerid][m] - GetTickCount(), left, sizeof(left)); format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %s", left); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
+        if(GetTickCount() < MinaCooldownTick[m]) { new left[24], msgcd[120]; FormatTiempoRestante(MinaCooldownTick[m] - GetTickCount(), left, sizeof(left)); format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %s", left); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
         if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
         new segs = 15 + random(6);
         MineroMinaIndex[playerid] = m;
@@ -1684,13 +1697,16 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
 
-    if(!strcmp(cmd, "/pintar", true)) {
-        if(!IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return SendClientMessage(playerid, -1, "Debes estar en el CP de pintura.");
-        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar sobre tu vehiculo conduciendo.");
-        new vehid = GetPlayerVehicleID(playerid);
-        if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
-        ShowPlayerDialog(playerid, DIALOG_PINTURA_COLOR, DIALOG_STYLE_LIST, "Taller de pintura ($10000)", "Rojo\nAzul\nVerde\nNegro\nBlanco\nAmarillo", "Pintar", "Cerrar");
-        return 1;
+    if(!strcmp(cmd, "/tuning", true) || !strcmp(cmd, "/pintar", true)) {
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return SendClientMessage(playerid, -1, "Debes estar en Tuning Kame House.");
+        return MostrarMenuTuning(playerid);
+    }
+
+    if(!strcmp(cmd, "/mina", true)) {
+        if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tener el trabajo de minero para usar /mina.");
+        if(!SetCheckpointMinaMasCercana(playerid)) return SendClientMessage(playerid, -1, "No hay minas disponibles cercanas en este momento.");
+        MineroGPSActivo[playerid] = true;
+        return SendClientMessage(playerid, 0x66CCFFFF, "[Minero] GPS de mina activado. Te marcamos la mina disponible mas cercana.");
     }
 
     if(!strcmp(cmd, "/llenar", true)) {
@@ -1788,6 +1804,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         }
         if(MineroTrabajando[playerid]) {
             MineroTrabajando[playerid] = false;
+            MineroGPSActivo[playerid] = false;
+            DisablePlayerCheckpoint(playerid);
             if(MineroTimer[playerid] != -1) { KillTimer(MineroTimer[playerid]); MineroTimer[playerid] = -1; }
             TogglePlayerControllable(playerid, true);
             RemovePlayerAttachedObject(playerid, 8);
@@ -1807,7 +1825,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Taller de pintura\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
         return 1;
     }
 
@@ -1935,50 +1953,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
 
-    if(!strcmp(cmd, "/crearbanda", true)) {
-        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        if(TotalBandaSpawns >= MAX_BANDA_SPAWNS) return SendClientMessage(playerid, -1, "Limite de spawns de bandas alcanzado.");
-        new Float:x, Float:y, Float:z, Float:a;
-        GetPlayerPos(playerid, x, y, z);
-        GetPlayerFacingAngle(playerid, a);
-        BandaSpawnPos[TotalBandaSpawns][0] = x;
-        BandaSpawnPos[TotalBandaSpawns][1] = y;
-        BandaSpawnPos[TotalBandaSpawns][2] = z;
-        BandaSpawnPos[TotalBandaSpawns][3] = a;
-        TotalBandaSpawns++;
-        GuardarBandasSpawns();
-        RespawnBandasPVE();
-        SendClientMessage(playerid, 0x66FF66FF, "Spawn de banda creado en tu posicion.");
-        return 1;
+    if(!strcmp(cmd, "/crearbanda", true) || !strcmp(cmd, "/borrarbanda", true)) {
+        return SendClientMessage(playerid, -1, "El sistema de Bandas fue eliminado de esta gamemode.");
     }
 
-    if(!strcmp(cmd, "/borrarbanda", true)) {
-        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        if(TotalBandaSpawns <= 0) return SendClientMessage(playerid, -1, "No hay spawns de banda para borrar.");
-        new Float:px, Float:py, Float:pz;
-        GetPlayerPos(playerid, px, py, pz);
-        new cercano = -1;
-        new Float:minDist = 12.0;
-        for(new i = 0; i < TotalBandaSpawns; i++) {
-            new Float:dist = GetDistanceBetweenPoints(px, py, pz, BandaSpawnPos[i][0], BandaSpawnPos[i][1], BandaSpawnPos[i][2]);
-            if(dist < minDist) {
-                minDist = dist;
-                cercano = i;
-            }
-        }
-        if(cercano == -1) return SendClientMessage(playerid, -1, "No hay spawn de banda cercano (12m).");
-        for(new j = cercano; j < TotalBandaSpawns - 1; j++) {
-            BandaSpawnPos[j][0] = BandaSpawnPos[j + 1][0];
-            BandaSpawnPos[j][1] = BandaSpawnPos[j + 1][1];
-            BandaSpawnPos[j][2] = BandaSpawnPos[j + 1][2];
-            BandaSpawnPos[j][3] = BandaSpawnPos[j + 1][3];
-        }
-        TotalBandaSpawns--;
-        GuardarBandasSpawns();
-        RespawnBandasPVE();
-        SendClientMessage(playerid, 0xFFAA00FF, "Spawn de banda eliminado.");
-        return 1;
-    }
+
+
 
     if(!EsStaff(playerid)) return SendClientMessage(playerid, 0xFF4444FF, "[SEERVER] Comando no encontrado en Kame House RP");
 
@@ -2198,7 +2178,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nVenta de skins\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2647,6 +2627,8 @@ public OnPlayerConnect(playerid) {
     SancionAdminIdPendiente[playerid] = -1;
     UnsanTargetPendiente[playerid] = -1;
     BandaSpawnBorrarPendiente[playerid] = -1;
+    MineroGPSActivo[playerid] = false;
+    OmitirArmasEnProximoSpawn[playerid] = false;
     SancionFinTick[playerid] = 0;
     SancionPos[playerid][0] = 0.0;
     SancionPos[playerid][1] = 0.0;
@@ -2709,7 +2691,6 @@ public OnPlayerSpawn(playerid) {
     SetDefaultCJAnimations(playerid);
     SetPlayerHealth(playerid, VIDA_AL_LOGUEAR);
     SetPlayerArmour(playerid, CHALECO_AL_LOGUEAR);
-    LimpiarIconosBandasParaJugador(playerid);
 
     new Float:sx = 2494.24, Float:sy = -1671.19, Float:sz = 13.33;
     if(GetPVarType(playerid, "SpawnX") == PLAYER_VARTYPE_FLOAT) {
@@ -2731,9 +2712,12 @@ public OnPlayerSpawn(playerid) {
         RemovePlayerAttachedObject(playerid, pi);
         if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
     }
-    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
-        if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
+    if(!OmitirArmasEnProximoSpawn[playerid]) {
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
+            if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
+        }
     }
+    OmitirArmasEnProximoSpawn[playerid] = false;
     ActualizarBarrasEstado(playerid);
     PlayerTextDrawShow(playerid, TextoBarraHambre[playerid]);
     PlayerTextDrawShow(playerid, BarraHambreFondo[playerid]);
@@ -3529,7 +3513,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new cmdMover[] = "/mover";
             return OnPlayerCommandText(playerid, cmdMover);
         }
-        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera\nSpawn de banda\nBorrar spawn de banda", "Crear", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
         if(listitem == 4) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
         if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
@@ -3545,11 +3529,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 12) return ShowPlayerDialog(playerid, DIALOG_ADMIN_ADD_MOD_ID, DIALOG_STYLE_INPUT, "Asignar Moderador", "Ingresa ID del jugador que sera Moderador", "Asignar", "Atras");
         if(listitem == 13) return ShowPlayerDialog(playerid, DIALOG_ADMIN_REMOVE_MOD_ID, DIALOG_STYLE_INPUT, "Eliminar Moderador", "Ingresa ID del Moderador a eliminar", "Eliminar", "Atras");
         if(listitem == 14) {
-            new textoBandas[144];
-            format(textoBandas, sizeof(textoBandas), "Sistema de Bandas PVE: %s\nSpawns cargados: %d/%d\n\nActivar sistema\nDesactivar sistema\nReiniciar bandas\nAgregar spawn aqui\nBorrar spawn por lista", BandasPVEActivas ? "ACTIVO" : "INACTIVO", TotalBandaSpawns, MAX_BANDA_SPAWNS);
-            return ShowPlayerDialog(playerid, DIALOG_ADMIN_BANDAS_MENU, DIALOG_STYLE_LIST, "Admin - Bandas", textoBandas, "Seleccionar", "Atras");
-        }
-        if(listitem == 15) {
             new texto[96];
             format(texto, sizeof(texto), "Activo\nInactivo\n\nEstado actual: %s", AdminModoDios[playerid] ? "Activo" : "Inactivo");
             return ShowPlayerDialog(playerid, DIALOG_ADMIN_MODO_DIOS, DIALOG_STYLE_LIST, "Admin - Modo Dios", texto, "Seleccionar", "Atras");
@@ -3604,14 +3583,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 7) {
             new cmdVentagas[] = "/ventagas";
             return OnPlayerCommandText(playerid, cmdVentagas);
-        }
-        if(listitem == 8) {
-            new cmdCrearBanda[] = "/crearbanda";
-            return OnPlayerCommandText(playerid, cmdCrearBanda);
-        }
-        if(listitem == 9) {
-            new cmdBorrarBanda[] = "/borrarbanda";
-            return OnPlayerCommandText(playerid, cmdBorrarBanda);
         }
         return 1;
     }
@@ -3808,8 +3779,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
         if(listitem == 0) {
             BandasPVEActivas = true;
-            InicializarSistemaBandasPVE();
-            SendClientMessage(playerid, 0x66FF66FF, "[Bandas PVE] Sistema activado.");
+                    SendClientMessage(playerid, 0x66FF66FF, "[Bandas PVE] Sistema activado.");
         } else if(listitem == 1) {
             DesactivarSistemaBandasPVE();
             SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Sistema desactivado.");
@@ -3847,6 +3817,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         new idxBorrar = BandaSpawnBorrarPendiente[playerid];
         BandaSpawnBorrarPendiente[playerid] = -1;
+    MineroGPSActivo[playerid] = false;
+    OmitirArmasEnProximoSpawn[playerid] = false;
         if(!EliminarSpawnBandaPorIndice(idxBorrar)) return SendClientMessage(playerid, -1, "No se pudo borrar el punto seleccionado.");
 
         GuardarBandasSpawns();
@@ -4431,8 +4403,19 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
 
-    if(dialogid == DIALOG_PINTURA_COLOR) {
+    if(dialogid == DIALOG_TUNING_MENU) {
         if(!response) return 1;
+        if(listitem == 0) {
+            new colores[512];
+            format(colores, sizeof(colores), "{FF0000}Rojo\n{0000FF}Azul\n{00FF00}Verde\n{000000}Negro\n{FFFFFF}Blanco\n{FFFF00}Amarillo\n{FF00FF}Fucsia\n{00FFFF}Cian\n{FFA500}Naranja\n{800080}Morado\n{8B4513}Cafe\n{A9A9A9}Gris");
+            return ShowPlayerDialog(playerid, DIALOG_PINTURA_COLOR, DIALOG_STYLE_LIST, "Tuning Kame House - Colores ($10000)", colores, "Pintar", "Atras");
+        }
+        if(listitem == 1) return MostrarListaVehiculosChatarra(playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_PINTURA_COLOR) {
+        if(!response) return MostrarMenuTuning(playerid);
         if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo para pintar.");
         if(GetPlayerMoney(playerid) < 10000) return SendClientMessage(playerid, -1, "Necesitas $10000 para pintar.");
         new veh = GetPlayerVehicleID(playerid);
@@ -4446,12 +4429,35 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 3: color = 0;
             case 4: color = 1;
             case 5: color = 6;
+            case 6: color = 126;
+            case 7: color = 128;
+            case 8: color = 158;
+            case 9: color = 149;
+            case 10: color = 55;
+            case 11: color = 8;
         }
         ChangeVehicleColours(veh, color, color);
         VehColor1Data[veh] = color;
         VehColor2Data[veh] = color;
         GivePlayerMoney(playerid, -10000);
         SendClientMessage(playerid, 0x00FF00FF, "Pintura aplicada correctamente. Costo: $10000.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_CHATARRA_VEHICULO) {
+        if(!response) return MostrarMenuTuning(playerid);
+        if(listitem < 0 || listitem >= TuningVehCount[playerid]) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        new veh = TuningVehLista[playerid][listitem];
+        if(veh <= 0 || veh >= MAX_VEHICLES || VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "El vehiculo seleccionado ya no esta disponible.");
+        new precioOriginal = GetPrecioOriginalVehiculo(VehModelData[veh]);
+        if(precioOriginal <= 0) precioOriginal = 100000;
+        new pago = (precioOriginal * 70) / 100;
+        GivePlayerMoney(playerid, pago);
+        EliminarVehiculoJugador(veh);
+        GuardarCuenta(playerid);
+        new msg[144];
+        format(msg, sizeof(msg), "Vendiste tu vehiculo como chatarra y recibiste $%d (70%% del precio original).", pago);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
         return 1;
     }
 
@@ -5621,6 +5627,20 @@ public OnPlayerUpdate(playerid) {
     return 1;
 }
 
+
+public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
+    #pragma unused killerid
+    #pragma unused reason
+    OmitirArmasEnProximoSpawn[playerid] = true;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
+        PlayerArmaComprada[playerid][w] = false;
+        PlayerAmmoInventario[playerid][w] = 0;
+    }
+    ResetPlayerWeapons(playerid);
+    SetSpawnInfo(playerid, 255, PlayerSkinGuardada[playerid], 2494.24, -1671.19, 13.33, 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
+    return 1;
+}
+
 public OnPlayerRequestClass(playerid, classid) {
     #pragma unused classid
     SetPlayerPos(playerid, 2494.24, -1680.0, 15.0);
@@ -6146,7 +6166,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoVentaAutos: format(dest, len, "Venta de autos");
         case puntoVentaSkins: format(dest, len, "Tienda De Skins");
         case puntoMaletero: format(dest, len, "Reservado");
-        case puntoPintura: format(dest, len, "CP pintura");
+        case puntoPintura: format(dest, len, "Tuning Kame House");
         case puntoMinero: format(dest, len, "Trabajo minero");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
         default: format(dest, len, "Punto");
@@ -6206,7 +6226,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoPintura: {
             PuntoPickup[punto] = CreatePickup(1210, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{00CCFF}CP pintura\n{FFFFFF}Conduce aqui y usa {FFFF00}/pintar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("{00CCFF}Tuning Kame House\n{FFFFFF}Conduce aqui y usa {FFFF00}/tuning", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
         }
         case puntoMinero: {
             PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -6234,7 +6254,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Comandos de chat:{FFFFFF} /g /m /d /duda /rd\n{66FF99}Personaje:{FFFFFF} /skills /lvl /inventario /comer /consumir /telefono\n{FFD166}Trabajo y puntos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /pintar\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon\n\n{AAAAAA}Tip: si eres staff usa {FFD166}/admm {AAAAAA}para herramientas administrativas.");
+    format(texto, sizeof(texto), "{33CCFF}Comandos de chat:{FFFFFF} /g /m /d /duda /rd\n{66FF99}Personaje:{FFFFFF} /skills /lvl /inventario /comer /consumir /telefono\n{FFD166}Trabajo y puntos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon\n\n{AAAAAA}Tip: si eres staff usa {FFD166}/admm {AAAAAA}para herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -7035,9 +7055,14 @@ public FinalizarMinado(playerid) {
     MineroDuracionActual[playerid] = 0;
     if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
     new msg[144];
-    MineroCooldownTick[playerid][MineroMinaIndex[playerid]] = GetTickCount() + 180000;
+    MinaCooldownTick[MineroMinaIndex[playerid]] = GetTickCount() + COOLDOWN_MINA_MS;
+    MineroMinaIndex[playerid] = -1;
     format(msg, sizeof(msg), "[Minero] Piedra:%d | Cobre:%d | Hierro:%d", piedra, cobre, hierro);
     SendClientMessage(playerid, 0x66FF66FF, msg);
+    if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
+        if(SetCheckpointMinaMasCercana(playerid)) SendClientMessage(playerid, 0x66CCFFFF, "[Minero] Mina completada. Te marcamos la siguiente mina disponible mas cercana.");
+        else SendClientMessage(playerid, 0xFFAA00FF, "[Minero] No hay otra mina disponible por ahora. Espera regeneracion.");
+    }
     return 1;
 }
 
@@ -7133,7 +7158,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{BB8FCE}Bandas\n{F4D03F}Modo Dios", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -7920,6 +7945,77 @@ stock CargarArmeriaConfig() {
         i++;
     }
     fclose(h);
+    return 1;
+}
+
+stock GetMinaDisponibleMasCercana(playerid, ignorar = -1) {
+    new elegido = -1;
+    new Float:px, Float:py, Float:pz;
+    new Float:minDist = 999999.0;
+    GetPlayerPos(playerid, px, py, pz);
+    for(new i = 0; i < TotalMinas; i++) {
+        if(!MinaData[i][minaActiva] || i == ignorar) continue;
+        if(GetTickCount() < MinaCooldownTick[i]) continue;
+        new Float:d = GetDistanceBetweenPoints(px, py, pz, MinaData[i][minaX], MinaData[i][minaY], MinaData[i][minaZ]);
+        if(d < minDist) { minDist = d; elegido = i; }
+    }
+    return elegido;
+}
+
+stock SetCheckpointMinaMasCercana(playerid) {
+    new mina = GetMinaDisponibleMasCercana(playerid);
+    if(mina == -1) {
+        DisablePlayerCheckpoint(playerid);
+        return 0;
+    }
+    SetPlayerCheckpoint(playerid, MinaData[mina][minaX], MinaData[mina][minaY], MinaData[mina][minaZ], 4.5);
+    return 1;
+}
+
+stock GetPrecioOriginalVehiculo(modelo) {
+    for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+        if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo && VentaAutosData[i][vaPrecio] > 0) return VentaAutosData[i][vaPrecio];
+    }
+    return 0;
+}
+
+stock MostrarMenuTuning(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_TUNING_MENU, DIALOG_STYLE_LIST, "Tuning Kame House", "Pintar vehiculo ($10000)\nVender auto como chatarra (70%)", "Seleccionar", "Cerrar");
+}
+
+stock MostrarListaVehiculosChatarra(playerid) {
+    new list[512], line[96];
+    list[0] = EOS;
+    TuningVehCount[playerid] = 0;
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != playerid) continue;
+        if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
+        if(TuningVehCount[playerid] >= MAX_AUTOS_NORMALES_JUGADOR) break;
+        TuningVehLista[playerid][TuningVehCount[playerid]] = v;
+        new precio = GetPrecioOriginalVehiculo(VehModelData[v]);
+        new pago = (precio * 70) / 100;
+        format(line, sizeof(line), "Vehiculo ID %d (Modelo %d) - Chatarra: $%d", v, VehModelData[v], pago);
+        if(TuningVehCount[playerid] > 0) strcat(list, "\n");
+        strcat(list, line);
+        TuningVehCount[playerid]++;
+    }
+    if(TuningVehCount[playerid] == 0) return SendClientMessage(playerid, -1, "No tienes vehiculos propios para vender como chatarra.");
+    return ShowPlayerDialog(playerid, DIALOG_CHATARRA_VEHICULO, DIALOG_STYLE_LIST, "Vender Auto Como Chatarra", list, "Vender", "Atras");
+}
+
+stock EliminarVehiculoJugador(veh) {
+    if(veh <= 0 || veh >= MAX_VEHICLES) return 0;
+    if(IsValidVehicle(veh)) DestroyVehicle(veh);
+    ResetMaleteroVehiculo(veh);
+    VehOwner[veh] = -1;
+    VehLocked[veh] = false;
+    VehOculto[veh] = false;
+    VehLastUseTick[veh] = 0;
+    VehModelData[veh] = 0;
+    VehColor1Data[veh] = 0;
+    VehColor2Data[veh] = 0;
+    GasInitVehiculo[veh] = false;
+    GasVehiculo[veh] = 0;
     return 1;
 }
 
