@@ -883,6 +883,11 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         }
     }
 
+    if((newkeys & KEY_SUBMISSION)) { // Tecla L
+        if(EsDueno(playerid)) return MostrarDialogoAdmin(playerid);
+        if(EsModerador(playerid)) return MostrarDialogoMod(playerid);
+    }
+
     if(!(newkeys & KEY_CTRL_BACK)) return 1; // Tecla H
 
     if(TrabajandoBasurero[playerid] > 0 && !IsPlayerInAnyVehicle(playerid) && BasureroRecolectando[playerid]) {
@@ -4396,7 +4401,7 @@ public OnPlayerUpdate(playerid) {
             TogglePlayerControllable(playerid, false);
             SetPlayerHealth(playerid, 100.0);
             SetPlayerArmour(playerid, 100.0);
-            SetPlayerCollision(playerid, false);
+            DisableRemoteVehicleCollisions(playerid, true);
             SetPlayerVirtualWorld(playerid, SancionPrevVW[playerid]);
             SetPlayerInterior(playerid, SancionPrevInterior[playerid]);
             SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
@@ -6182,7 +6187,7 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     TogglePlayerControllable(targetid, false);
     SetPlayerHealth(targetid, 100.0);
     SetPlayerArmour(targetid, 100.0);
-    SetPlayerCollision(targetid, false);
+    DisableRemoteVehicleCollisions(targetid, true);
 
     new conceptoNombre[16], labelText[128];
     GetConceptoSancionNombre(concepto, conceptoNombre, sizeof(conceptoNombre));
@@ -6205,7 +6210,7 @@ stock RemoverSancionJugador(targetid) {
     PlayerSancionado[targetid] = false;
     SancionFinTick[targetid] = 0;
     TogglePlayerControllable(targetid, true);
-    SetPlayerCollision(targetid, true);
+    DisableRemoteVehicleCollisions(targetid, false);
     if(SancionLabel[targetid] != Text3D:-1) {
         Delete3DTextLabel(SancionLabel[targetid]);
         SancionLabel[targetid] = Text3D:-1;
