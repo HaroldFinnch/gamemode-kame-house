@@ -436,6 +436,7 @@ new Float:PlayerPrendaScaleX[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleY[MAX_PLAYERS][MAX_PRENDAS];
 new Float:PlayerPrendaScaleZ[MAX_PLAYERS][MAX_PRENDAS];
 new PlayerPrendaModelo[MAX_PLAYERS][MAX_PRENDAS];
+new PlayerPrendaNombre[MAX_PLAYERS][MAX_PRENDAS][32];
 
 enum eEditMapData {
     bool:emActivo,
@@ -759,6 +760,7 @@ stock ShowPrendasAdminEditar(playerid, idx);
 stock ShowPrendasAdminMenu(playerid);
 stock ShowPrendaUsuarioMenu(playerid);
 stock ShowPrendaUsuarioEditar(playerid, idx);
+stock ObtenerNombrePrendaJugador(playerid, idx, dest[], len);
 stock IsPrendaSlotEnUsoPorJugadores(idx);
 stock ContarPrendasJugador(playerid);
 stock GetPrendaBoneName(bone, dest[], len);
@@ -2475,6 +2477,7 @@ public OnPlayerConnect(playerid) {
         PlayerPrendaRotX[playerid][pi] = 0.0; PlayerPrendaRotY[playerid][pi] = 0.0; PlayerPrendaRotZ[playerid][pi] = 0.0;
         PlayerPrendaScaleX[playerid][pi] = 0.0; PlayerPrendaScaleY[playerid][pi] = 0.0; PlayerPrendaScaleZ[playerid][pi] = 0.0;
         PlayerPrendaModelo[playerid][pi] = 0;
+        format(PlayerPrendaNombre[playerid][pi], 32, "");
         RemovePlayerAttachedObject(playerid, pi);
     }
 
@@ -2897,6 +2900,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             PlayerPrendaComprada[playerid][idxPrenda] = 1;
             PlayerPrendaActiva[playerid][idxPrenda] = 1;
             PlayerPrendaModelo[playerid][idxPrenda] = PrendasData[idxPrenda][prendaModelo];
+            format(PlayerPrendaNombre[playerid][idxPrenda], 32, "%s", PrendasData[idxPrenda][prendaNombre]);
             AplicarPrendaJugador(playerid, idxPrenda);
             GuardarCuenta(playerid);
             SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
@@ -3145,6 +3149,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             PlayerPrendaScaleX[playerid][idxp] = 0.0;
             PlayerPrendaScaleY[playerid][idxp] = 0.0;
             PlayerPrendaScaleZ[playerid][idxp] = 0.0;
+            format(PlayerPrendaNombre[playerid][idxp], 32, "");
             GuardarCuenta(playerid);
             SendClientMessage(playerid, 0xFF4444FF, "Prenda eliminada de tu inventario.");
             return ShowPrendaUsuarioMenu(playerid);
@@ -4363,11 +4368,12 @@ public GuardarCuenta(playerid) {
 
             for(new pi = 0; pi < MAX_PRENDAS; pi++) {
                 if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaModelo[playerid][pi] <= 0) PlayerPrendaModelo[playerid][pi] = PrendasData[pi][prendaModelo];
-                format(line, sizeof(line), "\n%d %d %d %f %f %f %f %f %f %f %f %f %d",
+                ObtenerNombrePrendaJugador(playerid, pi, PlayerPrendaNombre[playerid][pi], 32);
+                format(line, sizeof(line), "\n%d %d %d %f %f %f %f %f %f %f %f %f %d %s",
                     PlayerPrendaComprada[playerid][pi], PlayerPrendaActiva[playerid][pi], PlayerPrendaBone[playerid][pi],
                     PlayerPrendaOffX[playerid][pi], PlayerPrendaOffY[playerid][pi], PlayerPrendaOffZ[playerid][pi],
                     PlayerPrendaRotX[playerid][pi], PlayerPrendaRotY[playerid][pi], PlayerPrendaRotZ[playerid][pi],
-                    PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi], PlayerPrendaModelo[playerid][pi]);
+                    PlayerPrendaScaleX[playerid][pi], PlayerPrendaScaleY[playerid][pi], PlayerPrendaScaleZ[playerid][pi], PlayerPrendaModelo[playerid][pi], PlayerPrendaNombre[playerid][pi]);
                 fwrite(h, line);
             }
 
@@ -4573,13 +4579,13 @@ public OnPlayerDisconnect(playerid, reason) {
     BankTransferTarget[playerid] = -1;
     FinalizarTodosLosCultivos(playerid);
     for(new v = 1; v < MAX_VEHICLES; v++) {
-        if(MaleteroOwner[v] == playerid) {
-            DestroyVehicle(v);
-            MaleteroOwner[v] = -1;
-            MaleteroSlotsVeh[v] = 0;
-            MaleteroHierbaVeh[v] = 0;
-            MaleteroFloresVeh[v] = 0;
-        }
+        if(MaleteroOwner[v] != playerid) continue;
+        if(VehOwner[v] == playerid) continue;
+        DestroyVehicle(v);
+        MaleteroOwner[v] = -1;
+        MaleteroSlotsVeh[v] = 0;
+        MaleteroHierbaVeh[v] = 0;
+        MaleteroFloresVeh[v] = 0;
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
     return 1;
@@ -5763,7 +5769,7 @@ stock bool:EsLineaPrendaCuenta(const line[]) {
     for(new i = 0; line[i] != EOS; i++) {
         if(line[i] == ' ') espacios++;
     }
-    return espacios == 11 || espacios == 12;
+    return espacios == 11 || espacios == 12 || espacios >= 13;
 }
 
 stock CargarPrendaJugadorDesdeLinea(playerid, idxPrenda, const line[]) {
@@ -5786,6 +5792,13 @@ stock CargarPrendaJugadorDesdeLinea(playerid, idxPrenda, const line[]) {
     new model = strval(strtok(line, idxp));
     if(model <= 0) model = PrendasData[idxPrenda][prendaModelo];
     PlayerPrendaModelo[playerid][idxPrenda] = model;
+
+    new nombreParseado[32];
+    if(idxp < strlen(line)) strmid(nombreParseado, line, idxp, idxp + 32, 32);
+    else format(nombreParseado, sizeof(nombreParseado), "");
+    LimpiarLinea(nombreParseado);
+    if(strlen(nombreParseado) > 0) format(PlayerPrendaNombre[playerid][idxPrenda], 32, "%s", nombreParseado);
+    else format(PlayerPrendaNombre[playerid][idxPrenda], 32, "%s", PrendasData[idxPrenda][prendaNombre]);
     return 1;
 }
 
@@ -5817,6 +5830,7 @@ stock ReconciliarPrendasJugador(playerid) {
             PlayerPrendaScaleY[playerid][j] = PlayerPrendaScaleY[playerid][i];
             PlayerPrendaScaleZ[playerid][j] = PlayerPrendaScaleZ[playerid][i];
             PlayerPrendaModelo[playerid][j] = PlayerPrendaModelo[playerid][i];
+            format(PlayerPrendaNombre[playerid][j], 32, "%s", PlayerPrendaNombre[playerid][i]);
 
             PlayerPrendaComprada[playerid][i] = 0;
             PlayerPrendaActiva[playerid][i] = 0;
@@ -5831,6 +5845,7 @@ stock ReconciliarPrendasJugador(playerid) {
             PlayerPrendaScaleY[playerid][i] = 0.0;
             PlayerPrendaScaleZ[playerid][i] = 0.0;
             PlayerPrendaModelo[playerid][i] = 0;
+            format(PlayerPrendaNombre[playerid][i], 32, "");
             break;
         }
     }
@@ -5839,7 +5854,12 @@ stock ReconciliarPrendasJugador(playerid) {
 
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
     new line[256];
-    new cantidad = ContarAutosJugador(playerid);
+    new cantidad;
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != playerid) continue;
+        if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
+        cantidad++;
+    }
     if(cantidad > MAX_VEHICULOS_TOTALES_JUGADOR) cantidad = MAX_VEHICULOS_TOTALES_JUGADOR;
     format(line, sizeof(line), "\n%d", cantidad);
     fwrite(h, line);
@@ -5850,9 +5870,16 @@ stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
         if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
 
         new Float:x, Float:y, Float:z, Float:a;
-        GetVehiclePos(v, x, y, z);
-        GetVehicleZAngle(v, a);
-        VehPosData[v][0] = x; VehPosData[v][1] = y; VehPosData[v][2] = z; VehPosData[v][3] = a;
+        if(VehOculto[v]) {
+            x = VehPosData[v][0];
+            y = VehPosData[v][1];
+            z = VehPosData[v][2];
+            a = VehPosData[v][3];
+        } else {
+            GetVehiclePos(v, x, y, z);
+            GetVehicleZAngle(v, a);
+            VehPosData[v][0] = x; VehPosData[v][1] = y; VehPosData[v][2] = z; VehPosData[v][3] = a;
+        }
 
         format(line, sizeof(line), "\n%d %d %d %f %f %f %f %d %d %d %d %d %d %d %d",
             VehModelData[v], VehColor1Data[v], VehColor2Data[v], x, y, z, a,
@@ -6430,6 +6457,14 @@ stock ContarPrendasJugador(playerid) {
 }
 
 
+
+stock ObtenerNombrePrendaJugador(playerid, idx, dest[], len) {
+    if(idx < 0 || idx >= MAX_PRENDAS) return format(dest, len, "Prenda");
+    if(strlen(PlayerPrendaNombre[playerid][idx]) > 0) return format(dest, len, "%s", PlayerPrendaNombre[playerid][idx]);
+    if(strlen(PrendasData[idx][prendaNombre]) > 0) return format(dest, len, "%s", PrendasData[idx][prendaNombre]);
+    return format(dest, len, "Prenda #%d", idx);
+}
+
 stock IsPrendaSlotEnUsoPorJugadores(idx) {
     if(idx < 0 || idx >= MAX_PRENDAS) return 0;
     for(new p = 0; p < MAX_PLAYERS; p++) {
@@ -6444,7 +6479,9 @@ stock ShowPrendaUsuarioMenu(playerid) {
     list[0] = EOS;
     for(new i = 0; i < MAX_PRENDAS; i++) {
         if(!PlayerPrendaComprada[playerid][i]) continue;
-        format(line, sizeof(line), "%d) %s%s", i, PrendasData[i][prendaNombre], PlayerPrendaActiva[playerid][i] ? " {66FF66}(Visible)" : " {FFAA00}(Oculta)");
+        new nombrePrenda[32];
+        ObtenerNombrePrendaJugador(playerid, i, nombrePrenda, sizeof(nombrePrenda));
+        format(line, sizeof(line), "%d) %s%s", i, nombrePrenda, PlayerPrendaActiva[playerid][i] ? " {66FF66}(Visible)" : " {FFAA00}(Oculta)");
         if(strlen(list) > 0) strcat(list, "\n");
         strcat(list, line);
         count++;
