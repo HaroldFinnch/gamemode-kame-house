@@ -1540,7 +1540,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/skills", true)) {
-        new str[256];
+        new str[512];
         format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
@@ -4305,28 +4305,42 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         if(fread(h, line)) {
                             LimpiarLinea(line);
                             if(strcmp(line, CUENTA_SECCION_PRENDAS, false) == 0) {
+                                new bool:vehiculosCargados = false;
                                 for(new pi = 0; pi < MAX_PRENDAS; pi++) {
                                     if(!fread(h, line)) break;
                                     LimpiarLinea(line);
                                     if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
                                         CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                                        vehiculosCargados = true;
                                         break;
                                     }
                                     if(!EsLineaPrendaCuenta(line)) continue;
                                     CargarPrendaJugadorDesdeLinea(playerid, pi, line);
                                 }
+                                if(!vehiculosCargados && fread(h, line)) {
+                                    LimpiarLinea(line);
+                                    if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                                    else CargarVehiculosJugadorDesdeLinea(playerid, h, line);
+                                }
                             } else {
                                 if(EsLineaPrendaCuenta(line)) {
+                                    new bool:vehiculosCargados = false;
                                     CargarPrendaJugadorDesdeLinea(playerid, 0, line);
                                     for(new pi = 1; pi < MAX_PRENDAS; pi++) {
                                         if(!fread(h, line)) break;
                                         LimpiarLinea(line);
-                                    if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
+                                        if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
                                             CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                                            vehiculosCargados = true;
                                             break;
                                         }
                                         if(!EsLineaPrendaCuenta(line)) continue;
                                         CargarPrendaJugadorDesdeLinea(playerid, pi, line);
+                                    }
+                                    if(!vehiculosCargados && fread(h, line)) {
+                                        LimpiarLinea(line);
+                                        if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) CargarVehiculosJugadorDesdeCuenta(playerid, h);
+                                        else CargarVehiculosJugadorDesdeLinea(playerid, h, line);
                                     }
                                 } else {
                                     CargarVehiculosJugadorDesdeLinea(playerid, h, line);
