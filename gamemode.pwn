@@ -243,7 +243,7 @@
 #define MAX_BANDAS_PVE 30
 #define MAX_BANDEROS_POR_GRUPO 5
 #define MAX_BANDA_SPAWNS 30
-#define MIN_BANDEROS_POR_GRUPO 3
+#define MIN_BANDEROS_POR_GRUPO 2
 #define VIDA_BANDERO_PVE 200.0
 #define BANDA_RANGO_VISION 35.0
 #define BANDA_DANO_MIN 6.0
@@ -254,6 +254,8 @@
 #define BANDA_DISTANCIA_CUERPO 2.6
 #define BANDA_PASO_CORRER 1.25
 #define BANDA_PASO_CAMINAR 0.55
+#define BANDA_PASO_PATRULLA 0.38
+#define BANDA_RECALCULO_PATRULLA_MS 4500
 
 #define MAX_AUTOS_NORMALES_JUGADOR 2
 #define MAX_VEHICULOS_TOTALES_JUGADOR 2
@@ -516,6 +518,8 @@ new BandaArma[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new bool:BandaVivo[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new BandaGrupoAtacandoA[MAX_BANDAS_PVE] = {-1, ...};
 new BandaSpawnAsignado[MAX_BANDAS_PVE] = {-1, ...};
+new Float:BandaPatrullaObjetivo[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO][2];
+new BandaPatrullaRecalculoTick[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new UltimoControlArmaProhibidaTick[MAX_PLAYERS];
 
 #define MAX_AUTOS_VENTA 20
@@ -4861,10 +4865,13 @@ public SubirTiempoJugado() {
 stock GetNombreArmaPVE(weaponid, dest[], len) {
     if(weaponid == 22) return format(dest, len, "Colt 45");
     if(weaponid == 23) return format(dest, len, "Silenciada");
+    if(weaponid == 24) return format(dest, len, "Desert Eagle");
     if(weaponid == 25) return format(dest, len, "Escopeta");
     if(weaponid == 29) return format(dest, len, "MP5");
-    if(weaponid == 17) return format(dest, len, "Gas lacrimogeno");
+    if(weaponid == 30) return format(dest, len, "AK-47");
+    if(weaponid == 31) return format(dest, len, "M4");
     if(weaponid == 3) return format(dest, len, "Palo de billar");
+    if(weaponid == 4) return format(dest, len, "Cuchillo");
     return format(dest, len, "Arma %d", weaponid);
 }
 
@@ -4883,6 +4890,9 @@ stock LimpiarBandasPVE() {
             BandaVida[g][m] = 0.0;
             BandaArma[g][m] = 0;
             BandaVivo[g][m] = false;
+            BandaPatrullaObjetivo[g][m][0] = 0.0;
+            BandaPatrullaObjetivo[g][m][1] = 0.0;
+            BandaPatrullaRecalculoTick[g][m] = 0;
         }
     }
     for(new i = 0; i < MAX_PLAYERS; i++) if(IsPlayerConnected(i)) LimpiarIconosBandasParaJugador(i);
@@ -4893,9 +4903,13 @@ stock GetModeloObjetoArmaBandero(weaponid) {
     switch(weaponid) {
         case 22: return 346;
         case 23: return 347;
+        case 24: return 348;
         case 25: return 349;
         case 29: return 353;
+        case 30: return 355;
+        case 31: return 356;
         case 3: return 336;
+        case 4: return 335;
     }
     return 0;
 }
@@ -4925,13 +4939,17 @@ stock AplicarAnimacionBandero(actorid, weaponid, bool:atacando = false, bool:cor
     if(atacando) {
         switch(weaponid) {
             case 22, 23:
-                ApplyActorAnimation(actorid, "COLT45", "colt45_fire", 4.1, true, false, false, true, 0);
+                ApplyActorAnimation(actorid, "COLT45", "colt45_fire", 4.1, false, false, false, true, 0);
+            case 24:
+                ApplyActorAnimation(actorid, "COLT45", "sawnoff_reload", 4.1, false, false, false, true, 0);
             case 25:
-                ApplyActorAnimation(actorid, "SHOTGUN", "shotgun_fire", 4.1, true, false, false, true, 0);
+                ApplyActorAnimation(actorid, "SHOTGUN", "shotgun_fire", 4.1, false, false, false, true, 0);
             case 29:
-                ApplyActorAnimation(actorid, "UZI", "UZI_fire", 4.1, true, false, false, true, 0);
-            case 3:
-                ApplyActorAnimation(actorid, "BASEBALL", "Bat_4", 4.1, true, false, false, true, 0);
+                ApplyActorAnimation(actorid, "UZI", "UZI_fire", 4.1, false, false, false, true, 0);
+            case 30, 31:
+                ApplyActorAnimation(actorid, "RIFLE", "RIFLE_fire", 4.1, false, false, false, true, 0);
+            case 3, 4:
+                ApplyActorAnimation(actorid, "KNIFE", "KILL_Knife_Ped_Damage", 4.1, false, false, false, true, 0);
             default:
                 ApplyActorAnimation(actorid, "PED", "IDLE_GANG1", 4.1, true, false, false, true, 0);
         }
@@ -4943,13 +4961,23 @@ stock AplicarAnimacionBandero(actorid, weaponid, bool:atacando = false, bool:cor
         return 1;
     }
 
-    static const animsGang[][20] = {
-        "IDLE_GANG1",
-        "IDLE_GANG2",
-        "IDLE_GANG3",
-        "IDLE_GANG4"
-    };
-    ApplyActorAnimation(actorid, "PED", animsGang[random(sizeof(animsGang))], 4.1, true, false, false, true, 0);
+    ApplyActorAnimation(actorid, "PED", "WALK_gang1", 4.1, true, false, false, true, 0);
+    return 1;
+}
+
+stock RecalcularPatrullaBandero(grupo, miembro) {
+    if(grupo < 0 || grupo >= MAX_BANDAS_PVE || miembro < 0 || miembro >= MAX_BANDEROS_POR_GRUPO) return 0;
+    if(BandaSpawnAsignado[grupo] < 0 || BandaSpawnAsignado[grupo] >= TotalBandaSpawns) return 0;
+
+    new idxSpawn = BandaSpawnAsignado[grupo];
+    new Float:baseX = BandaSpawnPos[idxSpawn][0];
+    new Float:baseY = BandaSpawnPos[idxSpawn][1];
+    new Float:ox = float(random(900) - 450) / 100.0;
+    new Float:oy = float(random(900) - 450) / 100.0;
+
+    BandaPatrullaObjetivo[grupo][miembro][0] = baseX + ox;
+    BandaPatrullaObjetivo[grupo][miembro][1] = baseY + oy;
+    BandaPatrullaRecalculoTick[grupo][miembro] = GetTickCount();
     return 1;
 }
 
@@ -4966,6 +4994,7 @@ stock MoverBanderoHaciaObjetivo(grupo, miembro, Float:tx, Float:ty, Float:distan
     if(plano < 0.05) return 1;
 
     new Float:paso = (distancia > BANDA_DISTANCIA_ATAQUE) ? BANDA_PASO_CORRER : BANDA_PASO_CAMINAR;
+    if(distancia < BANDA_DISTANCIA_CUERPO) paso = BANDA_PASO_PATRULLA;
     if(plano < paso) paso = plano;
 
     new Float:nx = ax + (dx / plano) * paso;
@@ -5003,7 +5032,7 @@ stock CrearGrupoBandaPVE(slot) {
     BandaGrupoCentro[slot][1] = BandaSpawnPos[idxSpawn][1];
     BandaGrupoCentro[slot][2] = BandaSpawnPos[idxSpawn][2];
 
-    static const armasDisponibles[] = {25, 17, 22, 29, 23, 3};
+    static const armasDisponibles[] = {22, 23, 24, 25, 29, 30, 31, 3, 4};
 
     for(new m = 0; m < MAX_BANDEROS_POR_GRUPO; m++) {
         if(BandaActorId[slot][m] != INVALID_ACTOR_ID) DestroyActor(BandaActorId[slot][m]);
@@ -5027,6 +5056,7 @@ stock CrearGrupoBandaPVE(slot) {
         BandaVida[slot][m] = VIDA_BANDERO_PVE;
         BandaArma[slot][m] = armasDisponibles[random(sizeof(armasDisponibles))];
         BandaVivo[slot][m] = true;
+        RecalcularPatrullaBandero(slot, m);
         SetActorHealth(BandaActorId[slot][m], VIDA_BANDERO_PVE);
         ActualizarArmaVisibleBandero(slot, m);
         AplicarAnimacionBandero(BandaActorId[slot][m], BandaArma[slot][m]);
@@ -5108,32 +5138,65 @@ public ProcesarBandasPVE() {
             if(objetivo == -1) RemovePlayerMapIcon(i, 60 + g);
             else SetPlayerMapIcon(i, 60 + g, BandaGrupoCentro[g][0], BandaGrupoCentro[g][1], BandaGrupoCentro[g][2], 0, 0xFF0000FF, MAPICON_LOCAL);
         }
-        if(objetivo == -1) continue;
 
-        BandaUltimaAccionTick[g] = now;
+        if(objetivo != -1) BandaUltimaAccionTick[g] = now;
 
         new Float:px, Float:py, Float:pz;
-        GetPlayerPos(objetivo, px, py, pz);
+        if(objetivo != -1) GetPlayerPos(objetivo, px, py, pz);
 
         for(new m = 0; m < BandaGrupoMiembros[g]; m++) {
             if(!BandaVivo[g][m] || BandaActorId[g][m] == INVALID_ACTOR_ID) continue;
 
             new Float:ax, Float:ay, Float:az;
             GetActorPos(BandaActorId[g][m], ax, ay, az);
-            new Float:dist = GetDistanceBetweenPoints(ax, ay, az, px, py, pz);
 
-            if(dist > BANDA_DISTANCIA_CUERPO) {
-                MoverBanderoHaciaObjetivo(g, m, px, py, dist);
-                AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m], false, true);
+            if(objetivo == -1) {
+                if(BandaPatrullaRecalculoTick[g][m] == 0 || now - BandaPatrullaRecalculoTick[g][m] >= BANDA_RECALCULO_PATRULLA_MS) {
+                    RecalcularPatrullaBandero(g, m);
+                }
+
+                new Float:patX = BandaPatrullaObjetivo[g][m][0];
+                new Float:patY = BandaPatrullaObjetivo[g][m][1];
+                new Float:patDist = GetDistanceBetweenPoints(ax, ay, az, patX, patY, az);
+                if(patDist <= 0.60) {
+                    RecalcularPatrullaBandero(g, m);
+                    AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m], false, false);
+                    continue;
+                }
+
+                MoverBanderoHaciaObjetivo(g, m, patX, patY, BANDA_DISTANCIA_CUERPO - 0.1);
+                AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m], false, false);
                 continue;
+            }
+
+            new Float:dist = GetDistanceBetweenPoints(ax, ay, az, px, py, pz);
+            new arma = BandaArma[g][m];
+            new bool:esMelee = (arma == 3 || arma == 4);
+
+            if(esMelee) {
+                if(dist > BANDA_DISTANCIA_CUERPO) {
+                    MoverBanderoHaciaObjetivo(g, m, px, py, dist);
+                    AplicarAnimacionBandero(BandaActorId[g][m], arma, false, true);
+                    continue;
+                }
+            } else {
+                if(dist > BANDA_DISTANCIA_ATAQUE) {
+                    MoverBanderoHaciaObjetivo(g, m, px, py, dist);
+                    AplicarAnimacionBandero(BandaActorId[g][m], arma, false, true);
+                    continue;
+                }
+                SetActorFacingAngle(BandaActorId[g][m], atan2(py - ay, px - ax));
             }
 
             new Float:vida;
             GetPlayerHealth(objetivo, vida);
             if(vida <= 0.0) break;
+
             new Float:danio = BANDA_DANO_MIN + float(random(floatround((BANDA_DANO_MAX - BANDA_DANO_MIN) * 10.0) + 1)) / 10.0;
+            if(!esMelee && dist > (BANDA_DISTANCIA_CUERPO + 2.0)) danio += 2.0;
             SetPlayerHealth(objetivo, vida - danio);
-            AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m], true, false);
+            AplicarAnimacionBandero(BandaActorId[g][m], arma, true, false);
+            PlayerPlaySound(objetivo, 17802, px, py, pz);
         }
 
     }
@@ -5296,16 +5359,24 @@ public OnPlayerWeaponShot(playerid, WEAPON:weaponid, BULLET_HIT_TYPE:hittype, hi
 
     new Float:damage;
     switch(_:weaponid) {
-        case 25, 27: damage = 40.0;
-        case 29, 30, 31: damage = 28.0;
-        case 23, 24: damage = 34.0;
-        case 22: damage = 22.0;
-        default: damage = 16.0;
+        case 34: damage = 95.0;
+        case 33: damage = 72.0;
+        case 31: damage = 44.0;
+        case 30: damage = 40.0;
+        case 29: damage = 34.0;
+        case 25, 27: damage = 46.0;
+        case 24: damage = 52.0;
+        case 23: damage = 30.0;
+        case 22: damage = 24.0;
+        case 4, 8: damage = 18.0;
+        case 3: damage = 20.0;
+        default: damage = 14.0;
     }
 
     BandaVida[grupo][miembro] -= damage;
     BandaUltimaAccionTick[grupo] = GetTickCount();
     BandaGrupoAtacandoA[grupo] = playerid;
+    PlayerPlaySound(playerid, 17802, fX, fY, fZ);
 
     if(BandaVida[grupo][miembro] > 0.0) {
         if(BandaActorId[grupo][miembro] != INVALID_ACTOR_ID) SetActorHealth(BandaActorId[grupo][miembro], BandaVida[grupo][miembro]);
