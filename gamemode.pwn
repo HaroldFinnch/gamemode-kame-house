@@ -80,7 +80,7 @@
 #define DIR_DATA            "scriptfiles/kame_house"
 #define DIR_USUARIOS        "scriptfiles/kame_house/usuarios"
 #define DIR_USUARIOS_LEGACY "usuarios"
-#define PATH_USUARIOS       "scriptfiles/kame_house/usuarios/%s.ini"
+#define PATH_USUARIOS       "scriptfiles/kame_house/usuarios/%s.txt"
 #define PATH_USUARIOS_LEGACY "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
 #define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
@@ -233,6 +233,7 @@
 #define CUENTA_DATA_VERSION 4
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
+#define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
 
 #if !defined WEAPON_NONE
     #define WEAPON_NONE (WEAPON:-1)
@@ -610,6 +611,9 @@ forward GuardarCuenta(playerid);
 stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h);
 stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]);
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h);
+stock CargarArmasJugadorDesdeCuenta(playerid, File:h);
+stock CargarArmasJugadorDesdeLinea(playerid, File:h, const primeraLinea[]);
+stock GuardarArmasJugadorEnCuenta(playerid, File:h);
 stock bool:EsLineaPrendaCuenta(const line[]);
 stock ResolverPathCuenta(playerid, dest[], len);
 stock File:AbrirCuentaEscritura(playerid, dest[], len);
@@ -2315,6 +2319,15 @@ strtok(const string[], &index) {
     return result;
 }
 
+stock LimpiarLinea(line[]) {
+    new len = strlen(line);
+    while(len > 0 && line[len - 1] <= ' ') {
+        line[len - 1] = EOS;
+        len--;
+    }
+    return 1;
+}
+
 stock sscanf_manual(const string[], &Float:x, &Float:y, &Float:z) {
     new idx = 0;
     x = floatstr(strtok(string, idx));
@@ -2497,6 +2510,9 @@ public OnPlayerSpawn(playerid) {
     for(new pi = 0; pi < MAX_PRENDAS; pi++) {
         RemovePlayerAttachedObject(playerid, pi);
         if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
+    }
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
+        if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
     }
     PlayerTextDrawShow(playerid, BarraHambre[playerid]);
     PlayerTextDrawHide(playerid, BarraGas[playerid]);
@@ -3797,6 +3813,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]] = 9999;
         GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 9999);
         PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]] = true;
+        GuardarCuenta(playerid);
         return ShowArmeriaArmasDisponibles(playerid);
     }
 
@@ -3823,6 +3840,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         ArmeriaItems[item][aiStockMunicion] -= balas;
         new WEAPON:armaActual = GetPlayerWeapon(playerid);
         if(_:armaActual == ArmeriaItems[item][aiArma]) GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]]);
+        GuardarCuenta(playerid);
         return ShowArmeriaMunicionDisponible(playerid);
     }
 
@@ -4270,9 +4288,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         }
 
                         if(fread(h, line)) {
+                            LimpiarLinea(line);
                             if(strcmp(line, CUENTA_SECCION_PRENDAS, false) == 0) {
                                 for(new pi = 0; pi < MAX_PRENDAS; pi++) {
                                     if(!fread(h, line)) break;
+                                    LimpiarLinea(line);
                                     if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
                                         CargarVehiculosJugadorDesdeCuenta(playerid, h);
                                         break;
@@ -4309,7 +4329,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                                     PlayerPrendaScaleZ[playerid][0] = floatstr(strtok(line, idxp));
                                     for(new pi = 1; pi < MAX_PRENDAS; pi++) {
                                         if(!fread(h, line)) break;
-                                        if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
+                                        LimpiarLinea(line);
+                                    if(strcmp(line, CUENTA_SECCION_VEHICULOS, false) == 0) {
                                             CargarVehiculosJugadorDesdeCuenta(playerid, h);
                                             break;
                                         }
@@ -4378,6 +4399,7 @@ public GuardarCuenta(playerid) {
             fwrite(h, line);
 
             GuardarVehiculosJugadorEnCuenta(playerid, h);
+            GuardarArmasJugadorEnCuenta(playerid, h);
             fclose(h);
         }
     }
@@ -5682,6 +5704,8 @@ stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
 stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
     new line[256];
     strmid(line, primeraLinea, 0, sizeof(line), sizeof(line));
+    LimpiarLinea(line);
+    if(strcmp(line, CUENTA_SECCION_ARMAS, false) == 0) return CargarArmasJugadorDesdeCuenta(playerid, h);
 
     new cantidad = strval(line);
     if(cantidad < 0) cantidad = 0;
@@ -5733,6 +5757,11 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
             MaleteroSemillaFlorVeh[veh] = maleteroSemFlor;
         }
     }
+
+    if(fread(h, line)) {
+        LimpiarLinea(line);
+        if(strcmp(line, CUENTA_SECCION_ARMAS, false) == 0) CargarArmasJugadorDesdeCuenta(playerid, h);
+    }
     return 1;
 }
 
@@ -5769,6 +5798,52 @@ stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
             MaleteroOwner[v] == playerid ? 1 : 0, MaleteroSlotsVeh[v], MaleteroHierbaVeh[v], MaleteroFloresVeh[v], MaleteroSemillaHierbaVeh[v], MaleteroSemillaFlorVeh[v]);
         fwrite(h, line);
         guardados++;
+    }
+    return 1;
+}
+
+stock CargarArmasJugadorDesdeCuenta(playerid, File:h) {
+    new line[256];
+    if(!fread(h, line)) return 0;
+    return CargarArmasJugadorDesdeLinea(playerid, h, line);
+}
+
+stock CargarArmasJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
+    new line[256];
+    strmid(line, primeraLinea, 0, sizeof(line), sizeof(line));
+    LimpiarLinea(line);
+
+    new cantidad = strval(line);
+    if(cantidad < 0) cantidad = 0;
+    if(cantidad > MAX_WEAPON_ID_GM) cantidad = MAX_WEAPON_ID_GM;
+
+    for(new i = 0; i < cantidad; i++) {
+        if(!fread(h, line)) break;
+        new idx = 0;
+        new weaponid = strval(strtok(line, idx));
+        new ammo = strval(strtok(line, idx));
+        if(weaponid < 0 || weaponid >= MAX_WEAPON_ID_GM) continue;
+        if(ammo < 0) ammo = 0;
+        PlayerArmaComprada[playerid][weaponid] = ammo > 0;
+        PlayerAmmoInventario[playerid][weaponid] = ammo;
+    }
+    return 1;
+}
+
+stock GuardarArmasJugadorEnCuenta(playerid, File:h) {
+    new cantidad;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
+        if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) cantidad++;
+    }
+
+    new line[64];
+    format(line, sizeof(line), "\n%s\n%d", CUENTA_SECCION_ARMAS, cantidad);
+    fwrite(h, line);
+
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
+        if(!PlayerArmaComprada[playerid][w] || PlayerAmmoInventario[playerid][w] <= 0) continue;
+        format(line, sizeof(line), "\n%d %d", w, PlayerAmmoInventario[playerid][w]);
+        fwrite(h, line);
     }
     return 1;
 }
@@ -6356,21 +6431,26 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
 
 public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:response, Float:fX, Float:fY, Float:fZ, Float:fRotX, Float:fRotY, Float:fRotZ) {
     #pragma unused playerobject
-    #pragma unused objectid
+    #pragma unused fX
+    #pragma unused fY
+    #pragma unused fZ
+    #pragma unused fRotX
+    #pragma unused fRotY
+    #pragma unused fRotZ
     new slot = EditMapEditandoSlot[playerid];
-    if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo]) return 1;
+    if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo] || EditMapData[slot][emObj] != objectid) {
+        slot = -1;
+        for(new i = 0; i < TotalEditMap; i++) {
+            if(EditMapData[i][emActivo] && EditMapData[i][emObj] == objectid) { slot = i; break; }
+        }
+        if(slot == -1) return 1;
+    }
 
     if(response == EDIT_RESPONSE_FINAL) {
-        EditMapData[slot][emX] = fX;
-        EditMapData[slot][emY] = fY;
-        EditMapData[slot][emZ] = fZ;
-        EditMapData[slot][emRX] = fRotX;
-        EditMapData[slot][emRY] = fRotY;
-        EditMapData[slot][emRZ] = fRotZ;
-        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectPos(EditMapData[slot][emObj], fX, fY, fZ);
-        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectRot(EditMapData[slot][emObj], fRotX, fRotY, fRotZ);
+        GetObjectPos(EditMapData[slot][emObj], EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ]);
+        GetObjectRot(EditMapData[slot][emObj], EditMapData[slot][emRX], EditMapData[slot][emRY], EditMapData[slot][emRZ]);
         GuardarEditMap();
-        SendClientMessage(playerid, 0x66FF66FF, "Objeto de editmap guardado.");
+        SendClientMessage(playerid, 0x66FF66FF, "Objeto de editmap guardado en su ultima posicion.");
     } else if(response == EDIT_RESPONSE_CANCEL) {
         if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectPos(EditMapData[slot][emObj], EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ]);
         if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) SetObjectRot(EditMapData[slot][emObj], EditMapData[slot][emRX], EditMapData[slot][emRY], EditMapData[slot][emRZ]);
