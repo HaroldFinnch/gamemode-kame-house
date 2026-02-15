@@ -93,11 +93,14 @@
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
-#define PATH_EDITMAP "editmap.txt"
-#define PATH_EDITMAP_LEGACY "scriptfiles/kame_house/editmap.txt"
-#define PATH_VENTA_AUTOS "venta_autos_config.txt"
-#define PATH_VENTA_SKINS "venta_skins_config.txt"
-#define PATH_ARMERIA "armeria_config.txt"
+#define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
+#define PATH_EDITMAP_LEGACY "editmap.txt"
+#define PATH_VENTA_AUTOS "scriptfiles/kame_house/venta_autos_config.txt"
+#define PATH_VENTA_AUTOS_LEGACY "venta_autos_config.txt"
+#define PATH_VENTA_SKINS "scriptfiles/kame_house/venta_skins_config.txt"
+#define PATH_VENTA_SKINS_LEGACY "venta_skins_config.txt"
+#define PATH_ARMERIA "scriptfiles/kame_house/armeria_config.txt"
+#define PATH_ARMERIA_LEGACY "armeria_config.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -895,6 +898,9 @@ public OnGameModeInit() {
     CargarPuntosMovibles();
     MigrarArchivoLegacy(PATH_PRENDAS_LEGACY, PATH_PRENDAS);
     MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
+    MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
+    MigrarArchivoLegacy(PATH_VENTA_SKINS_LEGACY, PATH_VENTA_SKINS);
+    MigrarArchivoLegacy(PATH_ARMERIA_LEGACY, PATH_ARMERIA);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
     CargarVentaSkinsConfig();
@@ -2310,7 +2316,7 @@ strtok(const string[], &index) {
 }
 
 stock sscanf_manual(const string[], &Float:x, &Float:y, &Float:z) {
-    new idx;
+    new idx = 0;
     x = floatstr(strtok(string, idx));
     y = floatstr(strtok(string, idx));
     z = floatstr(strtok(string, idx));
@@ -4022,7 +4028,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new armas = CuentaArmasMaletero(veh);
         if(listitem >= armas) return 1; // cerrar
 
-        new idx;
+        new idx = 0;
         for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
             if(MaleteroArmasVeh[veh][w] <= 0) continue;
             if(idx == listitem) {
@@ -4126,7 +4132,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return ShowBankMenu(playerid);
     }
 
-    new path[64], line[128];
+    new path[128], line[256];
     ResolverPathCuenta(playerid, path, sizeof(path));
     if(dialogid == DIALOG_REGISTRO) {
         if(!response) return Kick(playerid);
@@ -4503,6 +4509,10 @@ public AutoGuardadoGlobal() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i)) GuardarCuenta(i);
     GuardarCasas();
     GuardarPuntosMovibles();
+    GuardarMinas();
+    GuardarHornos();
+    GuardarCajasLoot();
+    GuardarPrepiezaPoints();
     GuardarEditMap();
     GuardarVentaAutosConfig();
     GuardarVentaSkinsConfig();
@@ -6033,7 +6043,7 @@ stock CargarHornos() {
 
     TotalHornos = 0;
     while(fread(h, line) && TotalHornos < MAX_HORNOS) {
-        new idx;
+        new idx = 0;
         new Float:x = floatstr(strtok(line, idx));
         new Float:y = floatstr(strtok(line, idx));
         new Float:z = floatstr(strtok(line, idx));
@@ -6073,7 +6083,7 @@ stock CargarCajasLoot() {
 
     TotalCajas = 0;
     while(fread(h, line) && TotalCajas < MAX_CAJAS) {
-        new idx;
+        new idx = 0;
         new Float:x = floatstr(strtok(line, idx));
         new Float:y = floatstr(strtok(line, idx));
         new Float:z = floatstr(strtok(line, idx));
@@ -6110,7 +6120,7 @@ stock CargarPrepiezaPoints() {
 
     TotalPrepiezaPoints = 0;
     while(fread(h, line) && TotalPrepiezaPoints < MAX_PREPIEZA_POINTS) {
-        new idx;
+        new idx = 0;
         new Float:x = floatstr(strtok(line, idx));
         new Float:y = floatstr(strtok(line, idx));
         new Float:z = floatstr(strtok(line, idx));
@@ -6460,7 +6470,7 @@ stock CargarEditMap() {
     new line[220];
     TotalEditMap = 0;
     while(fread(h, line) && TotalEditMap < MAX_EDITMAP_OBJECTS) {
-        new idx;
+        new idx = 0;
         new modelid = strval(strtok(line, idx));
         new Float:x = floatstr(strtok(line, idx));
         new Float:y = floatstr(strtok(line, idx));
@@ -6596,7 +6606,7 @@ stock CargarVentaAutosConfig() {
 
     new i = 0;
     while(fread(h, line) && i < MAX_AUTOS_VENTA) {
-        new idx;
+        new idx = 0;
         VentaAutosData[i][vaActiva] = strval(strtok(line, idx)) != 0;
         VentaAutosData[i][vaModelo] = strval(strtok(line, idx));
         VentaAutosData[i][vaPrecio] = strval(strtok(line, idx));
@@ -6640,7 +6650,7 @@ stock CargarVentaSkinsConfig() {
             VentaSkinsPos[1] = floatstr(strtok(line, idx));
             VentaSkinsPos[2] = floatstr(strtok(line, idx));
         } else {
-            new idx;
+            new idx = 0;
             VentaSkinsData[i][vsActiva] = strval(strtok(line, idx)) != 0;
             VentaSkinsData[i][vsSkin] = strval(strtok(line, idx));
             VentaSkinsData[i][vsPrecio] = strval(strtok(line, idx));
@@ -6648,7 +6658,7 @@ stock CargarVentaSkinsConfig() {
         }
     }
     while(fread(h, line) && i < MAX_SKINS_VENTA) {
-        new idx;
+        new idx = 0;
         VentaSkinsData[i][vsActiva] = strval(strtok(line, idx)) != 0;
         VentaSkinsData[i][vsSkin] = strval(strtok(line, idx));
         VentaSkinsData[i][vsPrecio] = strval(strtok(line, idx));
@@ -6685,7 +6695,7 @@ stock CargarArmeriaConfig() {
     if(!h) return GuardarArmeriaConfig();
     new i;
     while(fread(h, line) && i < MAX_ARMAS_TIENDA) {
-        new idx;
+        new idx = 0;
         ArmeriaItems[i][aiActiva] = strval(strtok(line, idx)) != 0;
         ArmeriaItems[i][aiArma] = strval(strtok(line, idx));
         ArmeriaItems[i][aiSlot] = strval(strtok(line, idx));
