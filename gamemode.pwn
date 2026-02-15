@@ -97,6 +97,7 @@
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_BANDAS_SPAWNS "bandas_spawns.txt"
 #define PATH_FACCIONES "scriptfiles/kame_house/facciones.txt"
+#define PATH_FACCIONES_BAK "scriptfiles/kame_house/facciones.bak"
 #define PATH_FACCIONES_LEGACY "facciones.txt"
 #define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
@@ -926,6 +927,7 @@ stock ConvertirColorAHexRGB(color, dest[], len);
 stock InicializarSistemaFacciones();
 stock CargarFacciones();
 stock GuardarFacciones();
+stock CargarFaccionesDesdeArchivo(const path[]);
 stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
 stock ActualizarLabelJugadorFaccion(playerid);
@@ -1941,10 +1943,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/gps", true)) {
-        ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
-        return 1;
-    }
+    if(!strcmp(cmd, "/gps", true)) return SendClientMessage(playerid, -1, "El GPS ahora solo se usa desde /telefono.");
 
     if(!strcmp(cmd, "/ayuda", true)) {
         ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nSistemas\nRol y reglas", "Ver", "Cerrar");
@@ -3033,7 +3032,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, /gps (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowReglasDialog(playerid);
         return 1;
     }
@@ -3223,10 +3222,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_ID, DIALOG_STYLE_INPUT, "Telefono - Enviar mensaje", "Ingresa el ID del jugador:", "Siguiente", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR1, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el primer valor:", "Siguiente", "Atras");
         if(listitem == 4) return ShowTelefonoVehiculosMenu(playerid);
-        if(listitem == 5) {
-            new cmdGps[] = "/gps";
-            return OnPlayerCommandText(playerid, cmdGps);
-        }
+        if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
         if(listitem == 6) {
             new restaurados = RestaurarVehiculosJugador(playerid);
             new msg[96];
@@ -6623,7 +6619,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -8184,7 +8180,7 @@ stock ShowReglasDialog(playerid) {
     strcat(reglasTexto, "{73C6B6}FR{FFFFFF}: Forzar rol. (30 min - 10 h)\n\n", sizeof(reglasTexto));
     strcat(reglasTexto, "{AAAAAA}Mantener rol serio mejora la experiencia de todos.", sizeof(reglasTexto));
 
-    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Reglamento Kame House", reglasTexto, "Entendido", "Cerrar");
+    return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Kame House RP", reglasTexto, "Entendido", "Cerrar");
 }
 
 stock GuardarVentaAutosConfig() {
@@ -8516,64 +8512,55 @@ stock MostrarPanelFaccionOwner(playerid) {
 stock ActualizarLabelJugadorFaccion(playerid) {
     if(!IsPlayerConnected(playerid)) return 0;
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
-    new texto[192], dineroCorto[16], bloqueFaccion[64], colorLabel = 0xFFFFFFFF;
+
+    new texto[192], dineroCorto[16], faccionNombre[24], colorLabel = 0xFFFFFFFF;
     FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
-    bloqueFaccion[0] = EOS;
+
+    faccionNombre[0] = EOS;
     if(PlayerFaccionId[playerid] != -1) {
-        new hexColor[8];
         colorLabel = FaccionData[PlayerFaccionId[playerid]][facColor];
-        ConvertirColorAHexRGB(colorLabel, hexColor, sizeof(hexColor));
-        format(bloqueFaccion, sizeof(bloqueFaccion), "{%s}[%s]{FFFFFF}", hexColor, FaccionData[PlayerFaccionId[playerid]][facNombre]);
+        format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
     }
+
     if(EsDueno(playerid)) {
-        if(bloqueFaccion[0]) format(texto, sizeof(texto), "{F7D154}[Owner]{FFFFFF} %s {58D68D}[$%s]", bloqueFaccion, dineroCorto);
-        else format(texto, sizeof(texto), "{F7D154}[Owner]{FFFFFF} {58D68D}[$%s]", dineroCorto);
-    } else if(EsModerador(playerid)) {
-        if(bloqueFaccion[0]) format(texto, sizeof(texto), "{85C1E9}[MOD]{FFFFFF} %s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{85C1E9}[MOD]{FFFFFF} {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", GetNivelPJ(playerid), dineroCorto);
+        if(!faccionNombre[0]) format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
+        format(texto, sizeof(texto), "= [Owner - %s - Nivel %d - $%s] =", faccionNombre, GetNivelPJ(playerid), dineroCorto);
+    } else if(faccionNombre[0]) {
+        format(texto, sizeof(texto), "- [%s - Nivel %d - $%s] -", faccionNombre, GetNivelPJ(playerid), dineroCorto);
     } else {
-        if(bloqueFaccion[0]) format(texto, sizeof(texto), "%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", GetNivelPJ(playerid), dineroCorto);
+        format(texto, sizeof(texto), "- [Nivel %d - $%s] -", GetNivelPJ(playerid), dineroCorto);
     }
+
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, colorLabel, 0.0, 0.0, 0.0, 30.0, 0);
     Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.62);
     return 1;
 }
 
 stock GuardarFacciones() {
-    new File:h = fopen(PATH_FACCIONES, io_write);
-    if(!h) return 0;
-    new line[1024], part[96];
-    for(new f=0; f<MAX_FACCIONES; f++) {
-        if(!FaccionData[f][facActiva]) continue;
-        format(line, sizeof(line), "%d|%s|%d|%d|%s", f, FaccionData[f][facNombre], FaccionData[f][facOwner], FaccionData[f][facColor], FaccionOwnerNombre[f]);
-        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
-            format(part, sizeof(part), "|%d|%d|%s", FaccionData[f][facMiembros][m], FaccionData[f][facRangos][m], FaccionMiembroNombre[f][m]);
-            strcat(line, part);
+    new paths[2][64] = {PATH_FACCIONES, PATH_FACCIONES_BAK};
+    for(new pidx = 0; pidx < 2; pidx++) {
+        new File:h = fopen(paths[pidx], io_write);
+        if(!h) continue;
+
+        new line[1024], part[96];
+        for(new f=0; f<MAX_FACCIONES; f++) {
+            if(!FaccionData[f][facActiva]) continue;
+            format(line, sizeof(line), "%d|%s|%d|%d|%s", f, FaccionData[f][facNombre], FaccionData[f][facOwner], FaccionData[f][facColor], FaccionOwnerNombre[f]);
+            for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
+                format(part, sizeof(part), "|%d|%d|%s", FaccionData[f][facMiembros][m], FaccionData[f][facRangos][m], FaccionMiembroNombre[f][m]);
+                strcat(line, part);
+            }
+            strcat(line, "\n");
+            fwrite(h, line);
         }
-        strcat(line, "\n");
-        fwrite(h, line);
+        fclose(h);
     }
-    fclose(h);
     return 1;
 }
 
-stock CargarFacciones() {
-    for(new f=0; f<MAX_FACCIONES; f++) {
-        FaccionData[f][facActiva] = false;
-        FaccionData[f][facNombre][0] = EOS;
-        FaccionData[f][facOwner] = -1;
-        FaccionData[f][facColor] = 0x95A5A6FF;
-        FaccionOwnerNombre[f][0] = EOS;
-        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
-            FaccionData[f][facMiembros][m] = -1;
-            FaccionData[f][facRangos][m] = 0;
-            FaccionMiembroNombre[f][m][0] = EOS;
-        }
-    }
-
-    new File:h = fopen(PATH_FACCIONES, io_read), line[1024];
-    if(!h) return GuardarFacciones();
+stock CargarFaccionesDesdeArchivo(const path[]) {
+    new File:h = fopen(path, io_read), line[1024], cargadas = 0;
+    if(!h) return -1;
 
     while(fread(h, line)) {
         LimpiarLinea(line);
@@ -8602,8 +8589,38 @@ stock CargarFacciones() {
                 format(FaccionMiembroNombre[fid][m], MAX_PLAYER_NAME, "ID_%d", FaccionData[fid][facMiembros][m]);
             }
         }
+        cargadas++;
     }
     fclose(h);
+    return cargadas;
+}
+
+stock CargarFacciones() {
+    for(new f=0; f<MAX_FACCIONES; f++) {
+        FaccionData[f][facActiva] = false;
+        FaccionData[f][facNombre][0] = EOS;
+        FaccionData[f][facOwner] = -1;
+        FaccionData[f][facColor] = 0x95A5A6FF;
+        FaccionOwnerNombre[f][0] = EOS;
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
+            FaccionData[f][facMiembros][m] = -1;
+            FaccionData[f][facRangos][m] = 0;
+            FaccionMiembroNombre[f][m][0] = EOS;
+        }
+    }
+
+    new cargadas = CargarFaccionesDesdeArchivo(PATH_FACCIONES);
+    if(cargadas < 0) cargadas = CargarFaccionesDesdeArchivo(PATH_FACCIONES_BAK);
+
+    if(cargadas < 0) {
+        GuardarFacciones();
+        return 1;
+    }
+
+    if(cargadas == 0) {
+        new cargadasBak = CargarFaccionesDesdeArchivo(PATH_FACCIONES_BAK);
+        if(cargadasBak > 0) GuardarFacciones();
+    }
     return 1;
 }
 
