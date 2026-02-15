@@ -5462,17 +5462,21 @@ stock PlayerTieneAccesoVehiculo(playerid, vehid) {
 stock GetNearbyOwnedVehicle(playerid) {
     if(IsPlayerInAnyVehicle(playerid)) {
         new actual = GetPlayerVehicleID(playerid);
-        if(PlayerTieneAccesoVehiculo(playerid, actual)) return actual;
+        if(actual != INVALID_VEHICLE_ID && IsValidVehicle(actual) && PlayerTieneAccesoVehiculo(playerid, actual)) return actual;
     }
 
     new closest = INVALID_VEHICLE_ID;
     new Float:minDist = 6.0;
     new Float:px, Float:py, Float:pz;
+    new world = GetPlayerVirtualWorld(playerid);
+    new interior = GetPlayerInterior(playerid);
     GetPlayerPos(playerid, px, py, pz);
 
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(!IsValidVehicle(v)) continue;
         if(!PlayerTieneAccesoVehiculo(playerid, v)) continue;
+        if(GetVehicleVirtualWorld(v) != world) continue;
+        if(GetVehicleInterior(v) != interior) continue;
         new Float:vx, Float:vy, Float:vz;
         GetVehiclePos(v, vx, vy, vz);
         new Float:dist = GetDistanceBetweenPoints(px, py, pz, vx, vy, vz);
@@ -5733,6 +5737,14 @@ stock RestaurarVehiculosJugador(playerid) {
         new nv = CreateVehicle(VehModelData[v], VehPosData[v][0], VehPosData[v][1], VehPosData[v][2], VehPosData[v][3], VehColor1Data[v], VehColor2Data[v], 120);
         if(nv == INVALID_VEHICLE_ID) continue;
 
+        if(nv == v) {
+            VehOculto[v] = false;
+            VehLastUseTick[v] = GetTickCount();
+            if(GPSVehiculoSeleccionado[playerid] == v) GPSVehiculoSeleccionado[playerid] = v;
+            restaurados++;
+            continue;
+        }
+
         VehOwner[nv] = VehOwner[v];
         VehLocked[nv] = VehLocked[v];
         VehOculto[nv] = false;
@@ -5783,6 +5795,13 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
 
     new nv = CreateVehicle(VehModelData[veh], VehPosData[veh][0], VehPosData[veh][1], VehPosData[veh][2], VehPosData[veh][3], VehColor1Data[veh], VehColor2Data[veh], 120);
     if(nv == INVALID_VEHICLE_ID) return false;
+
+    if(nv == veh) {
+        VehOculto[veh] = false;
+        VehLastUseTick[veh] = GetTickCount();
+        GPSVehiculoSeleccionado[playerid] = veh;
+        return true;
+    }
 
     VehOwner[nv] = VehOwner[veh];
     VehLocked[nv] = VehLocked[veh];
