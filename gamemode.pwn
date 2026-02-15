@@ -95,6 +95,8 @@
 #define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
 #define PATH_EDITMAP_LEGACY "editmap.txt"
 #define PATH_VENTA_AUTOS "venta_autos_config.txt"
+#define PATH_VENTA_SKINS "venta_skins_config.txt"
+#define PATH_ARMERIA "armeria_config.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -185,6 +187,14 @@
 #define DIALOG_MOD_MENU 100
 #define DIALOG_ADMIN_ADD_MOD_ID 101
 #define DIALOG_ADMIN_REMOVE_MOD_ID 102
+#define DIALOG_VENTA_SKINS_ADMIN_MENU 103
+#define DIALOG_VENTA_SKINS_ADD_ID 104
+#define DIALOG_VENTA_SKINS_ADD_PRECIO 105
+#define DIALOG_VENTA_SKINS_REMOVE_LIST 106
+#define DIALOG_VENTA_SKINS_BUY 107
+#define DIALOG_DUDA_TEXTO 108
+#define DIALOG_RD_TARGET 109
+#define DIALOG_RD_RESPUESTA 110
 
 #define RANGO_NINGUNO 0
 #define RANGO_DUENO 1
@@ -464,6 +474,19 @@ new VentaAutosData[MAX_AUTOS_VENTA][eVentaAuto];
 new VentaAutosAdminModeloPendiente[MAX_PLAYERS];
 new VentaAutosAdminPrecioPendiente[MAX_PLAYERS];
 
+#define MAX_SKINS_VENTA 100
+enum eVentaSkin {
+    bool:vsActiva,
+    vsSkin,
+    vsPrecio
+}
+new VentaSkinsData[MAX_SKINS_VENTA][eVentaSkin];
+new VentaSkinsAdminSkinPendiente[MAX_PLAYERS];
+new VentaSkinsPickup;
+new Text3D:VentaSkinsLabel = Text3D:-1;
+new Float:VentaSkinsPos[3] = {2503.50, -1660.20, 13.35};
+new RdTargetPendiente[MAX_PLAYERS] = {-1, ...};
+
 new MaleteroOwner[MAX_VEHICLES] = {-1, ...};
 new MaleteroSlotsVeh[MAX_VEHICLES];
 new MaleteroHierbaVeh[MAX_VEHICLES];
@@ -703,6 +726,18 @@ stock CargarPrendasConfig();
 stock GuardarPrendasConfig();
 stock CargarVentaAutosConfig();
 stock GuardarVentaAutosConfig();
+stock CargarVentaSkinsConfig();
+stock GuardarVentaSkinsConfig();
+stock ActualizarLabelVentaSkins();
+stock ShowVentaSkinsBuyMenu(playerid);
+stock ShowVentaSkinsAdminMenu(playerid);
+stock ShowVentaSkinsRemoveMenu(playerid);
+stock GetVentaSkinByListIndex(listindex);
+stock GetVentaSkinByAnyListIndex(listindex);
+stock IsNearVentaSkins(playerid);
+stock CargarArmeriaConfig();
+stock GuardarArmeriaConfig();
+stock SetDefaultCJAnimations(playerid);
 stock CrearPrendasDefault();
 stock ShowPrendasMenu(playerid);
 stock AplicarPrendaJugador(playerid, idx);
@@ -785,6 +820,7 @@ public OnGameModeInit() {
     SetGameModeText("KH 1.0");
     DisableInteriorEnterExits();
     EnableStuntBonusForAll(false);
+    UsePlayerPedAnims();
     fcreatedir(DIR_DATA);
     fcreatedir(DIR_USUARIOS);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
@@ -834,12 +870,17 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
+    CargarVentaSkinsConfig();
+    CargarArmeriaConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
 
     CrearPuntosFijos();
     ActualizarLabelVentaAutos();
+    if(VentaSkinsPickup != 0) DestroyPickup(VentaSkinsPickup);
+    VentaSkinsPickup = CreatePickup(1275, 1, VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2], 0);
+    ActualizarLabelVentaSkins();
     if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
     BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
     CargarRutasBasura();
@@ -908,30 +949,16 @@ public OnGameModeInit() {
 public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 {
     new bool:presionoY = ((newkeys & KEY_YES) && !(oldkeys & KEY_YES));
-    new bool:presionoB = ((newkeys & KEY_LOOK_BEHIND) && !(oldkeys & KEY_LOOK_BEHIND));
-    new bool:presionoL = ((newkeys & KEY_SUBMISSION) && !(oldkeys & KEY_SUBMISSION));
     new bool:presionoH = ((newkeys & KEY_CTRL_BACK) && !(oldkeys & KEY_CTRL_BACK));
 
     if(presionoY && PlayerAdmin[playerid] >= 1) { // Tecla Y (staff)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
+        if(IsNearVentaSkins(playerid)) return ShowVentaSkinsAdminMenu(playerid);
     }
 
-    if(presionoB) { // Tecla B
-        new vehMaletero = GetNearbyOwnedVehicle(playerid);
-        if(vehMaletero != INVALID_VEHICLE_ID) {
-            ShowMaleteroMaletero(playerid, vehMaletero);
-            return 1;
-        }
-    }
-
-    if(presionoL) { // Tecla L
-        if(PlayerAdmin[playerid] >= 1) {
-            if(PlayerAdmin[playerid] == RANGO_MOD) return MostrarDialogoMod(playerid);
-            return MostrarDialogoAdmin(playerid);
-        }
-    }
+    // Teclas B/L deshabilitadas por estabilidad del sistema.
 
     if(!presionoH) return 1; // Tecla H
 
@@ -983,6 +1010,11 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsNearVentaAutos(playerid)) {
         ShowAdminEditHint(playerid, "venta de autos");
         return ShowVentaAutosBuyMenu(playerid);
+    }
+
+    if(IsNearVentaSkins(playerid)) {
+        ShowAdminEditHint(playerid, "venta de skins");
+        return ShowVentaSkinsBuyMenu(playerid);
     }
 
     // Entrada a casas desde el icono con H
@@ -1449,6 +1481,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
             if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, p[0], p[1], p[2])) SendClientMessage(i, 0x77DD77FF, string);
         }
         return 1;
+    }
+
+    if(!strcmp(cmd, "/duda", true)) {
+        return ShowPlayerDialog(playerid, DIALOG_DUDA_TEXTO, DIALOG_STYLE_INPUT, "Sistema de Dudas", "Escribe tu duda para enviarla a todos:", "Enviar", "Cancelar");
+    }
+
+    if(!strcmp(cmd, "/rd", true)) {
+        return ShowPlayerDialog(playerid, DIALOG_RD_TARGET, DIALOG_STYLE_INPUT, "Responder Duda", "Ingresa el ID del jugador que hizo la duda:", "Siguiente", "Cancelar");
     }
 
     if(!strcmp(cmd, "/telefono", true)) {
@@ -2393,6 +2433,7 @@ public OnPlayerConnect(playerid) {
 public OnPlayerSpawn(playerid) {
     if(!IsPlayerLoggedIn[playerid]) return Kick(playerid);
     SetPlayerSkin(playerid, PlayerSkinGuardada[playerid]);
+    SetDefaultCJAnimations(playerid);
     SetPlayerHealth(playerid, VIDA_AL_LOGUEAR);
     SetPlayerArmour(playerid, CHALECO_AL_LOGUEAR);
 
@@ -2430,6 +2471,38 @@ stock SpawnPlayerAfterAuth(playerid)
 }
 
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
+
+    if(dialogid == DIALOG_DUDA_TEXTO) {
+        if(!response) return 1;
+        if(strlen(inputtext) < 3) return SendClientMessage(playerid, -1, "Escribe una duda valida.");
+        new nombre[MAX_PLAYER_NAME], msg[192];
+        GetPlayerName(playerid, nombre, sizeof(nombre));
+        format(msg, sizeof(msg), "[DUDAS] (%s y %d) %s", nombre, playerid, inputtext);
+        SendClientMessageToAll(0x66CCFFFF, msg);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_RD_TARGET) {
+        if(!response) return 1;
+        new target = strval(inputtext);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "ID invalido o jugador desconectado.");
+        RdTargetPendiente[playerid] = target;
+        return ShowPlayerDialog(playerid, DIALOG_RD_RESPUESTA, DIALOG_STYLE_INPUT, "Responder Duda", "Escribe tu respuesta:", "Enviar", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_RD_RESPUESTA) {
+        if(!response) return 1;
+        new target = RdTargetPendiente[playerid];
+        if(target == -1 || !IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "El jugador objetivo ya no esta conectado.");
+        if(strlen(inputtext) < 2) return SendClientMessage(playerid, -1, "Respuesta invalida.");
+        new nTarget[MAX_PLAYER_NAME], nResp[MAX_PLAYER_NAME], msg[220];
+        GetPlayerName(target, nTarget, sizeof(nTarget));
+        GetPlayerName(playerid, nResp, sizeof(nResp));
+        format(msg, sizeof(msg), "[DUDAS] (%s) Respuesta: %s Att: %s", nTarget, inputtext, nResp);
+        SendClientMessageToAll(0x66FF99FF, msg);
+        RdTargetPendiente[playerid] = -1;
+        return 1;
+    }
 
     if(dialogid == DIALOG_CREAR_CASA_INTERIOR) {
         if(!response) { CasaInteriorPendiente[playerid] = -1; return 1; }
@@ -3567,21 +3640,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new item = ArmeriaAdminItemEditando[playerid];
             if(item < 0 || item >= MAX_ARMAS_TIENDA || !ArmeriaItems[item][aiActiva]) return SendClientMessage(playerid, -1, "Item invalido.");
             ArmeriaItems[item][aiPrecioArma] = precioArma;
+            GuardarArmeriaConfig();
             SendClientMessage(playerid, 0x00FF00FF, "Precio de arma actualizado.");
             return ShowAdminArmasMenu(playerid);
         }
-        SetPVarInt(playerid, "AdminArmaPrecio", precioArma);
-        ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_ADD_STOCK, DIALOG_STYLE_INPUT, "Admin Armas - Paso 3", "Ingresa el stock inicial del arma:", "Guardar", "Atras");
-        return 1;
-    }
 
-    if(dialogid == DIALOG_ADMIN_ARMAS_ADD_STOCK) {
-        if(!response) return ShowAdminArmasMenu(playerid);
-        new stockArma = strval(inputtext);
-        if(stockArma <= 0) return SendClientMessage(playerid, -1, "Stock invalido.");
-
-        new precioArma = GetPVarInt(playerid, "AdminArmaPrecio");
-        if(precioArma <= 0) return SendClientMessage(playerid, -1, "Precio pendiente invalido.");
         new armaId = ArmeriaAdminArmaPendiente[playerid];
         if(armaId <= 0 || armaId >= MAX_WEAPON_ID_GM) return SendClientMessage(playerid, -1, "No hay arma pendiente valida.");
 
@@ -3593,17 +3656,17 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 ArmeriaItems[i][aiPrecioArma] = precioArma;
                 ArmeriaItems[i][aiPrecioMunicion] = 6;
                 ArmeriaItems[i][aiMunicionPack] = 1;
-                ArmeriaItems[i][aiStockArma] = stockArma;
-                ArmeriaItems[i][aiStockMunicion] = stockArma * 120;
-                DeletePVar(playerid, "AdminArmaPrecio");
+                ArmeriaItems[i][aiStockArma] = 1;
+                ArmeriaItems[i][aiStockMunicion] = 9999;
+                GuardarArmeriaConfig();
                 SendClientMessage(playerid, 0x00FF00FF, "Arma agregada a la tienda correctamente.");
                 return ShowAdminArmasMenu(playerid);
             }
         }
-        DeletePVar(playerid, "AdminArmaPrecio");
         SendClientMessage(playerid, -1, "No hay mas espacio en la tienda de armas.");
         return ShowAdminArmasMenu(playerid);
     }
+
 
     if(dialogid == DIALOG_ADMIN_ARMAS_EDITAR) {
         if(!response) return ShowAdminArmasMenu(playerid);
@@ -3624,6 +3687,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         if(ArmeriaItems[item][aiStockArma] > 0) ArmeriaItems[item][aiStockArma] = 0;
         else ArmeriaItems[item][aiStockArma] = 1;
+        GuardarArmeriaConfig();
         SendClientMessage(playerid, 0x00FF00FF, "Disponibilidad de arma actualizada.");
         return ShowAdminArmasMenu(playerid);
     }
@@ -3633,6 +3697,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new item = GetArmeriaItemByListIndex(listitem);
         if(item == -1) return SendClientMessage(playerid, -1, "Item invalido.");
         ArmeriaItems[item][aiActiva] = false;
+        GuardarArmeriaConfig();
         SendClientMessage(playerid, 0x00FF00FF, "Arma eliminada de la tienda.");
         return ShowAdminArmasMenu(playerid);
     }
@@ -3654,7 +3719,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]] = 9999;
         GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 9999);
         PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]] = true;
-        ArmeriaItems[item][aiStockArma]--;
         return ShowArmeriaArmasDisponibles(playerid);
     }
 
@@ -3682,6 +3746,83 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new WEAPON:armaActual = GetPlayerWeapon(playerid);
         if(_:armaActual == ArmeriaItems[item][aiArma]) GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]]);
         return ShowArmeriaMunicionDisponible(playerid);
+    }
+
+    if(dialogid == DIALOG_VENTA_SKINS_ADMIN_MENU) {
+        if(!response) return 1;
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+        if(!IsNearVentaSkins(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el CP de skins.");
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_VENTA_SKINS_ADD_ID, DIALOG_STYLE_INPUT, "Venta de Skins - Paso 1", "Ingresa ID de skin (0-311):", "Siguiente", "Cancelar");
+        if(listitem == 1) return ShowVentaSkinsRemoveMenu(playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_VENTA_SKINS_ADD_ID) {
+        if(!response) return ShowVentaSkinsAdminMenu(playerid);
+        if(!EsDueno(playerid) || !IsNearVentaSkins(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el CP de skins.");
+        new skin = strval(inputtext);
+        if(skin < 0 || skin > 311) return SendClientMessage(playerid, -1, "ID de skin invalido (0-311).");
+        VentaSkinsAdminSkinPendiente[playerid] = skin;
+        return ShowPlayerDialog(playerid, DIALOG_VENTA_SKINS_ADD_PRECIO, DIALOG_STYLE_INPUT, "Venta de Skins - Paso 2", "Ingresa el precio de la skin:", "Guardar", "Atras");
+    }
+
+    if(dialogid == DIALOG_VENTA_SKINS_ADD_PRECIO) {
+        if(!response) return ShowVentaSkinsAdminMenu(playerid);
+        if(!EsDueno(playerid) || !IsNearVentaSkins(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el CP de skins.");
+        new precio = strval(inputtext);
+        if(precio <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        new skin = VentaSkinsAdminSkinPendiente[playerid];
+        if(skin < 0 || skin > 311) return SendClientMessage(playerid, -1, "No hay skin pendiente valida.");
+
+        for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+            if(VentaSkinsData[i][vsActiva] && VentaSkinsData[i][vsSkin] == skin) {
+                VentaSkinsData[i][vsPrecio] = precio;
+                GuardarVentaSkinsConfig();
+                ActualizarLabelVentaSkins();
+                SendClientMessage(playerid, 0x00FF00FF, "Skin actualizada correctamente.");
+                return ShowVentaSkinsAdminMenu(playerid);
+            }
+        }
+
+        for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+            if(!VentaSkinsData[i][vsActiva]) {
+                VentaSkinsData[i][vsActiva] = true;
+                VentaSkinsData[i][vsSkin] = skin;
+                VentaSkinsData[i][vsPrecio] = precio;
+                GuardarVentaSkinsConfig();
+                ActualizarLabelVentaSkins();
+                SendClientMessage(playerid, 0x00FF00FF, "Skin agregada correctamente.");
+                return ShowVentaSkinsAdminMenu(playerid);
+            }
+        }
+        return SendClientMessage(playerid, -1, "No hay espacio para mas skins.");
+    }
+
+    if(dialogid == DIALOG_VENTA_SKINS_REMOVE_LIST) {
+        if(!response) return ShowVentaSkinsAdminMenu(playerid);
+        if(!EsDueno(playerid) || !IsNearVentaSkins(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el CP de skins.");
+        new item = GetVentaSkinByAnyListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        VentaSkinsData[item][vsActiva] = false;
+        VentaSkinsData[item][vsSkin] = 0;
+        VentaSkinsData[item][vsPrecio] = 0;
+        GuardarVentaSkinsConfig();
+        ActualizarLabelVentaSkins();
+        SendClientMessage(playerid, 0x00FF00FF, "Skin eliminada de la venta.");
+        return ShowVentaSkinsAdminMenu(playerid);
+    }
+
+    if(dialogid == DIALOG_VENTA_SKINS_BUY) {
+        if(!response) return 1;
+        new item = GetVentaSkinByListIndex(listitem);
+        if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(GetPlayerMoney(playerid) < VentaSkinsData[item][vsPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+        GivePlayerMoney(playerid, -VentaSkinsData[item][vsPrecio]);
+        SetPlayerSkin(playerid, VentaSkinsData[item][vsSkin]);
+        PlayerSkinGuardada[playerid] = VentaSkinsData[item][vsSkin];
+        GuardarCuenta(playerid);
+        SendClientMessage(playerid, 0x00FF00FF, "Compra completada. Tu skin fue actualizada y guardada.");
+        return 1;
     }
 
     if(dialogid == DIALOG_VENTA_AUTOS_ADMIN_MENU) {
@@ -3796,6 +3937,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VehPosData[veh][2] = pz;
         VehPosData[veh][3] = pa;
         VentaAutosData[item][vaStock]--;
+        GuardarVentaAutosConfig();
         ActualizarLabelVentaAutos();
         SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. El concesionario te entrega las llaves de tu nuevo auto.");
         return 1;
@@ -4296,6 +4438,8 @@ public AutoGuardadoGlobal() {
     GuardarPuntosMovibles();
     GuardarEditMap();
     GuardarVentaAutosConfig();
+    GuardarVentaSkinsConfig();
+    GuardarArmeriaConfig();
     return 1;
 }
 
@@ -4527,6 +4671,11 @@ stock IsNearVentaAutos(playerid) {
     return 0;
 }
 
+stock IsNearVentaSkins(playerid) {
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2])) return 1;
+    return 0;
+}
+
 stock ActualizarLabelVentaAutos() {
     if(VentaAutosLabel != Text3D:-1) { Delete3DTextLabel(VentaAutosLabel); VentaAutosLabel = Text3D:-1; }
     if(!VentaAutosActiva) return 1;
@@ -4592,6 +4741,62 @@ stock GetVentaAutoByAnyListIndex(listindex) {
     return -1;
 }
 
+stock ActualizarLabelVentaSkins() {
+    if(VentaSkinsLabel != Text3D:-1) { Delete3DTextLabel(VentaSkinsLabel); VentaSkinsLabel = Text3D:-1; }
+    new disponibles;
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) if(VentaSkinsData[i][vsActiva]) disponibles++;
+    new texto[128];
+    format(texto, sizeof(texto), "CP Venta de Skins\nSkins disponibles: %d\nUsa H para comprar", disponibles);
+    VentaSkinsLabel = Create3DTextLabel(texto, 0xFF66CCFF, VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2] + 0.6, 18.0, 0);
+    return 1;
+}
+
+stock GetVentaSkinByListIndex(listindex) {
+    new current;
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(!VentaSkinsData[i][vsActiva]) continue;
+        if(current == listindex) return i;
+        current++;
+    }
+    return -1;
+}
+
+stock GetVentaSkinByAnyListIndex(listindex) {
+    return GetVentaSkinByListIndex(listindex);
+}
+
+stock ShowVentaSkinsBuyMenu(playerid) {
+    new body[2048], line[64], count;
+    body[0] = EOS;
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(!VentaSkinsData[i][vsActiva]) continue;
+        format(line, sizeof(line), "Skin %d | Precio:$%d\n", VentaSkinsData[i][vsSkin], VentaSkinsData[i][vsPrecio]);
+        strcat(body, line);
+        count++;
+    }
+    if(count == 0) return SendClientMessage(playerid, -1, "No hay skins disponibles en venta.");
+    return ShowPlayerDialog(playerid, DIALOG_VENTA_SKINS_BUY, DIALOG_STYLE_LIST, "Venta de Skins", body, "Comprar", "Cerrar");
+}
+
+stock ShowVentaSkinsAdminMenu(playerid) {
+    if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+    if(!IsNearVentaSkins(playerid)) return SendClientMessage(playerid, -1, "Debes estar en el CP de skins.");
+    return ShowPlayerDialog(playerid, DIALOG_VENTA_SKINS_ADMIN_MENU, DIALOG_STYLE_LIST, "Venta de Skins Admin", "Agregar/actualizar skin\nQuitar skin", "Seleccionar", "Cerrar");
+}
+
+stock ShowVentaSkinsRemoveMenu(playerid) {
+    new body[2048], line[64], count;
+    body[0] = EOS;
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(!VentaSkinsData[i][vsActiva]) continue;
+        format(line, sizeof(line), "Skin %d | Precio:$%d\n", VentaSkinsData[i][vsSkin], VentaSkinsData[i][vsPrecio]);
+        strcat(body, line);
+        count++;
+    }
+    if(count == 0) return SendClientMessage(playerid, -1, "No hay skins para eliminar.");
+    return ShowPlayerDialog(playerid, DIALOG_VENTA_SKINS_REMOVE_LIST, DIALOG_STYLE_LIST, "Quitar skin de venta", body, "Quitar", "Atras");
+}
+
 stock ShowAdminEditHint(playerid, const nombreSistema[]) {
     if(!EsStaff(playerid)) return 0;
     new msg[96];
@@ -4637,7 +4842,7 @@ stock ShowArmeriaMunicionDisponible(playerid) {
 }
 
 stock ShowAdminArmasMenu(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma (ID + stock)\nEditar precio/disponibilidad", "Seleccionar", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_ARMAS_MENU, DIALOG_STYLE_LIST, "Admin Armas", "Agregar arma (ID + precio)\nEditar precio/disponibilidad", "Seleccionar", "Cerrar");
     return 1;
 }
 
@@ -5032,7 +5237,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /m /d /telefono /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
+    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /m /d /telefono /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda /duda /rd\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -6327,5 +6532,86 @@ stock CargarVentaAutosConfig() {
     }
 
     fclose(h);
+    return 1;
+}
+
+
+stock GuardarVentaSkinsConfig() {
+    new File:h = fopen(PATH_VENTA_SKINS, io_write);
+    if(!h) return 0;
+    new line[48];
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        format(line, sizeof(line), "%d %d %d\n", VentaSkinsData[i][vsActiva], VentaSkinsData[i][vsSkin], VentaSkinsData[i][vsPrecio]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarVentaSkinsConfig() {
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        VentaSkinsData[i][vsActiva] = false;
+        VentaSkinsData[i][vsSkin] = 0;
+        VentaSkinsData[i][vsPrecio] = 0;
+    }
+    new File:h = fopen(PATH_VENTA_SKINS, io_read), line[64];
+    if(!h) return GuardarVentaSkinsConfig();
+    new i;
+    while(fread(h, line) && i < MAX_SKINS_VENTA) {
+        new idx;
+        VentaSkinsData[i][vsActiva] = strval(strtok(line, idx)) != 0;
+        VentaSkinsData[i][vsSkin] = strval(strtok(line, idx));
+        VentaSkinsData[i][vsPrecio] = strval(strtok(line, idx));
+        i++;
+    }
+    fclose(h);
+    return 1;
+}
+
+stock GuardarArmeriaConfig() {
+    new File:h = fopen(PATH_ARMERIA, io_write);
+    if(!h) return 0;
+    new line[96];
+    for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+        format(line, sizeof(line), "%d %d %d %d %d %d %d %d\n", ArmeriaItems[i][aiActiva], ArmeriaItems[i][aiArma], ArmeriaItems[i][aiSlot], ArmeriaItems[i][aiPrecioArma], ArmeriaItems[i][aiPrecioMunicion], ArmeriaItems[i][aiMunicionPack], ArmeriaItems[i][aiStockArma], ArmeriaItems[i][aiStockMunicion]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarArmeriaConfig() {
+    for(new i = 0; i < MAX_ARMAS_TIENDA; i++) {
+        ArmeriaItems[i][aiActiva] = false;
+        ArmeriaItems[i][aiArma] = 0;
+        ArmeriaItems[i][aiSlot] = i;
+        ArmeriaItems[i][aiPrecioArma] = 0;
+        ArmeriaItems[i][aiPrecioMunicion] = 6;
+        ArmeriaItems[i][aiMunicionPack] = 1;
+        ArmeriaItems[i][aiStockArma] = 0;
+        ArmeriaItems[i][aiStockMunicion] = 9999;
+    }
+    new File:h = fopen(PATH_ARMERIA, io_read), line[128];
+    if(!h) return GuardarArmeriaConfig();
+    new i;
+    while(fread(h, line) && i < MAX_ARMAS_TIENDA) {
+        new idx;
+        ArmeriaItems[i][aiActiva] = strval(strtok(line, idx)) != 0;
+        ArmeriaItems[i][aiArma] = strval(strtok(line, idx));
+        ArmeriaItems[i][aiSlot] = strval(strtok(line, idx));
+        ArmeriaItems[i][aiPrecioArma] = strval(strtok(line, idx));
+        ArmeriaItems[i][aiPrecioMunicion] = strval(strtok(line, idx));
+        ArmeriaItems[i][aiMunicionPack] = strval(strtok(line, idx));
+        ArmeriaItems[i][aiStockArma] = strval(strtok(line, idx));
+        ArmeriaItems[i][aiStockMunicion] = strval(strtok(line, idx));
+        i++;
+    }
+    fclose(h);
+    return 1;
+}
+
+stock SetDefaultCJAnimations(playerid) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     return 1;
 }
