@@ -4132,7 +4132,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return ShowBankMenu(playerid);
     }
 
-    new path[64], line[128];
+    new path[128], line[256];
     ResolverPathCuenta(playerid, path, sizeof(path));
     if(dialogid == DIALOG_REGISTRO) {
         if(!response) return Kick(playerid);
