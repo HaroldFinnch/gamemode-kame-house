@@ -704,7 +704,6 @@ enum eCajaData {
 new CajaDataLoot[MAX_CAJAS][eCajaData];
 new TotalCajas;
 new CajaCooldownTick[MAX_PLAYERS][MAX_CAJAS];
-new MineroCooldownTick[MAX_PLAYERS][MAX_MINAS];
 new MinaCooldownTick[MAX_MINAS];
 new bool:MineroGPSActivo[MAX_PLAYERS];
 new bool:OmitirArmasEnProximoSpawn[MAX_PLAYERS];
@@ -1986,7 +1985,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         }
 
         GuardarCuenta(playerid);
-    GuardarFacciones();
+        GuardarFacciones();
         SendClientMessage(playerid, 0x00FF00FF, "Arma guardada en el maletero.");
         return 1;
     }
@@ -2913,7 +2912,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
     if(dialogid == DIALOG_FACCION_CREAR_COLOR_CONFIRM) {
-        FaccionCrearCompraColor[playerid] = response;
+        FaccionCrearCompraColor[playerid] = bool:response;
         if(response) {
             new lista[256]; lista[0]=EOS;
             for(new c=0;c<MAX_COLORES_FACCION;c++) { if(c>0) strcat(lista, "\n"); strcat(lista, FaccionColoresNombre[c]); }
@@ -4071,7 +4070,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
         if(listitem == 0) {
             BandasPVEActivas = true;
-                    SendClientMessage(playerid, 0x66FF66FF, "[Bandas PVE] Sistema activado.");
+            SendClientMessage(playerid, 0x66FF66FF, "[Bandas PVE] Sistema activado.");
         } else if(listitem == 1) {
             DesactivarSistemaBandasPVE();
             SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Sistema desactivado.");
@@ -4109,15 +4108,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         new idxBorrar = BandaSpawnBorrarPendiente[playerid];
         BandaSpawnBorrarPendiente[playerid] = -1;
-    MineroGPSActivo[playerid] = false;
-    OmitirArmasEnProximoSpawn[playerid] = false;
-    PlayerFaccionId[playerid] = -1;
-    PlayerFaccionRango[playerid] = 0;
-    InvitacionFaccionId[playerid] = -1;
-    InvitacionFaccionOwner[playerid] = -1;
-    FaccionCrearColorPendiente[playerid] = -1;
-    FaccionCrearCompraColor[playerid] = false;
-    FaccionAdminSeleccion[playerid] = -1;
+        MineroGPSActivo[playerid] = false;
+        OmitirArmasEnProximoSpawn[playerid] = false;
+        PlayerFaccionId[playerid] = -1;
+        PlayerFaccionRango[playerid] = 0;
+        InvitacionFaccionId[playerid] = -1;
+        InvitacionFaccionOwner[playerid] = -1;
+        FaccionCrearColorPendiente[playerid] = -1;
+        FaccionCrearCompraColor[playerid] = false;
+        FaccionAdminSeleccion[playerid] = -1;
         if(!EliminarSpawnBandaPorIndice(idxBorrar)) return SendClientMessage(playerid, -1, "No se pudo borrar el punto seleccionado.");
 
         GuardarBandasSpawns();
