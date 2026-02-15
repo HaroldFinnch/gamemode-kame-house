@@ -226,7 +226,7 @@
 #define BOLSA_OBJ_MODEL 1264
 #define BASURERO_NPC_SKIN 16
 #define BASURERO_FLORES_CHANCE 30
-#define GAS_PRECIO_POR_PUNTO 500
+#define GAS_PRECIO_POR_PUNTO 10
 #define GAS_CONSUMO_POR_MINUTO 5
 
 #define MAX_AUTOS_NORMALES_JUGADOR 2
@@ -728,6 +728,7 @@ stock GetPrimerSlotCultivoLibre(playerid);
 stock GetCultivoCosechableCercano(playerid);
 stock CrearPuntosFijos();
 stock ShowMaleteroMaletero(playerid, vehid);
+stock ResetMaleteroVehiculo(vehid, ownerid = -1);
 stock PlayerTieneAccesoVehiculo(playerid, vehid);
 stock GetNearbyOwnedVehicle(playerid);
 stock ActualizarBarrasEstado(playerid);
@@ -802,6 +803,19 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos);
 stock RemoverSancionJugador(targetid);
 stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
+
+stock ResetMaleteroVehiculo(vehid, ownerid = -1) {
+    if(vehid <= 0 || vehid >= MAX_VEHICLES) return 0;
+    MaleteroOwner[vehid] = ownerid;
+    MaleteroSlotsVeh[vehid] = MAX_SLOTS_MALETERO;
+    MaleteroHierbaVeh[vehid] = 0;
+    MaleteroFloresVeh[vehid] = 0;
+    MaleteroSemillaHierbaVeh[vehid] = 0;
+    MaleteroSemillaFlorVeh[vehid] = 0;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[vehid][w] = 0;
+    for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[vehid][ms] = 0; MaleteroArmaSlotAmmoVeh[vehid][ms] = 0; }
+    return 1;
+}
 
 stock ResolverPathCuenta(playerid, dest[], len) {
     new name[MAX_PLAYER_NAME], pathNuevo[64], pathLegacy[64];
@@ -1607,18 +1621,18 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
         if(GasRefuelTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas repostando.");
         new faltante = 100 - GasVehiculo[veh];
+        if(faltante <= 0) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
         new costo = faltante * GAS_PRECIO_POR_PUNTO;
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para repostar.");
         new segundos = floatround(float(faltante) / 10.0, floatround_ceil);
         if(segundos < 1) segundos = 1;
         if(segundos > 10) segundos = 10;
         TogglePlayerControllable(playerid, false);
-        ApplyAnimation(playerid, "CAR", "Sit_relaxed", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         GasRefuelVeh[playerid] = veh;
         GasRefuelCost[playerid] = costo;
         GasRefuelTimer[playerid] = SetTimerEx("FinalizarRepostaje", segundos * 1000, false, "d", playerid);
-        new tx[120];
-        format(tx, sizeof(tx), "Repostando... espera %d segundo(s). Costo: $%d.", segundos, costo);
+        new tx[140];
+        format(tx, sizeof(tx), "Repostando %.0f litros... espera %d segundo(s). Costo: $%d.", float(faltante), segundos, costo);
         SendClientMessage(playerid, 0xFFCC00FF, tx);
         return 1;
     }
@@ -2134,6 +2148,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         VehTempVanilla[veh] = true;
         GasInitVehiculo[veh] = true;
         GasVehiculo[veh] = 100;
+        ResetMaleteroVehiculo(veh);
 
         new msg[120];
         format(msg, sizeof(msg), "Vehiculo vanilla %d creado (ID %d). Se elimina solo tras 5 min sin uso.", modelo, veh);
@@ -2398,8 +2413,8 @@ public OnPlayerConnect(playerid) {
     PlayerHambre[playerid] = 100;
 
     BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 518.0, 150.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 1.1);
-    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 603.0, 0.0);
+    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.9);
+    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 588.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambreFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraHambreFondo[playerid], true);
@@ -2407,8 +2422,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawFont(playerid, BarraHambreFondo[playerid], TEXT_DRAW_FONT_1);
 
     BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 518.0, 150.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 1.1);
-    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 603.0, 0.0);
+    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.9);
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 588.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawUseBox(playerid, BarraHambre[playerid], true);
@@ -2416,8 +2431,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
     BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 518.0, 164.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 1.1);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 603.0, 0.0);
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.9);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 588.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
@@ -2425,8 +2440,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
     BarraGas[playerid] = CreatePlayerTextDraw(playerid, 518.0, 164.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 1.1);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 603.0, 0.0);
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.9);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 588.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
@@ -4093,6 +4108,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VehPosData[veh][1] = py;
         VehPosData[veh][2] = pz;
         VehPosData[veh][3] = pa;
+        ResetMaleteroVehiculo(veh, playerid);
         VentaAutosData[item][vaStock]--;
         GuardarVentaAutosConfig();
         GuardarCuenta(playerid);
@@ -4499,6 +4515,13 @@ stock CargarPuntosMovibles() {
         idx++;
     }
     fclose(h);
+
+    VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
+    VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
+    VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
+    VentaSkinsPos[0] = PuntoPos[puntoVentaSkins][0];
+    VentaSkinsPos[1] = PuntoPos[puntoVentaSkins][1];
+    VentaSkinsPos[2] = PuntoPos[puntoVentaSkins][2];
     return 1;
 }
 
@@ -5579,7 +5602,7 @@ stock ActualizarBarrasEstado(playerid) {
     if(gas < 0) gas = 0;
     if(gas > 100) gas = 100;
 
-    new Float:anchoMax = 85.0;
+    new Float:anchoMax = 70.0;
     new Float:inicio = 518.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicio + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicio + (anchoMax * float(gas) / 100.0), 0.0);
@@ -5629,25 +5652,34 @@ public TeleportVehiculoLlamado(playerid) {
 public FinalizarRepostaje(playerid) {
     GasRefuelTimer[playerid] = -1;
     if(!IsPlayerConnected(playerid)) return 1;
+
+    new veh = GasRefuelVeh[playerid];
+    GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
+
     if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) {
         TogglePlayerControllable(playerid, true);
-        ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
         return 1;
     }
 
-    new veh = GetPlayerVehicleID(playerid);
-    if(veh == INVALID_VEHICLE_ID || veh != GasRefuelVeh[playerid]) {
+    new vehActual = GetPlayerVehicleID(playerid);
+    if(vehActual == INVALID_VEHICLE_ID || vehActual != veh) {
         TogglePlayerControllable(playerid, true);
-        ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
         return 1;
     }
 
-    GivePlayerMoney(playerid, -GasRefuelCost[playerid]);
+    if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 0; }
+    new faltante = 100 - GasVehiculo[veh];
+    if(faltante < 0) faltante = 0;
+    new costo = faltante * GAS_PRECIO_POR_PUNTO;
+    if(faltante > 0 && costo > 0) GivePlayerMoney(playerid, -costo);
     GasVehiculo[veh] = 100;
+    GasRefuelCost[playerid] = 0;
     ActualizarGasTextoVehiculo(playerid);
     TogglePlayerControllable(playerid, true);
-    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-    SendClientMessage(playerid, 0x00FF00FF, "Repostaje completado.");
+
+    new msg[128];
+    format(msg, sizeof(msg), "Repostaje completado: +%d litros por $%d.", faltante, costo);
+    SendClientMessage(playerid, 0x00FF00FF, msg);
     return 1;
 }
 
@@ -5826,14 +5858,7 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
         MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[veh];
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[veh][w];
         for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[nv][ms] = MaleteroArmaSlotIdVeh[veh][ms]; MaleteroArmaSlotAmmoVeh[nv][ms] = MaleteroArmaSlotAmmoVeh[veh][ms]; }
-        MaleteroOwner[veh] = -1;
-        MaleteroSlotsVeh[veh] = 0;
-        MaleteroHierbaVeh[veh] = 0;
-        MaleteroFloresVeh[veh] = 0;
-        MaleteroSemillaHierbaVeh[veh] = 0;
-        MaleteroSemillaFlorVeh[veh] = 0;
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[veh][w] = 0;
-        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[veh][ms] = 0; MaleteroArmaSlotAmmoVeh[veh][ms] = 0; }
+        ResetMaleteroVehiculo(veh);
     }
 
     VehOwner[veh] = -1;
@@ -5898,14 +5923,7 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
         GasInitVehiculo[veh] = true;
         GasVehiculo[veh] = gas;
 
-        MaleteroOwner[veh] = -1;
-        MaleteroSlotsVeh[veh] = MAX_SLOTS_MALETERO;
-        MaleteroHierbaVeh[veh] = 0;
-        MaleteroFloresVeh[veh] = 0;
-        MaleteroSemillaHierbaVeh[veh] = 0;
-        MaleteroSemillaFlorVeh[veh] = 0;
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[veh][w] = 0;
-        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[veh][ms] = 0; MaleteroArmaSlotAmmoVeh[veh][ms] = 0; }
+        ResetMaleteroVehiculo(veh);
 
         if(isMaletero) {
             MaleteroOwner[veh] = playerid;
@@ -5914,19 +5932,22 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
             MaleteroFloresVeh[veh] = maleteroFlores;
             MaleteroSemillaHierbaVeh[veh] = maleteroSemHierba;
             MaleteroSemillaFlorVeh[veh] = maleteroSemFlor;
+        }
 
-            for(new ms = 0; ms < maleteroSlots; ms++) {
-                new tokId[16], tokAmmo[16];
-                format(tokId, sizeof(tokId), "%s", strtok(line, idx));
-                format(tokAmmo, sizeof(tokAmmo), "%s", strtok(line, idx));
-                if(!tokId[0] || !tokAmmo[0]) break;
-                new armaId = strval(tokId);
-                new armaAmmo = strval(tokAmmo);
-                if(armaId <= 0 || armaId >= MAX_WEAPON_ID_GM || armaAmmo <= 0) continue;
-                MaleteroArmaSlotIdVeh[veh][ms] = armaId;
-                MaleteroArmaSlotAmmoVeh[veh][ms] = armaAmmo;
-                MaleteroArmasVeh[veh][armaId] += armaAmmo;
-            }
+        new limiteCarga = maleteroSlots;
+        if(limiteCarga < 1 || limiteCarga > MAX_SLOTS_MALETERO) limiteCarga = MAX_SLOTS_MALETERO;
+        for(new ms = 0; ms < limiteCarga; ms++) {
+            new tokId[16], tokAmmo[16];
+            format(tokId, sizeof(tokId), "%s", strtok(line, idx));
+            format(tokAmmo, sizeof(tokAmmo), "%s", strtok(line, idx));
+            if(!tokId[0] || !tokAmmo[0]) break;
+            new armaId = strval(tokId);
+            new armaAmmo = strval(tokAmmo);
+            if(armaId <= 0 || armaId >= MAX_WEAPON_ID_GM || armaAmmo <= 0) continue;
+            if(!isMaletero) continue;
+            MaleteroArmaSlotIdVeh[veh][ms] = armaId;
+            MaleteroArmaSlotAmmoVeh[veh][ms] = armaAmmo;
+            MaleteroArmasVeh[veh][armaId] += armaAmmo;
         }
     }
 
@@ -6165,14 +6186,7 @@ public RestaurarVehiculoTemporal(slot) {
         MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[slot];
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[slot][w];
         for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[nv][ms] = MaleteroArmaSlotIdVeh[slot][ms]; MaleteroArmaSlotAmmoVeh[nv][ms] = MaleteroArmaSlotAmmoVeh[slot][ms]; }
-        MaleteroOwner[slot] = -1;
-        MaleteroSlotsVeh[slot] = 0;
-        MaleteroHierbaVeh[slot] = 0;
-        MaleteroFloresVeh[slot] = 0;
-        MaleteroSemillaHierbaVeh[slot] = 0;
-        MaleteroSemillaFlorVeh[slot] = 0;
-        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[slot][w] = 0;
-        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[slot][ms] = 0; MaleteroArmaSlotAmmoVeh[slot][ms] = 0; }
+        ResetMaleteroVehiculo(slot);
     }
 
     VehOwner[slot] = -1;
@@ -6719,12 +6733,7 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
 
 public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:response, Float:fX, Float:fY, Float:fZ, Float:fRotX, Float:fRotY, Float:fRotZ) {
     #pragma unused playerobject
-    #pragma unused fX
-    #pragma unused fY
-    #pragma unused fZ
-    #pragma unused fRotX
-    #pragma unused fRotY
-    #pragma unused fRotZ
+
     new slot = EditMapEditandoSlot[playerid];
     if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo] || EditMapData[slot][emObj] != objectid) {
         slot = -1;
@@ -6735,8 +6744,16 @@ public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:respon
     }
 
     if(response == EDIT_RESPONSE_FINAL) {
-        GetObjectPos(EditMapData[slot][emObj], EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ]);
-        GetObjectRot(EditMapData[slot][emObj], EditMapData[slot][emRX], EditMapData[slot][emRY], EditMapData[slot][emRZ]);
+        EditMapData[slot][emX] = fX;
+        EditMapData[slot][emY] = fY;
+        EditMapData[slot][emZ] = fZ;
+        EditMapData[slot][emRX] = fRotX;
+        EditMapData[slot][emRY] = fRotY;
+        EditMapData[slot][emRZ] = fRotZ;
+        if(EditMapData[slot][emObj] != INVALID_OBJECT_ID) {
+            SetObjectPos(EditMapData[slot][emObj], fX, fY, fZ);
+            SetObjectRot(EditMapData[slot][emObj], fRotX, fRotY, fRotZ);
+        }
         GuardarEditMap();
         SendClientMessage(playerid, 0x66FF66FF, "Objeto de editmap guardado en su ultima posicion.");
     } else if(response == EDIT_RESPONSE_CANCEL) {
