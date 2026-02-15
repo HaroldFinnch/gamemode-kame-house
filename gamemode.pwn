@@ -918,8 +918,6 @@ public OnGameModeInit() {
     PuntoPos[puntoVentaSkins][0] = VentaSkinsPos[0];
     PuntoPos[puntoVentaSkins][1] = VentaSkinsPos[1];
     PuntoPos[puntoVentaSkins][2] = VentaSkinsPos[2];
-    if(VentaSkinsPickup != 0) DestroyPickup(VentaSkinsPickup);
-    VentaSkinsPickup = CreatePickup(1275, 1, VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2], 0);
     ActualizarLabelVentaSkins();
     if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
     BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
@@ -2653,11 +2651,17 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Seleccion invalida.");
 
         GPSVehiculoSeleccionado[playerid] = veh;
+        if(!IsValidVehicle(veh) && VehOwner[veh] == playerid && VehModelData[veh] >= 400 && VehModelData[veh] <= 611) {
+            VehOculto[veh] = true;
+        }
+
         if(VehOculto[veh]) {
             if(!RestaurarVehiculoSeleccionado(playerid, veh)) return SendClientMessage(playerid, -1, "Ese vehiculo no pudo restaurarse ahora.");
             veh = GPSVehiculoSeleccionado[playerid];
             if(veh == INVALID_VEHICLE_ID || !IsValidVehicle(veh)) return SendClientMessage(playerid, -1, "No fue posible restaurar el vehiculo elegido.");
         }
+
+        if(!IsValidVehicle(veh)) return SendClientMessage(playerid, -1, "Ese vehiculo no esta disponible para localizarse ahora.");
 
         new Float:vx, Float:vy, Float:vz;
         GetVehiclePos(veh, vx, vy, vz);
@@ -2707,8 +2711,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             VentaSkinsPos[0] = px;
             VentaSkinsPos[1] = py;
             VentaSkinsPos[2] = pz;
-            if(VentaSkinsPickup != 0) DestroyPickup(VentaSkinsPickup);
-            VentaSkinsPickup = CreatePickup(1275, 1, px, py, pz, 0);
             ActualizarLabelVentaSkins();
             GuardarVentaSkinsConfig();
         }
@@ -3462,6 +3464,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         EditMapData[slot][emRZ] = 0.0;
         EditMapData[slot][emObj] = CreateObject(modelid, EditMapData[slot][emX], EditMapData[slot][emY], EditMapData[slot][emZ], 0.0, 0.0, 0.0);
         if(slot >= TotalEditMap) TotalEditMap = slot + 1;
+        GuardarEditMap();
         EditMapEditandoSlot[playerid] = slot;
         EditObject(playerid, EditMapData[slot][emObj]);
         SendClientMessage(playerid, 0x66FF66FF, "Objeto creado. Ajusta posicion/rotacion y confirma para guardar.");
@@ -4034,6 +4037,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VehPosData[veh][3] = pa;
         VentaAutosData[item][vaStock]--;
         GuardarVentaAutosConfig();
+        GuardarCuenta(playerid);
         ActualizarLabelVentaAutos();
         SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. El concesionario te entrega las llaves de tu nuevo auto.");
         return 1;
@@ -4684,6 +4688,18 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
     return 1;
 }
 
+public OnVehicleDeath(vehicleid, killerid) {
+    #pragma unused killerid
+    if(vehicleid <= 0 || vehicleid >= MAX_VEHICLES) return 1;
+    if(VehOwner[vehicleid] == -1) return 1;
+
+    GetVehiclePos(vehicleid, VehPosData[vehicleid][0], VehPosData[vehicleid][1], VehPosData[vehicleid][2]);
+    GetVehicleZAngle(vehicleid, VehPosData[vehicleid][3]);
+    VehOculto[vehicleid] = true;
+    VehLastUseTick[vehicleid] = GetTickCount();
+    return 1;
+}
+
 public OnPlayerUpdate(playerid) {
     if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
     if(PlayerSancionado[playerid]) {
@@ -5250,7 +5266,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
-        case puntoVentaSkins: format(dest, len, "Venta de skins");
+        case puntoVentaSkins: format(dest, len, "Tienda De Skins");
         case puntoMaletero: format(dest, len, "Reservado");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
@@ -5579,6 +5595,7 @@ stock ShowGPSVehiculosMenu(playerid) {
     body[0] = EOS;
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(VehOwner[v] != playerid) continue;
+        if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
         format(line, sizeof(line), "ID:%d | Modelo:%d | %s\n", v, VehModelData[v], VehOculto[v] ? "Oculto" : "Activo");
         strcat(body, line);
         count++;
@@ -5592,6 +5609,7 @@ stock GetOwnedVehicleByListIndex(playerid, listindex) {
     new current;
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(VehOwner[v] != playerid) continue;
+        if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
         if(current == listindex) return v;
         current++;
     }
@@ -6552,6 +6570,7 @@ stock CargarEditMap() {
     while(fread(h, line) && TotalEditMap < MAX_EDITMAP_OBJECTS) {
         new idx = 0;
         new modelid = strval(strtok(line, idx));
+        if(modelid < 300 || modelid > 20000) continue;
         new Float:x = floatstr(strtok(line, idx));
         new Float:y = floatstr(strtok(line, idx));
         new Float:z = floatstr(strtok(line, idx));
