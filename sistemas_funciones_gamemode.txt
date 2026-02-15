@@ -1,0 +1,266 @@
+DOCUMENTACION TECNICA - SISTEMAS Y FUNCIONES DE LA GAMEMODE KAME HOUSE
+Generado desde: gamemode.pwn
+
+1) RESUMEN DE SISTEMAS
+
+01. Autenticación y cuentas:
+    - Registro/login por dialogos, carga/guardado de usuario en `usuarios/%s.ini`, restauracion de datos persistentes (dinero, skills, inventario, vehiculos, casas, prendas y sanciones).
+02. Chat RP y comunicación:
+    - Canales `/g`, `/m`, `/d` con radio local y global; prefijos segun rango staff; sistema de telefono con SMS, calculadora y llamada de vehiculo.
+03. Economía central:
+    - Dinero en efectivo + banco (saldo, deposito, retiro y transferencia), pagos por trabajos y costos operativos (comida, telefono, combustible, etc.).
+04. Progresión del personaje:
+    - Nivel PJ por horas jugadas (`HORAS_POR_NIVEL_PJ`), pago por hora y limites de capacidad de vehiculos.
+05. Necesidades del personaje:
+    - Sistema de hambre con barra HUD, decremento periodico (`BajarHambre`) y accion `/comer` dentro de casa.
+06. Propiedades (casas):
+    - Compra/venta de casas, interiores, acceso a invitados, entrada/salida, limite por jugador y administracion owner (`/crearcasa`, `/eliminarcasa`).
+07. Trabajos principales:
+    - Camionero, Pizzero y Basurero con vehiculo temporal, checkpoints, estados de trabajo, progreso por nivel y pagos maximos/base.
+08. Cultivo y semillería:
+    - Compra de semillas, plantacion limitada por jugador, crecimiento por timer, cosecha, consumo y objetos visuales por planta.
+09. Minería y manufactura:
+    - Minas, hornos, cajas de busqueda, puntos de prepiezas y crafting armero por tiers/materiales.
+10. Armería:
+    - Catálogo administrable de armas/munición por stock y precio, compra jugador y panel staff para alta/edicion/baja.
+11. Vehículos personales:
+    - Compra de autos, llaves, compartir acceso, maletero con slots/armas, pintura, GPS vehicular, restauracion por inactividad y limite por nivel.
+12. Combustible y gas:
+    - Sistema de gas por puntos movibles/fijos, consumo por minuto, repostaje y bidón para cargar combustible.
+13. Prendas y accesorios:
+    - Sistema de ropa/accesorios por bones (attached objects), inventario de prendas por usuario y panel admin de configuración.
+14. EditMap in-game:
+    - Alta/edicion/eliminacion de objetos de mapa persistidos en `editmap.txt`, con lista visual y guardado.
+15. Administración y moderación:
+    - Paneles `/admm` y `/mover`, TP/traer, skin/vida/chaleco/dinero/minerales, sanciones temporales y gestión de moderadores.
+16. Puntos movibles del servidor:
+    - Reubicacion persistente de zonas clave (trabajos, banco, tiendas, etc.) con recreacion de labels/checkpoints.
+17. Persistencia global:
+    - Carga de configuración/rutas al iniciar y autoguardado cíclico para cuentas y sistemas dinámicos.
+
+2) COMANDOS DE JUGADOR/STAFF DETECTADOS EN OnPlayerCommandText
+
+Total de comandos/alias detectados: 68
+/g, /m, /d, /telefono, /skills, /lvl, /nivel, /comer, /pintar, /llenar, /bidon, /usarbidon, /inventario, /inv, /cosas, /plantar, /cosehar, /cosechar, /consumir, /dejartrabajo, /cancelartrabajo, /tirarbasura, /tirar, /gps, /ayuda, /saldo, /pagar, /comprarauto, /maletero, /ga, /llave, /compartirllave, /comprar, /crearparada, /crearparadapizza, /crearparadabasura, /ventagas, /crearventadeautos, /agregarauto, /kick, /dardinero, /dararma, /adminarmas, /adminarma, /admm, /reglas, /editmp, /crearmina, /crearhorno, /crearcaja, /crearprepiezas, /armero, /prendas, /prenda, /admprendas, /mover, /tp, /ir, /traer, /kill, /cord, /sacarveh, /rc, /fly, /crearcasa, /salir, /abrircasa, /eliminarcasa
+
+3) ARQUITECTURA DE EVENTOS (CALLBACKS PUBLIC)
+
+- GuardarCasas (linea 576)
+- GuardarCuenta (linea 577)
+- BajarHambre (linea 582)
+- ChequearLimitesMapa (linea 583)
+- AutoGuardadoGlobal (linea 584)
+- FinalizarRecolectaBasura (linea 585)
+- SubirTiempoJugado (linea 586)
+- ClearPlayerAnimLock (linea 587)
+- FinalizarRepostaje (linea 588)
+- CheckInactiveVehicles (linea 589)
+- RestaurarVehiculoTemporal (linea 590)
+- FinalizarMinado (linea 591)
+- FinalizarCajaBusqueda (linea 592)
+- FinalizarHorno (linea 593)
+- ActualizarTextosHornos (linea 594)
+- TeleportVehiculoLlamado (linea 595)
+- OnGameModeInit (linea 748)
+- OnPlayerKeyStateChange (linea 869)
+- OnPlayerEnterCheckpoint (linea 1097)
+- FinalizarCarga (linea 1182)
+- FinalizarDescarga (linea 1211)
+- AsignarRutaPizzero (linea 1212)
+- FinalizarEntregaPizza (linea 1221)
+- ActualizarCultivo (linea 1222)
+- OnPlayerCommandText (linea 1374)
+- OnPlayerClickMap (linea 2225)
+- OnPlayerText (linea 2231)
+- OnPlayerConnect (linea 2246)
+- OnPlayerSpawn (linea 2355)
+- OnDialogResponse (linea 2394)
+- OnPlayerWeaponShot (linea 4262)
+- OnPlayerDisconnect (linea 4273)
+- OnPlayerInteriorChange (linea 4324)
+- OnPlayerStateChange (linea 4361)
+- OnPlayerUpdate (linea 4399)
+- OnPlayerRequestClass (linea 4443)
+- OnPlayerEditAttachedObject (linea 5992)
+- OnPlayerEditObject (linea 6024)
+
+4) CATALOGO COMPLETO DE FUNCIONES DECLARADAS
+   Formato: nombre | linea_primera_aparicion | tipo(s) | implementada
+
+- strtok | 574 | forward | no
+- sscanf_manual | 575 | forward/stock | si
+- GuardarCasas | 576 | forward/public | si
+- GuardarCuenta | 577 | forward/public | si
+- CargarVehiculosJugadorDesdeCuenta | 578 | stock | si
+- CargarVehiculosJugadorDesdeLinea | 579 | stock | si
+- GuardarVehiculosJugadorEnCuenta | 580 | stock | si
+- bool:EsLineaPrendaCuenta | 581 | stock | si
+- BajarHambre | 582 | forward/public | si
+- ChequearLimitesMapa | 583 | forward/public | si
+- AutoGuardadoGlobal | 584 | forward/public | si
+- FinalizarRecolectaBasura | 585 | forward/public | si
+- SubirTiempoJugado | 586 | forward/public | si
+- ClearPlayerAnimLock | 587 | forward/public | si
+- FinalizarRepostaje | 588 | forward/public | si
+- CheckInactiveVehicles | 589 | forward/public | si
+- RestaurarVehiculoTemporal | 590 | forward/public | si
+- FinalizarMinado | 591 | forward/public | si
+- FinalizarCajaBusqueda | 592 | forward/public | si
+- FinalizarHorno | 593 | forward/public | si
+- ActualizarTextosHornos | 594 | forward/public | si
+- TeleportVehiculoLlamado | 595 | forward/public | si
+- CargarMinas | 596 | stock | si
+- GuardarMinas | 597 | stock | si
+- CargarHornos | 598 | stock | si
+- GuardarHornos | 599 | stock | si
+- CargarCajasLoot | 600 | stock | si
+- GuardarCajasLoot | 601 | stock | si
+- CargarPrepiezaPoints | 602 | stock | si
+- GuardarPrepiezaPoints | 603 | stock | si
+- MostrarDialogoAdmin | 604 | stock | si
+- AplicarTexturaMinaEstatica | 605 | stock | si
+- ObtenerDatosCrafteoArmero | 606 | stock | si
+- GetHornoMasCercano | 607 | stock | si
+- GetClosestCasa | 608 | stock | si
+- GetClosestCasaOwnedBy | 609 | stock | si
+- bool:PlayerTieneAccesoCasa | 610 | stock | si
+- EntrarCasa | 611 | stock | si
+- bool:GetCasaInteriorData | 612 | stock | si
+- bool:EsDueno | 613 | stock | si
+- bool:EsModerador | 614 | stock | si
+- bool:EsStaff | 615 | stock | si
+- ShowCrearCasaInteriorDialog | 616 | stock | si
+- Float:GetDistanceBetweenPoints | 617 | stock | si
+- CanceladoTrabajo | 618 | stock | si
+- FormatTiempoRestante | 619 | stock | si
+- ActualizarLabelHorno | 620 | stock | si
+- CanceladoTrabajoPizzero | 655 | stock | si
+- ShowAyudaDialog | 656 | stock | si
+- IsNearBank | 657 | stock | si
+- ShowBankMenu | 658 | stock | si
+- IsNearBusinessInterior | 659 | stock | si
+- IsNearSemilleria | 660 | stock | si
+- ShowSemilleriaMenu | 661 | stock | si
+- IsNearArmeria | 662 | stock | si
+- ShowArmeriaMenu | 663 | stock | si
+- ShowArmeriaArmasDisponibles | 664 | stock | si
+- ShowArmeriaMunicionDisponible | 665 | stock | si
+- ShowAdminArmasMenu | 666 | stock | si
+- GetWeaponNameGM | 667 | stock | si
+- GetArmeriaItemByListIndex | 668 | stock | si
+- GetArmeriaItemByStockMuniIndex | 669 | stock | si
+- CrearVehiculoTrabajoUnico | 670 | stock | si
+- CargarRutasBasura | 671 | stock | si
+- IniciarRutaBasurero | 672 | stock | si
+- FinalizarTrabajoBasurero | 673 | stock | si
+- GetBasuraPointNearPlayer | 674 | stock | si
+- ActualizarHUDRecolectaBasurero | 675 | stock | si
+- ActualizarLabelCultivo | 676 | stock | si
+- FinalizarCultivoVisual | 677 | stock | si
+- FinalizarTodosLosCultivos | 678 | stock | si
+- GetPrimerSlotCultivoLibre | 679 | stock | si
+- GetCultivoCosechableCercano | 680 | stock | si
+- CrearPuntosFijos | 681 | stock | si
+- ShowMaleteroMaletero | 682 | stock | si
+- PlayerTieneAccesoVehiculo | 683 | stock | si
+- GetNearbyOwnedVehicle | 684 | stock | si
+- CuentaArmasMaletero | 685 | stock | si
+- InitGasSystem | 686 | stock | si
+- ActualizarGasTextoVehiculo | 687 | stock | si
+- EncontrarGasCercano | 688 | stock | si
+- RecrearPuntoFijo | 689 | stock | si
+- GetPuntoMovibleNombre | 690 | stock | si
+- IsNearVentaAutos | 691 | stock | si
+- ActualizarLabelVentaAutos | 692 | stock | si
+- ShowVentaAutosBuyMenu | 693 | stock | si
+- GetVentaAutoByListIndex | 694 | stock | si
+- ShowVentaAutosAdminMenu | 695 | stock | si
+- CargarPrendasConfig | 696 | stock | si
+- GuardarPrendasConfig | 697 | stock | si
+- CargarVentaAutosConfig | 698 | stock | si
+- GuardarVentaAutosConfig | 699 | stock | si
+- CrearPrendasDefault | 700 | stock | si
+- ShowPrendasMenu | 701 | stock | si
+- AplicarPrendaJugador | 702 | stock | si
+- QuitarPrendaJugador | 703 | stock | si
+- ShowPrendasAdminEditar | 704 | stock | si
+- ShowPrendasAdminMenu | 705 | stock | si
+- ShowPrendaUsuarioMenu | 706 | stock | si
+- ShowPrendaUsuarioEditar | 707 | stock | si
+- IsPrendaSlotEnUsoPorJugadores | 708 | stock | si
+- ContarPrendasJugador | 709 | stock | si
+- GetPrendaBoneName | 710 | stock | si
+- IsNearPrendas | 711 | stock | si
+- ShowVentaAutosRemoveMenu | 712 | stock | si
+- GetVentaAutoByAnyListIndex | 713 | stock | si
+- ShowAdminEditHint | 714 | stock | si
+- GetNivelPJ | 715 | stock | si
+- ActualizarNivelPJ | 716 | stock | si
+- ContarAutosJugador | 717 | stock | si
+- ContarVehiculosTotalesJugador | 718 | stock | si
+- ShowGPSVehiculosMenu | 719 | stock | si
+- GetOwnedVehicleByListIndex | 720 | stock | si
+- RestaurarVehiculosJugador | 721 | stock | si
+- bool:RestaurarVehiculoSeleccionado | 722 | stock | si
+- ContarCasasJugador | 723 | stock | si
+- GuardarPuntosMovibles | 724 | stock | si
+- CargarPuntosMovibles | 725 | stock | si
+- ShowTelefonoMenu | 726 | stock | si
+- ShowTelefonoVehiculosMenu | 727 | stock | si
+- GetTelefonoVehiculoByListIndex | 728 | stock | si
+- GuardarEditMap | 729 | stock | si
+- CargarEditMap | 730 | stock | si
+- ShowEditMapMenu | 731 | stock | si
+- ShowEditMapEditList | 732 | stock | si
+- ShowEditMapDeleteList | 733 | stock | si
+- ShowEditMapViewList | 734 | stock | si
+- GetEditMapSlotByListIndex | 735 | stock | si
+- GetEditMapSlotLibre | 736 | stock | si
+- GetConceptoSancionNombre | 737 | stock | si
+- AplicarSancionJugador | 738 | stock | si
+- RemoverSancionJugador | 739 | stock | si
+- ShowReglasDialog | 740 | stock | si
+- CosecharCultivoCercano | 741 | stock | si
+- OnGameModeInit | 748 | public | si
+- OnPlayerKeyStateChange | 869 | public | si
+- OnPlayerEnterCheckpoint | 1097 | public | si
+- FinalizarCarga | 1182 | forward/public | si
+- FinalizarDescarga | 1211 | forward/public | si
+- AsignarRutaPizzero | 1212 | forward/public | si
+- FinalizarEntregaPizza | 1221 | forward/public | si
+- ActualizarCultivo | 1222 | forward/public | si
+- FinalizarTrabajo | 1242 | stock | si
+- OnPlayerCommandText | 1374 | public | si
+- GetPrefijoGlobal | 2218 | stock | si
+- OnPlayerClickMap | 2225 | public | si
+- OnPlayerText | 2231 | public | si
+- OnPlayerConnect | 2246 | public | si
+- OnPlayerSpawn | 2355 | public | si
+- SpawnPlayerAfterAuth | 2382 | stock | si
+- OnDialogResponse | 2394 | public | si
+- OnPlayerWeaponShot | 4262 | public | si
+- OnPlayerDisconnect | 4273 | public | si
+- OnPlayerInteriorChange | 4324 | public | si
+- OnPlayerStateChange | 4361 | public | si
+- OnPlayerUpdate | 4399 | public | si
+- OnPlayerRequestClass | 4443 | public | si
+- MostrarDialogoMod | 5633 | stock | si
+- OnPlayerEditAttachedObject | 5992 | public | si
+- OnPlayerEditObject | 6024 | public | si
+
+5) ARCHIVOS DE DATOS/PERSISTENCIA USADOS POR LA GAMEMODE
+
+- usuarios/%s.ini (cuentas de jugadores)
+- rutas_camionero.txt, rutas_pizzero.txt, rutas_basurero.txt
+- casas.txt
+- puntos_movibles.txt
+- minas.txt, hornos.txt, cajas_busqueda.txt, prepiezas_puntos.txt
+- prendas_config.txt
+- editmap.txt
+- venta_autos_config.txt
+
+6) NOTAS OPERATIVAS
+
+- Los sistemas están fuertemente integrados por diálogos (IDs DIALOG_*) y timers (SetTimerEx).
+- Gran parte de la lógica de negocio está centralizada en OnPlayerCommandText y OnDialogResponse.
+- La progresión y economía se apoyan en constantes editables al inicio del archivo para balance rápido.
