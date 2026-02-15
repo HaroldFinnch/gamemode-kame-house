@@ -96,6 +96,7 @@
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_BANDAS_SPAWNS "bandas_spawns.txt"
+#define PATH_FACCIONES "scriptfiles/kame_house/facciones.txt"
 #define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
 #define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
@@ -141,6 +142,22 @@
 #define DIALOG_PINTURA_COLOR 45
 #define DIALOG_TUNING_MENU 119
 #define DIALOG_CHATARRA_VEHICULO 120
+#define DIALOG_FACCION_MENU 121
+#define DIALOG_FACCION_CREAR_NOMBRE 122
+#define DIALOG_FACCION_CREAR_COLOR_CONFIRM 123
+#define DIALOG_FACCION_CREAR_COLOR_LISTA 124
+#define DIALOG_FACCION_CREAR_RESUMEN 125
+#define DIALOG_FACCION_COMPRAR_COLOR_LISTA 126
+#define DIALOG_FACCION_OWNER_MENU 127
+#define DIALOG_FACCION_INVITAR_ID 128
+#define DIALOG_FACCION_INVITACION 129
+#define DIALOG_FACCION_EDITAR_RANGO 130
+#define DIALOG_ADMIN_FACCIONES_MENU 131
+#define DIALOG_ADMIN_FACCIONES_LISTA 132
+#define DIALOG_ADMIN_FACCION_RENOMBRAR 133
+#define DIALOG_ADMIN_FACCION_CONFIRM_ELIMINAR 134
+#define DIALOG_ADMIN_FACCION_COLOR_LISTA 135
+#define DIALOG_ADMIN_FACCION_UNIR_LISTA 136
 #define DIALOG_GPS_VEHICULOS 46
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
@@ -219,6 +236,10 @@
 #define RANGO_DUENO 1
 #define RANGO_MOD 2
 
+#define FACCION_RANGO_MIEMBRO 1
+#define FACCION_RANGO_RECLUTA 2
+#define FACCION_RANGO_OWNER 3
+
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
 #define MAX_GAS_POINTS 64
@@ -235,6 +256,12 @@
 #define PRECIO_TELEFONO 10000
 #define COSTO_SMS 100
 #define COSTO_LLAMAR_VEHICULO 5000
+#define COSTO_CREAR_FACCION 1000000
+#define COSTO_COLOR_CREAR_FACCION 100000
+#define COSTO_COMPRAR_COLOR_FACCION 200000
+#define POS_FACCION_X 2504.40
+#define POS_FACCION_Y -1663.20
+#define POS_FACCION_Z 13.35
 
 #define MAX_PLANTAS_POR_JUGADOR 5
 #define BOLSA_OBJ_MODEL 1264
@@ -244,6 +271,9 @@
 #define GAS_CONSUMO_POR_MINUTO 5
 
 #define MAX_BANDAS_PVE 30
+#define MAX_FACCIONES 30
+#define MAX_MIEMBROS_FACCION 10
+#define MAX_COLORES_FACCION 10
 #define MAX_BANDEROS_POR_GRUPO 5
 #define MAX_BANDA_SPAWNS 30
 #define MIN_BANDEROS_POR_GRUPO 2
@@ -263,7 +293,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 2
 #define MAX_VEHICULOS_TOTALES_JUGADOR 2
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 6
+#define CUENTA_DATA_VERSION 7
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -364,6 +394,7 @@ new CasaData[MAX_CASAS][eCasa];
 new TotalCasas = 0;
 new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
+new Text3D:PlayerPrefixLabel[MAX_PLAYERS] = {Text3D:-1, ...};
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
@@ -387,6 +418,33 @@ static const Float:CasaInteriorPos[5][3] = {
 
 new Float:BandaSpawnPos[MAX_BANDA_SPAWNS][4];
 new TotalBandaSpawns;
+
+enum eFaccionData {
+    bool:facActiva,
+    facNombre[17],
+    facOwner,
+    facColor,
+    facMiembros[MAX_MIEMBROS_FACCION],
+    facRangos[MAX_MIEMBROS_FACCION]
+}
+new FaccionData[MAX_FACCIONES][eFaccionData];
+new PlayerFaccionId[MAX_PLAYERS] = {-1, ...};
+new PlayerFaccionRango[MAX_PLAYERS];
+new InvitacionFaccionId[MAX_PLAYERS] = {-1, ...};
+new InvitacionFaccionOwner[MAX_PLAYERS] = {-1, ...};
+new FaccionCrearColorPendiente[MAX_PLAYERS] = {-1, ...};
+new bool:FaccionCrearCompraColor[MAX_PLAYERS];
+new FaccionAdminSeleccion[MAX_PLAYERS] = {-1, ...};
+new Text3D:FaccionCPLabel = Text3D:-1;
+new FaccionCPPickup = 0;
+
+static const FaccionColoresNombre[MAX_COLORES_FACCION][] = {
+    "Rojo", "Azul", "Verde", "Amarillo", "Morado", "Naranja", "Cian", "Rosa", "Blanco", "Negro"
+};
+static const FaccionColoresValor[MAX_COLORES_FACCION] = {
+    0xE74C3CFF, 0x3498DBFF, 0x2ECC71FF, 0xF1C40FFF, 0x9B59B6FF,
+    0xE67E22FF, 0x1ABC9CFF, 0xFF66CCFF, 0xECF0F1FF, 0x2C3E50FF
+};
 
 // Sistema de armeria
 #define MAX_ARMAS_TIENDA 20
@@ -857,6 +915,19 @@ stock CargarPuntosMovibles();
 stock ShowTelefonoMenu(playerid);
 stock ShowTelefonoVehiculosMenu(playerid);
 stock GetTelefonoVehiculoByListIndex(playerid, listindex);
+stock GetNombreVehiculoVanilla(modelid, nombre[], len);
+stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0);
+stock InicializarSistemaFacciones();
+stock CargarFacciones();
+stock GuardarFacciones();
+stock MostrarMenuFaccionesCP(playerid);
+stock MostrarPanelFaccionOwner(playerid);
+stock ActualizarLabelJugadorFaccion(playerid);
+stock EliminarFaccion(fid);
+stock BuscarFaccionLibre();
+stock bool:AgregarMiembroFaccion(fid, playerid, rango);
+stock RemoverMiembroFaccion(fid, playerid);
+stock ActualizarMiembrosFaccion(fid);
 stock GuardarEditMap();
 stock CargarEditMap();
 stock ShowEditMapMenu(playerid);
@@ -1098,6 +1169,7 @@ public OnGameModeInit() {
     SetTimer("ActualizarTextosHornos", 1000, true);
 
     InitGasSystem();
+    InicializarSistemaFacciones();
     return 1;
 }
 
@@ -1172,6 +1244,10 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsNearVentaSkins(playerid)) {
         ShowAdminEditHint(playerid, "venta de skins");
         return ShowVentaSkinsBuyMenu(playerid);
+    }
+
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, POS_FACCION_X, POS_FACCION_Y, POS_FACCION_Z)) {
+        return MostrarMenuFaccionesCP(playerid);
     }
 
     // Entrada a casas desde el icono con H
@@ -1642,6 +1718,25 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/fc", true)) {
+        if(PlayerFaccionId[playerid] == -1) return SendClientMessage(playerid, -1, "No perteneces a ninguna faccion.");
+        if(!cmdtext[idx]) return SendClientMessage(playerid, -1, "Uso: /fc [mensaje]");
+        new fid = PlayerFaccionId[playerid];
+        new nombre[MAX_PLAYER_NAME], msg[200];
+        GetPlayerName(playerid, nombre, sizeof(nombre));
+        format(msg, sizeof(msg), "[RADIO %s] %s: %s", FaccionData[fid][facNombre], nombre, cmdtext[idx]);
+        for(new i = 0; i < MAX_PLAYERS; i++) {
+            if(IsPlayerConnected(i) && PlayerFaccionId[i] == fid) SendClientMessage(i, FaccionData[fid][facColor], msg);
+        }
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/faccion", true)) {
+        if(PlayerFaccionId[playerid] == -1) return SendClientMessage(playerid, -1, "No perteneces a ninguna faccion.");
+        if(PlayerFaccionRango[playerid] == FACCION_RANGO_MIEMBRO) return SendClientMessage(playerid, -1, "Solo owner/recluta pueden gestionar la faccion.");
+        return MostrarPanelFaccionOwner(playerid);
+    }
+
     if(!strcmp(cmd, "/duda", true)) {
         return ShowPlayerDialog(playerid, DIALOG_DUDA_TEXTO, DIALOG_STYLE_INPUT, "Sistema de Dudas", "Escribe tu duda para enviarla a todos:", "Enviar", "Cancelar");
     }
@@ -1891,6 +1986,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         }
 
         GuardarCuenta(playerid);
+    GuardarFacciones();
         SendClientMessage(playerid, 0x00FF00FF, "Arma guardada en el maletero.");
         return 1;
     }
@@ -2269,7 +2365,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         ResetMaleteroVehiculo(veh);
 
         new msg[120];
-        format(msg, sizeof(msg), "Vehiculo vanilla %d creado (ID %d). Se elimina solo tras 5 min sin uso.", modelo, veh);
+        new ident[96];
+        FormatearVehiculoIdentificador(veh, ident, sizeof(ident));
+        format(msg, sizeof(msg), "Vehiculo creado: %s. Se elimina solo tras 5 min sin uso.", ident);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         return 1;
     }
@@ -2629,6 +2727,13 @@ public OnPlayerConnect(playerid) {
     BandaSpawnBorrarPendiente[playerid] = -1;
     MineroGPSActivo[playerid] = false;
     OmitirArmasEnProximoSpawn[playerid] = false;
+    PlayerFaccionId[playerid] = -1;
+    PlayerFaccionRango[playerid] = 0;
+    InvitacionFaccionId[playerid] = -1;
+    InvitacionFaccionOwner[playerid] = -1;
+    FaccionCrearColorPendiente[playerid] = -1;
+    FaccionCrearCompraColor[playerid] = false;
+    FaccionAdminSeleccion[playerid] = -1;
     SancionFinTick[playerid] = 0;
     SancionPos[playerid][0] = 0.0;
     SancionPos[playerid][1] = 0.0;
@@ -2712,12 +2817,20 @@ public OnPlayerSpawn(playerid) {
         RemovePlayerAttachedObject(playerid, pi);
         if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
     }
+    ActualizarLabelJugadorFaccion(playerid);
     if(!OmitirArmasEnProximoSpawn[playerid]) {
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
             if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
         }
     }
     OmitirArmasEnProximoSpawn[playerid] = false;
+    PlayerFaccionId[playerid] = -1;
+    PlayerFaccionRango[playerid] = 0;
+    InvitacionFaccionId[playerid] = -1;
+    InvitacionFaccionOwner[playerid] = -1;
+    FaccionCrearColorPendiente[playerid] = -1;
+    FaccionCrearCompraColor[playerid] = false;
+    FaccionAdminSeleccion[playerid] = -1;
     ActualizarBarrasEstado(playerid);
     PlayerTextDrawShow(playerid, TextoBarraHambre[playerid]);
     PlayerTextDrawShow(playerid, BarraHambreFondo[playerid]);
@@ -2771,6 +2884,86 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         format(msg, sizeof(msg), "[DUDAS] (%s) Respuesta: %s Att: %s", nTarget, inputtext, nResp);
         SendClientMessageToAll(0xFFB347FF, msg);
         RdTargetPendiente[playerid] = -1;
+        return 1;
+    }
+
+
+    if(dialogid == DIALOG_FACCION_MENU) {
+        if(!response) return 1;
+        if(listitem == 0) {
+            if(PlayerFaccionId[playerid] != -1) return SendClientMessage(playerid, -1, "Ya perteneces a una faccion.");
+            if(GetPlayerMoney(playerid) < COSTO_CREAR_FACCION) return SendClientMessage(playerid, -1, "Necesitas $1000000 para crear una faccion.");
+            return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_NOMBRE, DIALOG_STYLE_INPUT, "Crear Faccion", "Escribe nombre de la faccion (maximo 16 caracteres):", "Siguiente", "Cancelar");
+        }
+        if(listitem == 1) {
+            if(PlayerFaccionId[playerid] == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER) return SendClientMessage(playerid, -1, "Solo el owner de faccion puede comprar color.");
+            if(GetPlayerMoney(playerid) < COSTO_COMPRAR_COLOR_FACCION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente ($200000).");
+            new lista[256]; lista[0]=EOS;
+            for(new c=0;c<MAX_COLORES_FACCION;c++) { if(c>0) strcat(lista, "\n"); strcat(lista, FaccionColoresNombre[c]); }
+            return ShowPlayerDialog(playerid, DIALOG_FACCION_COMPRAR_COLOR_LISTA, DIALOG_STYLE_LIST, "Comprar Color Faccion ($200000)", lista, "Comprar", "Atras");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_FACCION_CREAR_NOMBRE) {
+        if(!response) return 1;
+        if(strlen(inputtext) < 3 || strlen(inputtext) > 16) return SendClientMessage(playerid, -1, "El nombre debe tener entre 3 y 16 caracteres.");
+        SetPVarString(playerid, "FaccionNombreTmp", inputtext);
+        return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_COLOR_CONFIRM, DIALOG_STYLE_MSGBOX, "Crear Faccion", "Deseas elegir un color por $100000?\nPuedes omitirlo y usar color predeterminado.", "Elegir", "Omitir");
+    }
+
+    if(dialogid == DIALOG_FACCION_CREAR_COLOR_CONFIRM) {
+        FaccionCrearCompraColor[playerid] = response;
+        if(response) {
+            new lista[256]; lista[0]=EOS;
+            for(new c=0;c<MAX_COLORES_FACCION;c++) { if(c>0) strcat(lista, "\n"); strcat(lista, FaccionColoresNombre[c]); }
+            return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_COLOR_LISTA, DIALOG_STYLE_LIST, "Crear Faccion - Colores", lista, "Elegir", "Atras");
+        }
+        FaccionCrearColorPendiente[playerid] = -1;
+        return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_RESUMEN, DIALOG_STYLE_MSGBOX, "Crear Faccion - Confirmar", "Se cobrara $1000000 por crear tu faccion.\nSin color adicional.", "Confirmar", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_FACCION_CREAR_COLOR_LISTA) {
+        if(!response) { FaccionCrearCompraColor[playerid] = false; FaccionCrearColorPendiente[playerid] = -1; return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_RESUMEN, DIALOG_STYLE_MSGBOX, "Crear Faccion - Confirmar", "Se cobrara $1000000 por crear tu faccion.\nSin color adicional.", "Confirmar", "Cancelar"); }
+        if(listitem < 0 || listitem >= MAX_COLORES_FACCION) return 1;
+        FaccionCrearColorPendiente[playerid] = listitem;
+        return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_RESUMEN, DIALOG_STYLE_MSGBOX, "Crear Faccion - Confirmar", "Se cobrara $1100000 por crear tu faccion con color personalizado.", "Confirmar", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_FACCION_CREAR_RESUMEN) {
+        if(!response) return 1;
+        if(PlayerFaccionId[playerid] != -1) return SendClientMessage(playerid, -1, "Ya perteneces a una faccion.");
+        new costo = COSTO_CREAR_FACCION + ((FaccionCrearCompraColor[playerid] && FaccionCrearColorPendiente[playerid] != -1) ? COSTO_COLOR_CREAR_FACCION : 0);
+        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+        new fid = BuscarFaccionLibre();
+        if(fid == -1) return SendClientMessage(playerid, -1, "No hay espacio para mas facciones.");
+        new nombre[17]; GetPVarString(playerid, "FaccionNombreTmp", nombre, sizeof(nombre));
+        if(!nombre[0]) return SendClientMessage(playerid, -1, "Nombre invalido.");
+        GivePlayerMoney(playerid, -costo);
+        FaccionData[fid][facActiva] = true;
+        format(FaccionData[fid][facNombre], 17, "%s", nombre);
+        FaccionData[fid][facOwner] = playerid;
+        FaccionData[fid][facColor] = (FaccionCrearCompraColor[playerid] && FaccionCrearColorPendiente[playerid] != -1) ? FaccionColoresValor[FaccionCrearColorPendiente[playerid]] : 0x95A5A6FF;
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++){ FaccionData[fid][facMiembros][m] = -1; FaccionData[fid][facRangos][m]=0; }
+        AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_OWNER);
+        DeletePVar(playerid, "FaccionNombreTmp");
+        GuardarFacciones();
+        ActualizarLabelJugadorFaccion(playerid);
+        SendClientMessage(playerid, 0x66FF66FF, "Faccion creada correctamente.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_FACCION_COMPRAR_COLOR_LISTA) {
+        if(!response) return 1;
+        new fid = PlayerFaccionId[playerid];
+        if(fid == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER) return 1;
+        if(listitem < 0 || listitem >= MAX_COLORES_FACCION) return 1;
+        if(GetPlayerMoney(playerid) < COSTO_COMPRAR_COLOR_FACCION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+        GivePlayerMoney(playerid, -COSTO_COMPRAR_COLOR_FACCION);
+        FaccionData[fid][facColor] = FaccionColoresValor[listitem];
+        ActualizarMiembrosFaccion(fid);
+        GuardarFacciones();
+        SendClientMessage(playerid, 0x66FF66FF, "Color de faccion actualizado.");
         return 1;
     }
 
@@ -3505,6 +3698,104 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return 1;
     }
 
+    if(dialogid == DIALOG_FACCION_OWNER_MENU) {
+        if(!response) return 1;
+        new fid = PlayerFaccionId[playerid];
+        if(fid == -1) return 1;
+        if(listitem == 0) {
+            new info[256], miembros = 0;
+            for(new i=0;i<MAX_MIEMBROS_FACCION;i++) if(FaccionData[fid][facMiembros][i] != -1) miembros++;
+            format(info, sizeof(info), "Faccion: %s\nMiembros: %d/%d\nOwner ID: %d", FaccionData[fid][facNombre], miembros, MAX_MIEMBROS_FACCION, FaccionData[fid][facOwner]);
+            return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Info Faccion", info, "Cerrar", "");
+        }
+        if(PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER && PlayerFaccionRango[playerid] != FACCION_RANGO_RECLUTA) return SendClientMessage(playerid, -1, "No tienes permisos en la faccion.");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_FACCION_INVITAR_ID, DIALOG_STYLE_INPUT, "Faccion - Invitar", "ID del jugador a invitar:", "Invitar", "Atras");
+        if(listitem == 2 && PlayerFaccionRango[playerid] == FACCION_RANGO_OWNER) return ShowPlayerDialog(playerid, DIALOG_FACCION_EDITAR_RANGO, DIALOG_STYLE_INPUT, "Faccion - Editar rango", "ID del miembro:\n(Alterna Miembro/Recluta)", "Editar", "Atras");
+        if(listitem == 3 && PlayerFaccionRango[playerid] == FACCION_RANGO_OWNER) return ShowPlayerDialog(playerid, DIALOG_FACCION_EDITAR_RANGO+1, DIALOG_STYLE_INPUT, "Faccion - Expulsar", "ID del miembro a expulsar:", "Expulsar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_FACCION_INVITAR_ID) {
+        if(!response) return MostrarPanelFaccionOwner(playerid);
+        new target = strval(inputtext), fid = PlayerFaccionId[playerid];
+        if(fid == -1 || !IsPlayerConnected(target) || target == playerid) return SendClientMessage(playerid, -1, "ID invalido.");
+        if(PlayerFaccionId[target] != -1) return SendClientMessage(playerid, -1, "Ese jugador ya pertenece a una faccion.");
+        InvitacionFaccionId[target] = fid;
+        InvitacionFaccionOwner[target] = playerid;
+        new nombre[MAX_PLAYER_NAME], txt[180]; GetPlayerName(playerid, nombre, sizeof(nombre));
+        format(txt, sizeof(txt), "%s quiere invitarte a la faccion %s", nombre, FaccionData[fid][facNombre]);
+        ShowPlayerDialog(target, DIALOG_FACCION_INVITACION, DIALOG_STYLE_MSGBOX, "Invitacion de faccion", txt, "Aceptar", "Rechazar");
+        SendClientMessage(playerid, 0x66FF66FF, "Invitacion enviada.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_FACCION_INVITACION) {
+        new fid = InvitacionFaccionId[playerid];
+        if(fid == -1 || !FaccionData[fid][facActiva]) return 1;
+        if(response) {
+            if(!AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_MIEMBRO)) return SendClientMessage(playerid, -1, "La faccion esta llena.");
+            GuardarFacciones();
+            SendClientMessage(playerid, 0x66FF66FF, "Te uniste a la faccion.");
+        }
+        InvitacionFaccionId[playerid] = -1;
+        InvitacionFaccionOwner[playerid] = -1;
+        return 1;
+    }
+
+    if(dialogid == DIALOG_FACCION_EDITAR_RANGO) {
+        if(!response) return MostrarPanelFaccionOwner(playerid);
+        new target = strval(inputtext), fid = PlayerFaccionId[playerid];
+        if(fid == -1 || target == playerid || !IsPlayerConnected(target) || PlayerFaccionId[target] != fid) return SendClientMessage(playerid, -1, "Jugador invalido.");
+        PlayerFaccionRango[target] = (PlayerFaccionRango[target] == FACCION_RANGO_RECLUTA) ? FACCION_RANGO_MIEMBRO : FACCION_RANGO_RECLUTA;
+        for(new i=0;i<MAX_MIEMBROS_FACCION;i++) if(FaccionData[fid][facMiembros][i] == target) FaccionData[fid][facRangos][i] = PlayerFaccionRango[target];
+        GuardarFacciones();
+        SendClientMessage(playerid, 0x66FF66FF, "Rango actualizado.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_FACCION_EDITAR_RANGO+1) {
+        if(!response) return MostrarPanelFaccionOwner(playerid);
+        new target = strval(inputtext), fid = PlayerFaccionId[playerid];
+        if(fid == -1 || target == playerid || !IsPlayerConnected(target) || PlayerFaccionId[target] != fid) return SendClientMessage(playerid, -1, "Jugador invalido.");
+        RemoverMiembroFaccion(fid, target);
+        GuardarFacciones();
+        SendClientMessage(playerid, 0x66FF66FF, "Miembro expulsado.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_FACCIONES_MENU) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        SetPVarInt(playerid, "AdminFaccionAccion", listitem);
+        new lista[1024], line[64]; lista[0]=EOS;
+        for(new f=0; f<MAX_FACCIONES; f++) {
+            if(!FaccionData[f][facActiva]) continue;
+            if(lista[0]) strcat(lista, "\n");
+            format(line, sizeof(line), "[%d] %s", f, FaccionData[f][facNombre]);
+            strcat(lista, line);
+        }
+        if(!lista[0]) return SendClientMessage(playerid, -1, "No hay facciones registradas.");
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_LISTA, DIALOG_STYLE_LIST, "Admin - Selecciona faccion", lista, "Elegir", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_FACCIONES_LISTA) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_MENU, DIALOG_STYLE_LIST, "Admin - Facciones", "Renombrar faccion\nEliminar faccion\nEditar color\nUnir faccion", "Abrir", "Atras");
+        new fid = -1, seen = -1;
+        for(new f=0; f<MAX_FACCIONES; f++) { if(!FaccionData[f][facActiva]) continue; seen++; if(seen == listitem){ fid=f; break; } }
+        if(fid == -1) return 1;
+        FaccionAdminSeleccion[playerid] = fid;
+        new accion = GetPVarInt(playerid, "AdminFaccionAccion");
+        if(accion == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_RENOMBRAR, DIALOG_STYLE_INPUT, "Renombrar Faccion", "Nuevo nombre (max 16):", "Guardar", "Cancelar");
+        if(accion == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_CONFIRM_ELIMINAR, DIALOG_STYLE_MSGBOX, "Eliminar Faccion", "Confirmar eliminacion de faccion?", "Eliminar", "Cancelar");
+        if(accion == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_COLOR_LISTA, DIALOG_STYLE_LIST, "Editar color", "Rojo\nAzul\nVerde\nAmarillo\nMorado\nNaranja\nCian\nRosa\nBlanco\nNegro", "Aplicar", "Cancelar");
+        if(accion == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_UNIR_LISTA, DIALOG_STYLE_INPUT, "Unir faccion", "ID del jugador a unir:", "Unir", "Cancelar");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_FACCION_RENOMBRAR) { if(!response) return 1; new fid = FaccionAdminSeleccion[playerid]; if(fid == -1) return 1; if(strlen(inputtext)<3 || strlen(inputtext)>16) return SendClientMessage(playerid,-1,"Nombre invalido."); format(FaccionData[fid][facNombre],17,"%s",inputtext); GuardarFacciones(); return SendClientMessage(playerid,0x66FF66FF,"Faccion renombrada."); }
+    if(dialogid == DIALOG_ADMIN_FACCION_CONFIRM_ELIMINAR) { if(!response) return 1; new fid = FaccionAdminSeleccion[playerid]; if(fid==-1) return 1; EliminarFaccion(fid); GuardarFacciones(); return SendClientMessage(playerid,0x66FF66FF,"Faccion eliminada."); }
+    if(dialogid == DIALOG_ADMIN_FACCION_COLOR_LISTA) { if(!response) return 1; new fid = FaccionAdminSeleccion[playerid]; if(fid==-1 || listitem<0 || listitem>=MAX_COLORES_FACCION) return 1; FaccionData[fid][facColor] = FaccionColoresValor[listitem]; ActualizarMiembrosFaccion(fid); GuardarFacciones(); return SendClientMessage(playerid,0x66FF66FF,"Color de faccion actualizado."); }
+    if(dialogid == DIALOG_ADMIN_FACCION_UNIR_LISTA) { if(!response) return 1; new target=strval(inputtext), fid=FaccionAdminSeleccion[playerid]; if(fid==-1 || !IsPlayerConnected(target)) return SendClientMessage(playerid,-1,"ID invalido."); if(PlayerFaccionId[target]!=-1) RemoverMiembroFaccion(PlayerFaccionId[target], target); if(!AgregarMiembroFaccion(fid,target,FACCION_RANGO_MIEMBRO)) return SendClientMessage(playerid,-1,"Faccion llena."); GuardarFacciones(); return SendClientMessage(playerid,0x66FF66FF,"Jugador unido a la faccion."); }
+
     if(dialogid == DIALOG_ADMIN_MENU) {
         if(!response) return 1;
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
@@ -3533,6 +3824,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(texto, sizeof(texto), "Activo\nInactivo\n\nEstado actual: %s", AdminModoDios[playerid] ? "Activo" : "Inactivo");
             return ShowPlayerDialog(playerid, DIALOG_ADMIN_MODO_DIOS, DIALOG_STYLE_LIST, "Admin - Modo Dios", texto, "Seleccionar", "Atras");
         }
+        if(listitem == 15) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_MENU, DIALOG_STYLE_LIST, "Admin - Facciones", "Renombrar faccion\nEliminar faccion\nEditar color\nUnir faccion", "Abrir", "Atras");
         return 1;
     }
 
@@ -3819,6 +4111,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         BandaSpawnBorrarPendiente[playerid] = -1;
     MineroGPSActivo[playerid] = false;
     OmitirArmasEnProximoSpawn[playerid] = false;
+    PlayerFaccionId[playerid] = -1;
+    PlayerFaccionRango[playerid] = 0;
+    InvitacionFaccionId[playerid] = -1;
+    InvitacionFaccionOwner[playerid] = -1;
+    FaccionCrearColorPendiente[playerid] = -1;
+    FaccionCrearCompraColor[playerid] = false;
+    FaccionAdminSeleccion[playerid] = -1;
         if(!EliminarSpawnBandaPorIndice(idxBorrar)) return SendClientMessage(playerid, -1, "No se pudo borrar el punto seleccionado.");
 
         GuardarBandasSpawns();
@@ -4717,6 +5016,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 }
                 ReconciliarPrendasJugador(playerid);
 
+                PlayerFaccionId[playerid] = -1;
+                PlayerFaccionRango[playerid] = 0;
+                for(new f = 0; f < MAX_FACCIONES; f++) {
+                    if(!FaccionData[f][facActiva]) continue;
+                    for(new m = 0; m < MAX_MIEMBROS_FACCION; m++) {
+                        if(FaccionData[f][facMiembros][m] == playerid) {
+                            PlayerFaccionId[playerid] = f;
+                            PlayerFaccionRango[playerid] = FaccionData[f][facRangos][m];
+                        }
+                    }
+                }
+
                 ActualizarNivelPJ(playerid);
                 SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
                 fclose(h); SpawnPlayerAfterAuth(playerid);
@@ -5345,6 +5656,7 @@ public AutoGuardadoGlobal() {
     GuardarVentaAutosConfig();
     GuardarVentaSkinsConfig();
     GuardarArmeriaConfig();
+    GuardarFacciones();
     return 1;
 }
 
@@ -5435,6 +5747,7 @@ public OnPlayerDisconnect(playerid, reason) {
         Delete3DTextLabel(SancionLabel[playerid]);
         SancionLabel[playerid] = Text3D:-1;
     }
+    if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
     PlayerSancionado[playerid] = false;
     GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
@@ -5713,7 +6026,9 @@ stock ShowVentaAutosBuyMenu(playerid) {
     body[0] = EOS;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
         if(!VentaAutosData[i][vaActiva] || VentaAutosData[i][vaStock] <= 0) continue;
-        format(line, sizeof(line), "Modelo %d | Precio:$%d | [Disponible]\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio]);
+        new vname[32];
+        GetNombreVehiculoVanilla(VentaAutosData[i][vaModelo], vname, sizeof(vname));
+        format(line, sizeof(line), "[ID %d] (%s) [Valor: $%d] | [Disponible]\n", VentaAutosData[i][vaModelo], vname, VentaAutosData[i][vaPrecio]);
         strcat(body, line);
         count++;
     }
@@ -5734,7 +6049,9 @@ stock ShowVentaAutosRemoveMenu(playerid) {
     body[0] = EOS;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
         if(!VentaAutosData[i][vaActiva]) continue;
-        format(line, sizeof(line), "Modelo %d | Precio:$%d | %s\n", VentaAutosData[i][vaModelo], VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock] > 0 ? "[Disponible]" : "[No Disponible]");
+        new vname2[32];
+        GetNombreVehiculoVanilla(VentaAutosData[i][vaModelo], vname2, sizeof(vname2));
+        format(line, sizeof(line), "[ID %d] (%s) [Valor: $%d] | %s\n", VentaAutosData[i][vaModelo], vname2, VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock] > 0 ? "[Disponible]" : "[No Disponible]");
         strcat(body, line);
         count++;
     }
@@ -6024,7 +6341,9 @@ stock ShowTelefonoVehiculosMenu(playerid) {
     body[0] = EOS;
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(VehOwner[v] != playerid) continue;
-        format(line, sizeof(line), "ID:%d | Modelo:%d\n", v, VehModelData[v]);
+        new ident[96];
+        FormatearVehiculoIdentificador(v, ident, sizeof(ident));
+        format(line, sizeof(line), "%s\n", ident);
         strcat(body, line);
         count++;
     }
@@ -6568,7 +6887,9 @@ stock ShowGPSVehiculosMenu(playerid) {
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(VehOwner[v] != playerid) continue;
         if(VehModelData[v] < 400 || VehModelData[v] > 611) continue;
-        format(line, sizeof(line), "ID:%d | Modelo:%d | %s\n", v, VehModelData[v], VehOculto[v] ? "Oculto" : "Activo");
+        new ident[96];
+        FormatearVehiculoIdentificador(v, ident, sizeof(ident));
+        format(line, sizeof(line), "%s | %s\n", ident, VehOculto[v] ? "Oculto" : "Activo");
         strcat(body, line);
         count++;
     }
@@ -7158,7 +7479,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -7994,7 +8315,9 @@ stock MostrarListaVehiculosChatarra(playerid) {
         TuningVehLista[playerid][TuningVehCount[playerid]] = v;
         new precio = GetPrecioOriginalVehiculo(VehModelData[v]);
         new pago = (precio * 70) / 100;
-        format(line, sizeof(line), "Vehiculo ID %d (Modelo %d) - Chatarra: $%d", v, VehModelData[v], pago);
+        new ident[96];
+        FormatearVehiculoIdentificador(v, ident, sizeof(ident), precio);
+        format(line, sizeof(line), "%s - Chatarra: $%d", ident, pago);
         if(TuningVehCount[playerid] > 0) strcat(list, "\n");
         strcat(list, line);
         TuningVehCount[playerid]++;
@@ -8022,5 +8345,172 @@ stock EliminarVehiculoJugador(veh) {
 stock SetDefaultCJAnimations(playerid) {
     if(!IsPlayerConnected(playerid)) return 0;
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    return 1;
+}
+
+stock GetNombreVehiculoVanilla(modelid, nombre[], len) {
+    format(nombre, len, "Modelo %d", modelid);
+    return 1;
+}
+
+stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0) {
+    if(vehid <= 0 || vehid >= MAX_VEHICLES || VehModelData[vehid] < 400 || VehModelData[vehid] > 611) {
+        format(dest, len, "[ID %d] (Vehiculo desconocido)%s", vehid, valor > 0 ? " [Valor: $0]" : "");
+        return 1;
+    }
+    new nombre[32], extra[32];
+    GetNombreVehiculoVanilla(VehModelData[vehid], nombre, sizeof(nombre));
+    if(valor > 0) format(extra, sizeof(extra), " [Valor: $%d]", valor);
+    else extra[0] = EOS;
+    format(dest, len, "[ID %d] (%s)%s", vehid, nombre, extra);
+    return 1;
+}
+
+stock BuscarFaccionLibre() { for(new i=0;i<MAX_FACCIONES;i++) if(!FaccionData[i][facActiva]) return i; return -1; }
+
+stock bool:AgregarMiembroFaccion(fid, playerid, rango) {
+    if(fid < 0 || fid >= MAX_FACCIONES || !FaccionData[fid][facActiva]) return false;
+    new count = 0;
+    for(new i=0;i<MAX_MIEMBROS_FACCION;i++) if(FaccionData[fid][facMiembros][i] != -1) count++;
+    if(count >= MAX_MIEMBROS_FACCION) return false;
+    for(new i=0;i<MAX_MIEMBROS_FACCION;i++) {
+        if(FaccionData[fid][facMiembros][i] != -1) continue;
+        FaccionData[fid][facMiembros][i] = playerid;
+        FaccionData[fid][facRangos][i] = rango;
+        PlayerFaccionId[playerid] = fid;
+        PlayerFaccionRango[playerid] = rango;
+        ActualizarLabelJugadorFaccion(playerid);
+        return true;
+    }
+    return false;
+}
+
+stock RemoverMiembroFaccion(fid, playerid) {
+    if(fid < 0 || fid >= MAX_FACCIONES) return 0;
+    for(new i=0;i<MAX_MIEMBROS_FACCION;i++) {
+        if(FaccionData[fid][facMiembros][i] != playerid) continue;
+        FaccionData[fid][facMiembros][i] = -1;
+        FaccionData[fid][facRangos][i] = 0;
+    }
+    PlayerFaccionId[playerid] = -1;
+    PlayerFaccionRango[playerid] = 0;
+    ActualizarLabelJugadorFaccion(playerid);
+    return 1;
+}
+
+stock ActualizarMiembrosFaccion(fid) {
+    if(fid < 0 || fid >= MAX_FACCIONES) return 0;
+    for(new i=0;i<MAX_MIEMBROS_FACCION;i++) {
+        new pid = FaccionData[fid][facMiembros][i];
+        if(pid == -1 || !IsPlayerConnected(pid)) continue;
+        PlayerFaccionId[pid] = fid;
+        PlayerFaccionRango[pid] = FaccionData[fid][facRangos][i];
+        ActualizarLabelJugadorFaccion(pid);
+    }
+    return 1;
+}
+
+stock EliminarFaccion(fid) {
+    if(fid < 0 || fid >= MAX_FACCIONES) return 0;
+    for(new i=0;i<MAX_MIEMBROS_FACCION;i++) {
+        new pid = FaccionData[fid][facMiembros][i];
+        if(pid != -1) {
+            PlayerFaccionId[pid] = -1;
+            PlayerFaccionRango[pid] = 0;
+            if(IsPlayerConnected(pid)) ActualizarLabelJugadorFaccion(pid);
+        }
+        FaccionData[fid][facMiembros][i] = -1;
+        FaccionData[fid][facRangos][i] = 0;
+    }
+    FaccionData[fid][facActiva] = false;
+    FaccionData[fid][facOwner] = -1;
+    FaccionData[fid][facNombre][0] = EOS;
+    FaccionData[fid][facColor] = 0;
+    return 1;
+}
+
+stock MostrarMenuFaccionesCP(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_FACCION_MENU, DIALOG_STYLE_LIST, "Facciones Kame House", "Crear Faccion\nComprar Color Para La Faccion", "Abrir", "Cerrar");
+}
+
+stock MostrarPanelFaccionOwner(playerid) {
+    new fid = PlayerFaccionId[playerid];
+    if(fid == -1) return SendClientMessage(playerid, -1, "No perteneces a ninguna faccion.");
+    return ShowPlayerDialog(playerid, DIALOG_FACCION_OWNER_MENU, DIALOG_STYLE_LIST, "Panel Faccion", "Informacion\nAnadir miembro\nEditar rango\nEliminar miembro", "Abrir", "Cerrar");
+}
+
+stock ActualizarLabelJugadorFaccion(playerid) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
+    new texto[128];
+    if(EsDueno(playerid)) {
+        if(PlayerFaccionId[playerid] != -1) format(texto, sizeof(texto), "[Owner][%s][$%d]", FaccionData[PlayerFaccionId[playerid]][facNombre], GetPlayerMoney(playerid));
+        else format(texto, sizeof(texto), "[Owner][$%d]", GetPlayerMoney(playerid));
+    } else if(EsModerador(playerid)) {
+        if(PlayerFaccionId[playerid] != -1) format(texto, sizeof(texto), "[MOD][%s][Lvl %d][$%d]", FaccionData[PlayerFaccionId[playerid]][facNombre], GetNivelPJ(playerid), GetPlayerMoney(playerid));
+        else format(texto, sizeof(texto), "[MOD][Lvl %d][$%d]", GetNivelPJ(playerid), GetPlayerMoney(playerid));
+    } else {
+        if(PlayerFaccionId[playerid] != -1) format(texto, sizeof(texto), "[%s][Lvl %d][$%d]", FaccionData[PlayerFaccionId[playerid]][facNombre], GetNivelPJ(playerid), GetPlayerMoney(playerid));
+        else format(texto, sizeof(texto), "[Lvl %d][$%d]", GetNivelPJ(playerid), GetPlayerMoney(playerid));
+    }
+    new color = (PlayerFaccionId[playerid] != -1) ? FaccionData[PlayerFaccionId[playerid]][facColor] : 0xFFFFFFFF;
+    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, color, 0.0, 0.0, 0.0, 25.0, 0);
+    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.9);
+    return 1;
+}
+
+stock GuardarFacciones() {
+    new File:h = fopen(PATH_FACCIONES, io_write);
+    if(!h) return 0;
+    new line[512], part[24];
+    for(new f=0; f<MAX_FACCIONES; f++) {
+        if(!FaccionData[f][facActiva]) continue;
+        format(line, sizeof(line), "%d %s %d %d", f, FaccionData[f][facNombre], FaccionData[f][facOwner], FaccionData[f][facColor]);
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
+            format(part, sizeof(part), " %d %d", FaccionData[f][facMiembros][m], FaccionData[f][facRangos][m]);
+            strcat(line, part);
+        }
+        strcat(line, "\n");
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarFacciones() {
+    for(new f=0; f<MAX_FACCIONES; f++) {
+        FaccionData[f][facActiva] = false;
+        FaccionData[f][facNombre][0] = EOS;
+        FaccionData[f][facOwner] = -1;
+        FaccionData[f][facColor] = 0x95A5A6FF;
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) { FaccionData[f][facMiembros][m] = -1; FaccionData[f][facRangos][m] = 0; }
+    }
+    new File:h = fopen(PATH_FACCIONES, io_read), line[512];
+    if(!h) return GuardarFacciones();
+    while(fread(h, line)) {
+        LimpiarLinea(line);
+        if(!line[0]) continue;
+        new idx = 0;
+        new fid = strval(strtok(line, idx));
+        if(fid < 0 || fid >= MAX_FACCIONES) continue;
+        FaccionData[fid][facActiva] = true;
+        format(FaccionData[fid][facNombre], 17, "%s", strtok(line, idx));
+        FaccionData[fid][facOwner] = strval(strtok(line, idx));
+        FaccionData[fid][facColor] = strval(strtok(line, idx));
+        for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
+            FaccionData[fid][facMiembros][m] = strval(strtok(line, idx));
+            FaccionData[fid][facRangos][m] = strval(strtok(line, idx));
+        }
+    }
+    fclose(h);
+    return 1;
+}
+
+stock InicializarSistemaFacciones() {
+    CargarFacciones();
+    if(FaccionCPPickup != 0) DestroyPickup(FaccionCPPickup);
+    FaccionCPPickup = CreatePickup(1274, 23, POS_FACCION_X, POS_FACCION_Y, POS_FACCION_Z, 0);
+    if(FaccionCPLabel != Text3D:-1) Delete3DTextLabel(FaccionCPLabel);
+    FaccionCPLabel = Create3DTextLabel("CP Facciones Kame House\nPresiona H", 0x9B59B6FF, POS_FACCION_X, POS_FACCION_Y, POS_FACCION_Z + 0.8, 20.0, 0);
     return 1;
 }
