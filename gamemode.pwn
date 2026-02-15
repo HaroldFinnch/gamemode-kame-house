@@ -916,6 +916,8 @@ stock ShowTelefonoVehiculosMenu(playerid);
 stock GetTelefonoVehiculoByListIndex(playerid, listindex);
 stock GetNombreVehiculoVanilla(modelid, nombre[], len);
 stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0);
+stock FormatearDineroCorto(monto, dest[], len);
+stock ConvertirColorAHexRGB(color, dest[], len);
 stock InicializarSistemaFacciones();
 stock CargarFacciones();
 stock GuardarFacciones();
@@ -1756,7 +1758,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/lvl", true) || !strcmp(cmd, "/nivel", true)) {
+    if(!strcmp(cmd, "/pj", true) || !strcmp(cmd, "/nivel", true)) {
         new nivelActual = GetNivelPJ(playerid);
         new minutosObjetivo = 0;
         for(new n = 1; n <= nivelActual; n++) minutosObjetivo += HORAS_POR_NIVEL_PJ * n * 60;
@@ -1765,8 +1767,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new body[384], pagoHora = nivelActual * 500;
-        format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/2", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
+        new body[448], pagoHora = nivelActual * 500, faccionTexto[32];
+        if(PlayerFaccionId[playerid] != -1) format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
+        else format(faccionTexto, sizeof(faccionTexto), "Ninguna");
+        format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {FFFFFF}%s\n{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/2", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionTexto, ContarAutosJugador(playerid));
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -3784,7 +3788,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         FaccionAdminSeleccion[playerid] = fid;
         new accion = GetPVarInt(playerid, "AdminFaccionAccion");
         if(accion == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_RENOMBRAR, DIALOG_STYLE_INPUT, "Renombrar Faccion", "Nuevo nombre (max 16):", "Guardar", "Cancelar");
-        if(accion == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_CONFIRM_ELIMINAR, DIALOG_STYLE_MSGBOX, "Eliminar Faccion", "Confirmar eliminacion de faccion?", "Eliminar", "Cancelar");
+        if(accion == 1) {
+            new msg[128];
+            format(msg, sizeof(msg), "Eliminaras la faccion:\n[%d] %s\n\nConfirmar eliminacion?", fid, FaccionData[fid][facNombre]);
+            return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_CONFIRM_ELIMINAR, DIALOG_STYLE_MSGBOX, "Eliminar Faccion", msg, "Eliminar", "Cancelar");
+        }
         if(accion == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_COLOR_LISTA, DIALOG_STYLE_LIST, "Editar color", "Rojo\nAzul\nVerde\nAmarillo\nMorado\nNaranja\nCian\nRosa\nBlanco\nNegro", "Aplicar", "Cancelar");
         if(accion == 3) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCION_UNIR_LISTA, DIALOG_STYLE_INPUT, "Unir faccion", "ID del jugador a unir:", "Unir", "Cancelar");
         return 1;
@@ -6572,7 +6580,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Comandos de chat:{FFFFFF} /g /m /d /duda /rd\n{66FF99}Personaje:{FFFFFF} /skills /lvl /inventario /comer /consumir /telefono\n{FFD166}Trabajo y puntos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon\n\n{AAAAAA}Tip: si eres staff usa {FFD166}/admm {AAAAAA}para herramientas administrativas.");
+    format(texto, sizeof(texto), "{33CCFF}Comandos de chat:{FFFFFF} /g /m /d /duda /rd\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono\n{FFD166}Trabajo y puntos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon\n\n{AAAAAA}Tip: si eres staff usa {FFD166}/admm {AAAAAA}para herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -8365,6 +8373,18 @@ stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0) {
     return 1;
 }
 
+
+stock FormatearDineroCorto(monto, dest[], len) {
+    if(monto >= 1000000) return format(dest, len, "%dM", monto / 1000000);
+    if(monto >= 1000) return format(dest, len, "%dK", monto / 1000);
+    return format(dest, len, "%d", monto);
+}
+
+stock ConvertirColorAHexRGB(color, dest[], len) {
+    new rgb = (color >> 8) & 0xFFFFFF;
+    return format(dest, len, "%06X", rgb);
+}
+
 stock BuscarFaccionLibre() { for(new i=0;i<MAX_FACCIONES;i++) if(!FaccionData[i][facActiva]) return i; return -1; }
 
 stock bool:AgregarMiembroFaccion(fid, playerid, rango) {
@@ -8411,6 +8431,7 @@ stock ActualizarMiembrosFaccion(fid) {
 
 stock EliminarFaccion(fid) {
     if(fid < 0 || fid >= MAX_FACCIONES) return 0;
+    new ownerid = FaccionData[fid][facOwner];
     for(new i=0;i<MAX_MIEMBROS_FACCION;i++) {
         new pid = FaccionData[fid][facMiembros][i];
         if(pid != -1) {
@@ -8420,6 +8441,11 @@ stock EliminarFaccion(fid) {
         }
         FaccionData[fid][facMiembros][i] = -1;
         FaccionData[fid][facRangos][i] = 0;
+    }
+    if(ownerid != -1) {
+        PlayerFaccionId[ownerid] = -1;
+        PlayerFaccionRango[ownerid] = 0;
+        if(IsPlayerConnected(ownerid)) ActualizarLabelJugadorFaccion(ownerid);
     }
     FaccionData[fid][facActiva] = false;
     FaccionData[fid][facOwner] = -1;
@@ -8441,20 +8467,23 @@ stock MostrarPanelFaccionOwner(playerid) {
 stock ActualizarLabelJugadorFaccion(playerid) {
     if(!IsPlayerConnected(playerid)) return 0;
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
-    new texto[128];
-    if(EsDueno(playerid)) {
-        if(PlayerFaccionId[playerid] != -1) format(texto, sizeof(texto), "[Owner][%s][$%d]", FaccionData[PlayerFaccionId[playerid]][facNombre], GetPlayerMoney(playerid));
-        else format(texto, sizeof(texto), "[Owner][$%d]", GetPlayerMoney(playerid));
-    } else if(EsModerador(playerid)) {
-        if(PlayerFaccionId[playerid] != -1) format(texto, sizeof(texto), "[MOD][%s][Lvl %d][$%d]", FaccionData[PlayerFaccionId[playerid]][facNombre], GetNivelPJ(playerid), GetPlayerMoney(playerid));
-        else format(texto, sizeof(texto), "[MOD][Lvl %d][$%d]", GetNivelPJ(playerid), GetPlayerMoney(playerid));
-    } else {
-        if(PlayerFaccionId[playerid] != -1) format(texto, sizeof(texto), "[%s][Lvl %d][$%d]", FaccionData[PlayerFaccionId[playerid]][facNombre], GetNivelPJ(playerid), GetPlayerMoney(playerid));
-        else format(texto, sizeof(texto), "[Lvl %d][$%d]", GetNivelPJ(playerid), GetPlayerMoney(playerid));
+    new texto[160], dineroCorto[16], bloqueFaccion[48];
+    FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
+    bloqueFaccion[0] = EOS;
+    if(PlayerFaccionId[playerid] != -1) {
+        new hexColor[7];
+        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], hexColor, sizeof(hexColor));
+        format(bloqueFaccion, sizeof(bloqueFaccion), " {%s}[%s]{FFFFFF}", hexColor, FaccionData[PlayerFaccionId[playerid]][facNombre]);
     }
-    new color = (PlayerFaccionId[playerid] != -1) ? FaccionData[PlayerFaccionId[playerid]][facColor] : 0xFFFFFFFF;
-    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, color, 0.0, 0.0, 0.0, 25.0, 0);
-    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.9);
+    if(EsDueno(playerid)) {
+        format(texto, sizeof(texto), "{F7D154}[Owner]{FFFFFF}%s {58D68D}[$%s]", bloqueFaccion, dineroCorto);
+    } else if(EsModerador(playerid)) {
+        format(texto, sizeof(texto), "{85C1E9}[MOD]{FFFFFF}%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
+    } else {
+        format(texto, sizeof(texto), "%s {5DADE2}[Lvl %d]{FFFFFF} {58D68D}[$%s]", bloqueFaccion, GetNivelPJ(playerid), dineroCorto);
+    }
+    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 25.0, 0);
+    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 1.1);
     return 1;
 }
 
