@@ -8,6 +8,7 @@
 #define CHALECO_AL_LOGUEAR  100.0
 #define DINERO_INICIAL      500
 #define COLOR_HAMBRE        0xFFA500FF
+#define COLOR_GAS           0x33CCFFFF
 #define RADIO_CHAT_LOCAL    20.0
 #define PRECIO_COMIDA       1000
 #define HAMBRE_POR_COMIDA   15
@@ -502,6 +503,8 @@ new MaleteroFloresVeh[MAX_VEHICLES];
 new MaleteroSemillaHierbaVeh[MAX_VEHICLES];
 new MaleteroSemillaFlorVeh[MAX_VEHICLES];
 new MaleteroArmasVeh[MAX_VEHICLES][MAX_WEAPON_ID_GM];
+new MaleteroArmaSlotIdVeh[MAX_VEHICLES][MAX_SLOTS_MALETERO];
+new MaleteroArmaSlotAmmoVeh[MAX_VEHICLES][MAX_SLOTS_MALETERO];
 
 new VehOwner[MAX_VEHICLES] = {-1, ...};
 new bool:VehLocked[MAX_VEHICLES];
@@ -726,6 +729,7 @@ stock ShowMaleteroMaletero(playerid, vehid);
 stock PlayerTieneAccesoVehiculo(playerid, vehid);
 stock GetNearbyOwnedVehicle(playerid);
 stock CuentaArmasMaletero(vehid);
+stock FormatearBarraEstado(const etiqueta[], valor, dest[], len);
 stock InitGasSystem();
 stock ActualizarGasTextoVehiculo(playerid);
 stock EncontrarGasCercano(playerid);
@@ -1573,10 +1577,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
         PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
         if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
 
-        new msg[96], hud[16];
+        new msg[96], hud[32];
         format(msg, sizeof(msg), "Compraste comida por $%d. Hambre actual: %d/100", PRECIO_COMIDA, PlayerHambre[playerid]);
         SendClientMessage(playerid, 0x00FF00FF, msg);
-        format(hud, sizeof(hud), "H: %d", PlayerHambre[playerid]);
+        FormatearBarraEstado("Hambre", PlayerHambre[playerid], hud, sizeof(hud));
         PlayerTextDrawSetString(playerid, BarraHambre[playerid], hud);
         return 1;
     }
@@ -1744,15 +1748,30 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new ammo = GetPlayerAmmo(playerid);
         if(ammo <= 0) ammo = PlayerAmmoInventario[playerid][_:arma];
         if(ammo <= 0) return SendClientMessage(playerid, -1, "No tienes municion en esa arma.");
-        PlayerAmmoInventario[playerid][_:arma] = ammo;
-        new usados = CuentaArmasMaletero(vehid);
-        if(usados >= MaleteroSlotsVeh[vehid]) return SendClientMessage(playerid, -1, "Maletero lleno.");
-        MaleteroArmasVeh[vehid][_:arma] += ammo;
-        ResetPlayerWeapons(playerid);
-        for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-            if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0 && w != _:arma) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
+
+        new slotLibre = -1;
+        new limiteSlots = MaleteroSlotsVeh[vehid];
+        if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
+        for(new i = 0; i < limiteSlots; i++) {
+            if(MaleteroArmaSlotIdVeh[vehid][i] <= 0 || MaleteroArmaSlotAmmoVeh[vehid][i] <= 0) {
+                slotLibre = i;
+                break;
+            }
         }
+        if(slotLibre == -1) return SendClientMessage(playerid, -1, "Maletero lleno.");
+
+        MaleteroArmaSlotIdVeh[vehid][slotLibre] = _:arma;
+        MaleteroArmaSlotAmmoVeh[vehid][slotLibre] = ammo;
+        MaleteroArmasVeh[vehid][_:arma] += ammo;
+
+        ResetPlayerWeapons(playerid);
         PlayerAmmoInventario[playerid][_:arma] = 0;
+        PlayerArmaComprada[playerid][_:arma] = false;
+        for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
+            if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
+        }
+
+        GuardarCuenta(playerid);
         SendClientMessage(playerid, 0x00FF00FF, "Arma guardada en el maletero.");
         return 1;
     }
@@ -2375,17 +2394,17 @@ public OnPlayerConnect(playerid) {
     TogglePlayerSpectating(playerid, true);
     TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
-    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 545.0, 150.0, "H: 100");
+    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 505.0, 150.0, "Hambre: [||||||||||]");
     PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.3, 1.2);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawSetShadow(playerid, BarraHambre[playerid], 1);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 545.0, 164.0, "G: 100");
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 505.0, 164.0, "Gas: [||||||||||]");
     PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.3, 1.2);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_HAMBRE);
+    PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawSetShadow(playerid, BarraGas[playerid], 1);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
     PlayerInCasa[playerid] = -1;
@@ -2519,6 +2538,11 @@ public OnPlayerSpawn(playerid) {
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
         if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
     }
+    new hambreHud[32], gasHud[32];
+    FormatearBarraEstado("Hambre", PlayerHambre[playerid], hambreHud, sizeof(hambreHud));
+    FormatearBarraEstado("Gas", 100, gasHud, sizeof(gasHud));
+    PlayerTextDrawSetString(playerid, BarraHambre[playerid], hambreHud);
+    PlayerTextDrawSetString(playerid, BarraGas[playerid], gasHud);
     PlayerTextDrawShow(playerid, BarraHambre[playerid]);
     PlayerTextDrawHide(playerid, BarraGas[playerid]);
     return 1;
@@ -4062,13 +4086,21 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem >= armas) return 1; // cerrar
 
         new idx = 0;
-        for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-            if(MaleteroArmasVeh[veh][w] <= 0) continue;
+        new limiteSlots = MaleteroSlotsVeh[veh];
+        if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
+        for(new i = 0; i < limiteSlots; i++) {
+            new w = MaleteroArmaSlotIdVeh[veh][i];
+            new ammo = MaleteroArmaSlotAmmoVeh[veh][i];
+            if(w <= 0 || w >= MAX_WEAPON_ID_GM || ammo <= 0) continue;
             if(idx == listitem) {
-                GivePlayerWeapon(playerid, WEAPON:w, MaleteroArmasVeh[veh][w]);
+                GivePlayerWeapon(playerid, WEAPON:w, ammo);
                 PlayerArmaComprada[playerid][w] = true;
-                PlayerAmmoInventario[playerid][w] += MaleteroArmasVeh[veh][w];
-                MaleteroArmasVeh[veh][w] = 0;
+                PlayerAmmoInventario[playerid][w] += ammo;
+                MaleteroArmaSlotIdVeh[veh][i] = 0;
+                MaleteroArmaSlotAmmoVeh[veh][i] = 0;
+                if(MaleteroArmasVeh[veh][w] >= ammo) MaleteroArmasVeh[veh][w] -= ammo;
+                else MaleteroArmasVeh[veh][w] = 0;
+                GuardarCuenta(playerid);
                 SendClientMessage(playerid, 0x00FF00FF, "Sacaste el arma del maletero.");
                 return ShowMaleteroMaletero(playerid, veh);
             }
@@ -4450,8 +4482,10 @@ stock CargarPuntosMovibles() {
 public BajarHambre() {
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
         if(PlayerHambre[i] > 0) {
-            PlayerHambre[i]--; new s[16]; format(s, 16, "H: %d", PlayerHambre[i]);
-            PlayerTextDrawSetString(i, BarraHambre[i], s);
+            PlayerHambre[i]--;
+            new estado[32];
+            FormatearBarraEstado("Hambre", PlayerHambre[i], estado, sizeof(estado));
+            PlayerTextDrawSetString(i, BarraHambre[i], estado);
         } else { new Float:h; GetPlayerHealth(i, h); SetPlayerHealth(i, h-2.0); }
     }
     return 1;
@@ -5416,8 +5450,30 @@ stock GetNearbyOwnedVehicle(playerid) {
 
 stock CuentaArmasMaletero(vehid) {
     new total;
-    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) if(MaleteroArmasVeh[vehid][w] > 0) total++;
+    new limiteSlots = MaleteroSlotsVeh[vehid];
+    if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
+    for(new i = 0; i < limiteSlots; i++) {
+        if(MaleteroArmaSlotIdVeh[vehid][i] <= 0) continue;
+        if(MaleteroArmaSlotAmmoVeh[vehid][i] <= 0) continue;
+        total++;
+    }
     return total;
+}
+
+stock FormatearBarraEstado(const etiqueta[], valor, dest[], len) {
+    if(valor < 0) valor = 0;
+    if(valor > 100) valor = 100;
+
+    new llenos = (valor + 9) / 10;
+    if(llenos < 0) llenos = 0;
+    if(llenos > 10) llenos = 10;
+
+    new barra[11];
+    for(new i = 0; i < 10; i++) barra[i] = (i < llenos) ? '|' : '.';
+    barra[10] = EOS;
+
+    format(dest, len, "%s: [%s]", etiqueta, barra);
+    return 1;
 }
 
 stock InitGasSystem() {
@@ -5439,6 +5495,7 @@ stock InitGasSystem() {
         MaleteroSemillaHierbaVeh[v] = 0;
         MaleteroSemillaFlorVeh[v] = 0;
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[v][w] = 0;
+            for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[v][ms] = 0; MaleteroArmaSlotAmmoVeh[v][ms] = 0; }
     }
     for(new i = 0; i < MAX_PLAYERS; i++) { VehSharedTo[i] = INVALID_VEHICLE_ID; VehSharedUntil[i] = 0; }
     return 1;
@@ -5446,17 +5503,20 @@ stock InitGasSystem() {
 
 stock ShowMaleteroMaletero(playerid, vehid) {
     if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
-    new info[128], body[768], line[64], totalArmas = CuentaArmasMaletero(vehid);
-    new usados = totalArmas;
+    new info[128], body[768], line[72], usados = CuentaArmasMaletero(vehid);
     format(info, sizeof(info), "Armas guardadas: %d/%d slots usados", usados, MaleteroSlotsVeh[vehid]);
     SendClientMessage(playerid, 0x99FFFFFF, info);
 
     body[0] = EOS;
-    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-        if(MaleteroArmasVeh[vehid][w] <= 0) continue;
+    new limiteSlots = MaleteroSlotsVeh[vehid];
+    if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
+    for(new i = 0; i < limiteSlots; i++) {
+        new w = MaleteroArmaSlotIdVeh[vehid][i];
+        new ammo = MaleteroArmaSlotAmmoVeh[vehid][i];
+        if(w <= 0 || w >= MAX_WEAPON_ID_GM || ammo <= 0) continue;
         new wn[32];
         GetWeaponNameGM(w, wn, sizeof(wn));
-        format(line, sizeof(line), "Sacar %s (%d)\n", wn, MaleteroArmasVeh[vehid][w]);
+        format(line, sizeof(line), "Sacar %s (%d)\n", wn, ammo);
         strcat(body, line);
     }
     strcat(body, "Cerrar maletero");
@@ -5473,7 +5533,7 @@ stock ActualizarGasTextoVehiculo(playerid) {
     if(veh == INVALID_VEHICLE_ID) return 1;
     UltimoVehiculoGasMostrado[playerid] = veh;
     if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 70 + random(31); }
-    new gt[16]; format(gt, sizeof(gt), "G: %d", GasVehiculo[veh]);
+    new gt[32]; FormatearBarraEstado("Gas", GasVehiculo[veh], gt, sizeof(gt));
     PlayerTextDrawSetString(playerid, BarraGas[playerid], gt);
     PlayerTextDrawShow(playerid, BarraGas[playerid]);
     return 1;
@@ -5639,6 +5699,7 @@ stock RestaurarVehiculosJugador(playerid) {
             MaleteroSemillaHierbaVeh[nv] = MaleteroSemillaHierbaVeh[v];
             MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[v];
             for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[v][w];
+            for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[nv][ms] = MaleteroArmaSlotIdVeh[v][ms]; MaleteroArmaSlotAmmoVeh[nv][ms] = MaleteroArmaSlotAmmoVeh[v][ms]; }
             MaleteroOwner[v] = -1;
             MaleteroSlotsVeh[v] = 0;
             MaleteroHierbaVeh[v] = 0;
@@ -5646,6 +5707,7 @@ stock RestaurarVehiculosJugador(playerid) {
             MaleteroSemillaHierbaVeh[v] = 0;
             MaleteroSemillaFlorVeh[v] = 0;
             for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[v][w] = 0;
+            for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[v][ms] = 0; MaleteroArmaSlotAmmoVeh[v][ms] = 0; }
         }
 
         VehOwner[v] = -1;
@@ -5688,6 +5750,7 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
         MaleteroSemillaHierbaVeh[nv] = MaleteroSemillaHierbaVeh[veh];
         MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[veh];
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[veh][w];
+        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[nv][ms] = MaleteroArmaSlotIdVeh[veh][ms]; MaleteroArmaSlotAmmoVeh[nv][ms] = MaleteroArmaSlotAmmoVeh[veh][ms]; }
         MaleteroOwner[veh] = -1;
         MaleteroSlotsVeh[veh] = 0;
         MaleteroHierbaVeh[veh] = 0;
@@ -5695,6 +5758,7 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
         MaleteroSemillaHierbaVeh[veh] = 0;
         MaleteroSemillaFlorVeh[veh] = 0;
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[veh][w] = 0;
+        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[veh][ms] = 0; MaleteroArmaSlotAmmoVeh[veh][ms] = 0; }
     }
 
     VehOwner[veh] = -1;
@@ -5713,7 +5777,7 @@ stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h) {
 }
 
 stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
-    new line[256];
+    new line[768];
     strmid(line, primeraLinea, 0, sizeof(line), sizeof(line));
     LimpiarLinea(line);
     if(strcmp(line, CUENTA_SECCION_ARMAS, false) == 0) return CargarArmasJugadorDesdeCuenta(playerid, h);
@@ -5759,6 +5823,15 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
         GasInitVehiculo[veh] = true;
         GasVehiculo[veh] = gas;
 
+        MaleteroOwner[veh] = -1;
+        MaleteroSlotsVeh[veh] = MAX_SLOTS_MALETERO;
+        MaleteroHierbaVeh[veh] = 0;
+        MaleteroFloresVeh[veh] = 0;
+        MaleteroSemillaHierbaVeh[veh] = 0;
+        MaleteroSemillaFlorVeh[veh] = 0;
+        for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[veh][w] = 0;
+        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[veh][ms] = 0; MaleteroArmaSlotAmmoVeh[veh][ms] = 0; }
+
         if(isMaletero) {
             MaleteroOwner[veh] = playerid;
             MaleteroSlotsVeh[veh] = maleteroSlots;
@@ -5766,6 +5839,19 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
             MaleteroFloresVeh[veh] = maleteroFlores;
             MaleteroSemillaHierbaVeh[veh] = maleteroSemHierba;
             MaleteroSemillaFlorVeh[veh] = maleteroSemFlor;
+
+            for(new ms = 0; ms < maleteroSlots; ms++) {
+                new tokId[16], tokAmmo[16];
+                format(tokId, sizeof(tokId), "%s", strtok(line, idx));
+                format(tokAmmo, sizeof(tokAmmo), "%s", strtok(line, idx));
+                if(!tokId[0] || !tokAmmo[0]) break;
+                new armaId = strval(tokId);
+                new armaAmmo = strval(tokAmmo);
+                if(armaId <= 0 || armaId >= MAX_WEAPON_ID_GM || armaAmmo <= 0) continue;
+                MaleteroArmaSlotIdVeh[veh][ms] = armaId;
+                MaleteroArmaSlotAmmoVeh[veh][ms] = armaAmmo;
+                MaleteroArmasVeh[veh][armaId] += armaAmmo;
+            }
         }
     }
 
@@ -5867,7 +5953,7 @@ stock ReconciliarPrendasJugador(playerid) {
 }
 
 stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
-    new line[256];
+    new line[768];
     new cantidad;
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(VehOwner[v] != playerid) continue;
@@ -5899,6 +5985,17 @@ stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
             VehModelData[v], VehColor1Data[v], VehColor2Data[v], x, y, z, a,
             VehLocked[v] ? 1 : 0, GasVehiculo[v],
             MaleteroOwner[v] == playerid ? 1 : 0, MaleteroSlotsVeh[v], MaleteroHierbaVeh[v], MaleteroFloresVeh[v], MaleteroSemillaHierbaVeh[v], MaleteroSemillaFlorVeh[v]);
+
+        new limiteSlots = MaleteroSlotsVeh[v];
+        if(limiteSlots < 1 || limiteSlots > MAX_SLOTS_MALETERO) limiteSlots = MAX_SLOTS_MALETERO;
+        for(new ms = 0; ms < limiteSlots; ms++) {
+            new armaId = MaleteroArmaSlotIdVeh[v][ms];
+            new armaAmmo = MaleteroArmaSlotAmmoVeh[v][ms];
+            new slotData[24];
+            format(slotData, sizeof(slotData), " %d %d", armaId, armaAmmo);
+            strcat(line, slotData);
+        }
+
         fwrite(h, line);
         guardados++;
     }
@@ -5992,6 +6089,7 @@ public RestaurarVehiculoTemporal(slot) {
         MaleteroSemillaHierbaVeh[nv] = MaleteroSemillaHierbaVeh[slot];
         MaleteroSemillaFlorVeh[nv] = MaleteroSemillaFlorVeh[slot];
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[nv][w] = MaleteroArmasVeh[slot][w];
+        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[nv][ms] = MaleteroArmaSlotIdVeh[slot][ms]; MaleteroArmaSlotAmmoVeh[nv][ms] = MaleteroArmaSlotAmmoVeh[slot][ms]; }
         MaleteroOwner[slot] = -1;
         MaleteroSlotsVeh[slot] = 0;
         MaleteroHierbaVeh[slot] = 0;
@@ -5999,6 +6097,7 @@ public RestaurarVehiculoTemporal(slot) {
         MaleteroSemillaHierbaVeh[slot] = 0;
         MaleteroSemillaFlorVeh[slot] = 0;
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) MaleteroArmasVeh[slot][w] = 0;
+        for(new ms = 0; ms < MAX_SLOTS_MALETERO; ms++) { MaleteroArmaSlotIdVeh[slot][ms] = 0; MaleteroArmaSlotAmmoVeh[slot][ms] = 0; }
     }
 
     VehOwner[slot] = -1;
@@ -6634,6 +6733,7 @@ stock ShowEditMapViewList(playerid) {
 }
 
 stock GuardarEditMap() {
+    fcreatedir(DIR_DATA);
     new File:h = fopen(PATH_EDITMAP, io_write);
     if(!h) return 0;
 
@@ -6659,6 +6759,7 @@ stock GuardarEditMap() {
 
 stock CargarEditMap() {
     new File:h = fopen(PATH_EDITMAP, io_read);
+    if(!h) h = fopen(PATH_EDITMAP_LEGACY, io_read);
     if(!h) return 0;
 
     new line[220];
