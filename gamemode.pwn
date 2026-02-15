@@ -378,6 +378,7 @@ enum ePuntoMovible {
     puntoSemilleria,
     puntoArmeria,
     puntoVentaAutos,
+    puntoVentaSkins,
     puntoMaletero,
     puntoPintura,
     puntoMinero,
@@ -879,6 +880,9 @@ public OnGameModeInit() {
     PuntoPos[puntoVentaAutos][0] = POS_BANCO_X + 12.0;
     PuntoPos[puntoVentaAutos][1] = POS_BANCO_Y + 4.0;
     PuntoPos[puntoVentaAutos][2] = POS_BANCO_Z;
+    PuntoPos[puntoVentaSkins][0] = VentaSkinsPos[0];
+    PuntoPos[puntoVentaSkins][1] = VentaSkinsPos[1];
+    PuntoPos[puntoVentaSkins][2] = VentaSkinsPos[2];
     PuntoPos[puntoMaletero][0] = 2490.0; PuntoPos[puntoMaletero][1] = -1648.0; PuntoPos[puntoMaletero][2] = 13.3;
     PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
     PuntoPos[puntoMinero][0] = PuntoPos[puntoCamionero][0] + 6.0; PuntoPos[puntoMinero][1] = PuntoPos[puntoCamionero][1]; PuntoPos[puntoMinero][2] = PuntoPos[puntoCamionero][2];
@@ -901,6 +905,9 @@ public OnGameModeInit() {
 
     CrearPuntosFijos();
     ActualizarLabelVentaAutos();
+    PuntoPos[puntoVentaSkins][0] = VentaSkinsPos[0];
+    PuntoPos[puntoVentaSkins][1] = VentaSkinsPos[1];
+    PuntoPos[puntoVentaSkins][2] = VentaSkinsPos[2];
     if(VentaSkinsPickup != 0) DestroyPickup(VentaSkinsPickup);
     VentaSkinsPickup = CreatePickup(1275, 1, VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2], 0);
     ActualizarLabelVentaSkins();
@@ -956,7 +963,7 @@ public OnGameModeInit() {
         fclose(h);
     }
 
-    SetTimer("AutoGuardadoGlobal", 300000, true);
+    SetTimer("AutoGuardadoGlobal", 60000, true);
     SetTimer("BajarHambre", 60000, true);
     SetTimer("ChequearLimitesMapa", 1000, true);
     SetTimer("SubirTiempoJugado", 60000, true);
@@ -1501,7 +1508,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GetPlayerPos(playerid, p[0], p[1], p[2]);
         format(string, sizeof(string), "[ENTORNO] %s (%d): %s", name, playerid, cmdtext[idx]);
         for(new i = 0; i < MAX_PLAYERS; i++) {
-            if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, p[0], p[1], p[2])) SendClientMessage(i, 0x77DD77FF, string);
+            if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, p[0], p[1], p[2])) SendClientMessage(i, 0x33CC33FF, string);
         }
         return 1;
     }
@@ -1521,7 +1528,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/skills", true)) {
         new str[256];
-        format(str, sizeof(str), "{FFFFFF}Camionero Nivel: {FFFF00}%d/%d\n{FFFFFF}Viajes: {FFFF00}%d/%d\n\n{FFFFFF}Pizzero Nivel: {FF8C00}%d/%d\n{FFFFFF}Entregas: {FF8C00}%d/%d\n\n{FFFFFF}Basurero Nivel: {66FF66}%d/%d\n{FFFFFF}Recorridos: {66FF66}%d/%d\n\n{FFFFFF}Armero Nivel: {99CCFF}%d/%d\n{FFFFFF}Progreso: {99CCFF}%d/3", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid]);
+        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid]);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
@@ -1536,11 +1543,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new mins = faltanMin % 60;
 
         new body[384], pagoHora = nivelActual * 500;
-        format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d
-{33CCFF}Tiempo jugado: {FFFFFF}%d horas
-{33CCFF}Prox nivel en: {FFFFFF}%dh %dm
-{33CCFF}Pago por hora: {00FF00}$%d
-{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/2", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
+        format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Capacidad de vehiculos: {FFFFFF}%d/2", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, ContarAutosJugador(playerid));
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -2009,7 +2012,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nVenta de skins\nCP pintura\nTrabajo Minero\nPrendas Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2444,6 +2447,15 @@ public OnPlayerConnect(playerid) {
         CultivoPos[playerid][c][2] = 0.0;
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
+    for(new pi = 0; pi < MAX_PRENDAS; pi++) {
+        PlayerPrendaComprada[playerid][pi] = 0;
+        PlayerPrendaActiva[playerid][pi] = 0;
+        PlayerPrendaBone[playerid][pi] = 0;
+        PlayerPrendaOffX[playerid][pi] = 0.0; PlayerPrendaOffY[playerid][pi] = 0.0; PlayerPrendaOffZ[playerid][pi] = 0.0;
+        PlayerPrendaRotX[playerid][pi] = 0.0; PlayerPrendaRotY[playerid][pi] = 0.0; PlayerPrendaRotZ[playerid][pi] = 0.0;
+        PlayerPrendaScaleX[playerid][pi] = 0.0; PlayerPrendaScaleY[playerid][pi] = 0.0; PlayerPrendaScaleZ[playerid][pi] = 0.0;
+        RemovePlayerAttachedObject(playerid, pi);
+    }
 
     new path[64];
     ResolverPathCuenta(playerid, path, sizeof(path));
@@ -2476,6 +2488,10 @@ public OnPlayerSpawn(playerid) {
         TogglePlayerControllable(playerid, false);
     }
     SetCameraBehindPlayer(playerid);
+    for(new pi = 0; pi < MAX_PRENDAS; pi++) {
+        RemovePlayerAttachedObject(playerid, pi);
+        if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
+    }
     PlayerTextDrawShow(playerid, BarraHambre[playerid]);
     PlayerTextDrawHide(playerid, BarraGas[playerid]);
     return 1;
@@ -2501,7 +2517,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new nombre[MAX_PLAYER_NAME], msg[192];
         GetPlayerName(playerid, nombre, sizeof(nombre));
         format(msg, sizeof(msg), "[DUDAS] (%s - %d) %s", nombre, playerid, inputtext);
-        SendClientMessageToAll(0x66CCFFFF, msg);
+        SendClientMessageToAll(0xFFD166FF, msg);
         return 1;
     }
 
@@ -2522,7 +2538,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         GetPlayerName(target, nTarget, sizeof(nTarget));
         GetPlayerName(playerid, nResp, sizeof(nResp));
         format(msg, sizeof(msg), "[DUDAS] (%s) Respuesta: %s Att: %s", nTarget, inputtext, nResp);
-        SendClientMessageToAll(0x66FF99FF, msg);
+        SendClientMessageToAll(0xFFB347FF, msg);
         RdTargetPendiente[playerid] = -1;
         return 1;
     }
@@ -2570,9 +2586,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "[Minero]\n-Informacion del trabajo: extrae piedra/cobre/hierro en minas.\n-Comandos: H en mina, /inventario, /dejartrabajo.\n-Niveles: mejora por tiempo jugado general.\n-Paga: recursos para vender/craftear.\n\n[Basurero]\n-Informacion del trabajo: recoge bolsas y cargalas en la Rumpo con H.\n-Comandos: H en bolsa/camion, /tirar basura, /dejartrabajo.\n-Niveles: 1 a 10 por rutas completadas.\n-Paga: dinero + chance de flores.\n\n[Pizzero]\n-Informacion del trabajo: entrega pizzas en moto por checkpoints.\n-Comandos: H para tomar trabajo, /dejartrabajo.\n-Niveles: 1 a 10 por entregas.\n-Paga: dinero por entrega + bonus por nivel.\n\n[Camionero]\n-Informacion del trabajo: rutas de carga y entrega.\n-Comandos: H para iniciar, /dejartrabajo.\n-Niveles: 1 a 10 por viajes.\n-Paga: pago alto por ruta.\n\n[Armero]\n-Informacion del trabajo: crea armas y municion en armeria.\n-Comandos: H en armeria, /armero, /inventario.\n-Niveles: 1 a 10 por crafteo.\n-Paga: venta/utilidad de armas para combate.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "/comprar /abrircasa /salir\n/plantar /inventario\nH para cosechar\nMaximo 5 plantas por jugador en su casa", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "/saldo /comprar\n/pagar y transferencias deshabilitadas\nCada hora recibes pago segun nivel PJ", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas.\n- Comandos: H en mina, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion en armeria.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Casas", "{33CCFF}/comprar /abrircasa /salir{FFFFFF}\n{66FF99}/plantar /inventario{FFFFFF}\nPresiona {FFFF00}H {FFFFFF}para cosechar\nMaximo {FFD166}5 plantas{FFFFFF} por jugador en su casa", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Economia", "{FFD166}/saldo /comprar{FFFFFF}\n{FF6666}/pagar deshabilitado{FFFFFF}\nCada hora recibes pago segun {33CCFF}nivel PJ", "Cerrar", "");
         if(listitem == 4 && PlayerAdmin[playerid] >= 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Admin", "Usa /admm para abrir el panel admin con accesos rapidos.", "Cerrar", "");
         return 1;
     }
@@ -2632,16 +2648,32 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_MOVER_MENU) {
         if(!response) return 1;
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        if(listitem < 0 || listitem >= _:totalPuntosMovibles) return SendClientMessage(playerid, -1, "Punto invalido.");
+
+        new ePuntoMovible:puntoMover;
+        switch(listitem) {
+            case 0: puntoMover = puntoCamionero;
+            case 1: puntoMover = puntoPizzeria;
+            case 2: puntoMover = puntoBasurero;
+            case 3: puntoMover = puntoCarga;
+            case 4: puntoMover = puntoBanco;
+            case 5: puntoMover = puntoSemilleria;
+            case 6: puntoMover = puntoArmeria;
+            case 7: puntoMover = puntoVentaAutos;
+            case 8: puntoMover = puntoVentaSkins;
+            case 9: puntoMover = puntoPintura;
+            case 10: puntoMover = puntoMinero;
+            case 11: puntoMover = puntoPrendas;
+            default: return SendClientMessage(playerid, -1, "Punto invalido.");
+        }
 
         new Float:px, Float:py, Float:pz, nombre[48], msg[144];
         GetPlayerPos(playerid, px, py, pz);
-        PuntoPos[ePuntoMovible:listitem][0] = px;
-        PuntoPos[ePuntoMovible:listitem][1] = py;
-        PuntoPos[ePuntoMovible:listitem][2] = pz;
-        RecrearPuntoFijo(ePuntoMovible:listitem);
+        PuntoPos[puntoMover][0] = px;
+        PuntoPos[puntoMover][1] = py;
+        PuntoPos[puntoMover][2] = pz;
+        RecrearPuntoFijo(puntoMover);
         GuardarPuntosMovibles();
-        if(ePuntoMovible:listitem == puntoVentaAutos) {
+        if(puntoMover == puntoVentaAutos) {
             VentaAutosPos[0] = px;
             VentaAutosPos[1] = py;
             VentaAutosPos[2] = pz;
@@ -2649,7 +2681,16 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             VentaAutosPickup = CreatePickup(1274, 1, px, py, pz, 0);
             ActualizarLabelVentaAutos();
         }
-        GetPuntoMovibleNombre(ePuntoMovible:listitem, nombre, sizeof(nombre));
+        if(puntoMover == puntoVentaSkins) {
+            VentaSkinsPos[0] = px;
+            VentaSkinsPos[1] = py;
+            VentaSkinsPos[2] = pz;
+            if(VentaSkinsPickup != 0) DestroyPickup(VentaSkinsPickup);
+            VentaSkinsPickup = CreatePickup(1275, 1, px, py, pz, 0);
+            ActualizarLabelVentaSkins();
+            GuardarVentaSkinsConfig();
+        }
+        GetPuntoMovibleNombre(puntoMover, nombre, sizeof(nombre));
         format(msg, sizeof(msg), "Moviste %s a tu posicion. El GPS ya usa la nueva ubicacion.", nombre);
         SendClientMessage(playerid, 0x00FF00FF, msg);
         return 1;
@@ -2828,18 +2869,21 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             PlayerPrendaComprada[playerid][idxPrenda] = 1;
             PlayerPrendaActiva[playerid][idxPrenda] = 1;
             AplicarPrendaJugador(playerid, idxPrenda);
+            GuardarCuenta(playerid);
             SendClientMessage(playerid, 0x66FF66FF, "Compraste y equipaste la prenda.");
             return 1;
         }
 
         if(PlayerPrendaActiva[playerid][idxPrenda]) {
             QuitarPrendaJugador(playerid, idxPrenda);
+            GuardarCuenta(playerid);
             return SendClientMessage(playerid, 0xFFAA00FF, "Prenda oculta. Usa /prendas para volver a mostrarla.");
         }
 
         if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 10 prendas visibles.");
         PlayerPrendaActiva[playerid][idxPrenda] = 1;
         AplicarPrendaJugador(playerid, idxPrenda);
+        GuardarCuenta(playerid);
         SendClientMessage(playerid, 0x66FF66FF, "Prenda equipada.");
         return 1;
     }
@@ -3012,6 +3056,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         PlayerPrendaBone[playerid][idxp] = bones[listitem];
         AplicarPrendaJugador(playerid, idxp);
+        GuardarCuenta(playerid);
         return ShowPrendaUsuarioEditar(playerid, idxp);
     }
 
@@ -3046,11 +3091,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 2) {
             if(PlayerPrendaActiva[playerid][idxp]) {
                 QuitarPrendaJugador(playerid, idxp);
+                GuardarCuenta(playerid);
                 SendClientMessage(playerid, 0xFFAA00FF, "Prenda oculta.");
             } else {
                 if(ContarPrendasJugador(playerid) >= MAX_PRENDAS_USUARIO) return SendClientMessage(playerid, -1, "Limite alcanzado: solo puedes tener 10 prendas visibles.");
                 PlayerPrendaActiva[playerid][idxp] = 1;
                 AplicarPrendaJugador(playerid, idxp);
+                GuardarCuenta(playerid);
                 SendClientMessage(playerid, 0x66FF66FF, "Prenda visible nuevamente.");
             }
             return ShowPrendaUsuarioMenu(playerid);
@@ -3068,6 +3115,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             PlayerPrendaScaleX[playerid][idxp] = 0.0;
             PlayerPrendaScaleY[playerid][idxp] = 0.0;
             PlayerPrendaScaleZ[playerid][idxp] = 0.0;
+            GuardarCuenta(playerid);
             SendClientMessage(playerid, 0xFF4444FF, "Prenda eliminada de tu inventario.");
             return ShowPrendaUsuarioMenu(playerid);
         }
@@ -3323,6 +3371,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(skin < 0 || skin > 311) return SendClientMessage(playerid, -1, "Skin invalida (0-311).");
         SetPlayerSkin(target, skin);
         PlayerSkinGuardada[target] = skin;
+        GuardarCuenta(target);
         SendClientMessage(playerid, 0x66FF66FF, "Skin cambiada correctamente.");
         SendClientMessage(target, 0x66FF66FF, "Un admin cambio tu skin.");
         return 1;
@@ -4284,7 +4333,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 ActualizarNivelPJ(playerid);
                 SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
                 fclose(h); SpawnPlayerAfterAuth(playerid);
-            } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave mal:", "Entrar", "Salir"); }
+            } else { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error", "Clave incorrecta.", "Entrar", "Salir"); }
         }
     }
     return 1;
@@ -5169,6 +5218,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
+        case puntoVentaSkins: format(dest, len, "Venta de skins");
         case puntoMaletero: format(dest, len, "Reservado");
         case puntoPintura: format(dest, len, "CP pintura");
         case puntoMinero: format(dest, len, "Trabajo minero");
@@ -5222,6 +5272,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoVentaAutos: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
         }
+        case puntoVentaSkins: {
+            PuntoPickup[punto] = CreatePickup(1275, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("{FF66CC}CP Venta de skins\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
         case puntoMaletero: {
             // Punto reservado: no crear pickup ni label.
         }
@@ -5255,7 +5309,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{00FF00}Comandos basicos:\n{FFFFFF}/g /m /d /telefono /skills /lvl /comer /llenar /pintar /bidon /usarbidon /inventario /plantar /consumir /dejartrabajo /cancelartrabajo /tirarbasura (/tirar basura) /gps /saldo /salir /comprar /maletero /ga /llave /compartirllave /abrircasa /ayuda /duda /rd\n\n{AAAAAA}Tip: si eres admin usa /admm para ver las herramientas administrativas.");
+    format(texto, sizeof(texto), "{33CCFF}Comandos de chat:{FFFFFF} /g /m /d /duda /rd\n{66FF99}Personaje:{FFFFFF} /skills /lvl /inventario /comer /consumir /telefono\n{FFD166}Trabajo y puntos:{FFFFFF} /gps /dejartrabajo /cancelartrabajo /tirarbasura /plantar\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /pintar\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon\n\n{AAAAAA}Tip: si eres staff usa {FFD166}/admm {AAAAAA}para herramientas administrativas.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -6283,6 +6337,7 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
             PlayerPrendaScaleY[playerid][index] = fScaleY;
             PlayerPrendaScaleZ[playerid][index] = fScaleZ;
         }
+        GuardarCuenta(playerid);
         SendClientMessage(playerid, 0x00FF00FF, "Posicion de prenda guardada.");
     }
     PrendaMoveIndex[playerid] = -1;
@@ -6557,7 +6612,9 @@ stock CargarVentaAutosConfig() {
 stock GuardarVentaSkinsConfig() {
     new File:h = fopen(PATH_VENTA_SKINS, io_write);
     if(!h) return 0;
-    new line[48];
+    new line[96];
+    format(line, sizeof(line), "POS %f %f %f\n", VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2]);
+    fwrite(h, line);
     for(new i = 0; i < MAX_SKINS_VENTA; i++) {
         format(line, sizeof(line), "%d %d %d\n", VentaSkinsData[i][vsActiva], VentaSkinsData[i][vsSkin], VentaSkinsData[i][vsPrecio]);
         fwrite(h, line);
@@ -6572,9 +6629,24 @@ stock CargarVentaSkinsConfig() {
         VentaSkinsData[i][vsSkin] = 0;
         VentaSkinsData[i][vsPrecio] = 0;
     }
-    new File:h = fopen(PATH_VENTA_SKINS, io_read), line[64];
+    new File:h = fopen(PATH_VENTA_SKINS, io_read), line[96];
     if(!h) return GuardarVentaSkinsConfig();
+
     new i;
+    if(fread(h, line)) {
+        if(line[0] == 'P' && line[1] == 'O' && line[2] == 'S') {
+            new idx = 3;
+            VentaSkinsPos[0] = floatstr(strtok(line, idx));
+            VentaSkinsPos[1] = floatstr(strtok(line, idx));
+            VentaSkinsPos[2] = floatstr(strtok(line, idx));
+        } else {
+            new idx;
+            VentaSkinsData[i][vsActiva] = strval(strtok(line, idx)) != 0;
+            VentaSkinsData[i][vsSkin] = strval(strtok(line, idx));
+            VentaSkinsData[i][vsPrecio] = strval(strtok(line, idx));
+            i++;
+        }
+    }
     while(fread(h, line) && i < MAX_SKINS_VENTA) {
         new idx;
         VentaSkinsData[i][vsActiva] = strval(strtok(line, idx)) != 0;
