@@ -81,6 +81,7 @@
 
 #define DIALOG_REGISTRO     1
 #define DIALOG_LOGIN        2
+#define DIR_SCRIPTFILES     "scriptfiles"
 #define DIR_DATA            "scriptfiles/kame_house"
 #define DIR_USUARIOS        "scriptfiles/kame_house/usuarios"
 #define DIR_USUARIOS_LEGACY "usuarios"
@@ -943,6 +944,7 @@ stock IsNearVentaSkins(playerid);
 stock CargarArmeriaConfig();
 stock GuardarArmeriaConfig();
 stock CargarTiendaVirtualConfig();
+stock GuardarTiendaVirtualConfigEnRuta(const ruta[]);
 stock GuardarTiendaVirtualConfig();
 stock SetDefaultCJAnimations(playerid);
 stock CrearPrendasDefault();
@@ -3195,7 +3197,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- Casas: 1\n- Vehiculos propios: 1\n- Plantas en casa: 3\n- Espacios de maletero: 5\n- Prendas visibles: 3\n- Trabajos simultaneos: 1\n- Bonus por trabajo: $0\n\n{FFD54F}VIP:\n- Casas: 3\n- Vehiculos propios: 3\n- Plantas en casa: 5\n- Espacios de maletero: 7\n- Prendas visibles: 6\n- Trabajos simultaneos: 2\n- Bonus por trabajo: $100\n- 30%% de probabilidad de cosecha x2\n\n{00E5FF}Diamante:\n- Casas: 10\n- Vehiculos propios: 10\n- Plantas en casa: 15\n- Espacios de maletero: 15\n- Prendas visibles: 10\n- Trabajos simultaneos: 4\n- Bonus por trabajo: $500\n- 30%% de probabilidad de cosecha x4\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
     }
@@ -8845,9 +8847,11 @@ stock CargarTiendaVirtualConfig() {
     PrecioMembresiaVIPDiamantes = 1;
     PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
 
+    fcreatedir(DIR_SCRIPTFILES);
     fcreatedir(DIR_DATA);
 
     new File:h = fopen(PATH_TIENDA_VIRTUAL, io_read), line[96];
+    if(!h) h = fopen(PATH_TIENDA_VIRTUAL_LEGACY, io_read);
     if(!h) return GuardarTiendaVirtualConfig();
 
     while(fread(h, line)) {
@@ -8890,10 +8894,8 @@ stock CargarTiendaVirtualConfig() {
     return 1;
 }
 
-stock GuardarTiendaVirtualConfig() {
-    fcreatedir(DIR_DATA);
-
-    new File:h = fopen(PATH_TIENDA_VIRTUAL, io_write);
+stock GuardarTiendaVirtualConfigEnRuta(const ruta[]) {
+    new File:h = fopen(ruta, io_write);
     if(!h) return 0;
 
     new line[96];
@@ -8906,6 +8908,15 @@ stock GuardarTiendaVirtualConfig() {
 
     fclose(h);
     return 1;
+}
+
+stock GuardarTiendaVirtualConfig() {
+    fcreatedir(DIR_SCRIPTFILES);
+    fcreatedir(DIR_DATA);
+
+    new okMain = GuardarTiendaVirtualConfigEnRuta(PATH_TIENDA_VIRTUAL);
+    new okLegacy = GuardarTiendaVirtualConfigEnRuta(PATH_TIENDA_VIRTUAL_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock GetMinaDisponibleMasCercana(playerid, ignorar = -1) {
