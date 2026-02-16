@@ -429,19 +429,19 @@ new Float:CamioneroDestino[MAX_PLAYERS][3];
 static const CasaInteriorNombre[5][] = {
     "Safe House 1",
     "Safe House 4",
-    "Willowfield safehouse",
     "Vank Hoff Hotel",
-    "Safe House 3"
+    "Willowfield safehouse",
+    "Unknown safe house"
 };
 
-static const CasaInteriorJuegoID[5] = {10, 1, 11, 5, 6};
+static const CasaInteriorJuegoID[5] = {10, 1, 5, 11, 9};
 
 static const Float:CasaInteriorPos[5][3] = {
     {2262.83, -1137.71, 1050.63},
     {2217.28, -1076.27, 1050.48},
-    {1240.39, -2036.88, 59.96},
     {227.76, 1114.39, 1080.99},
-    {2233.80, -1115.36, 1050.88}
+    {1240.39, -2036.88, 59.96},
+    {2318.16, -1026.75, 1050.21}
 };
 
 new Float:BandaSpawnPos[MAX_BANDA_SPAWNS][4];
@@ -883,6 +883,7 @@ stock GetLimitePrendasJugador(playerid);
 stock GetLimiteMaleteroJugador(playerid);
 stock GetLimiteTrabajosJugador(playerid);
 stock GetBonusTrabajoMembresia(playerid);
+stock GetLimiteCasasJugador(playerid);
 stock ExpirarMembresiaSiCorresponde(playerid);
 stock TieneTrabajoActivo(playerid);
 stock ContarTrabajosActivos(playerid);
@@ -2155,7 +2156,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new casa = GetClosestCasa(playerid);
         if(casa == -1) return SendClientMessage(playerid, -1, "No estas cerca de una casa.");
         if(strcmp(CasaData[casa][cOwner], "None") != 0) return SendClientMessage(playerid, -1, "Esta casa no esta en venta.");
-        if(ContarCasasJugador(playerid) >= 1) return SendClientMessage(playerid, -1, "Solo puedes tener 1 casa por jugador.");
+        new limiteCasas = GetLimiteCasasJugador(playerid);
+        if(ContarCasasJugador(playerid) >= limiteCasas) {
+            new aviso[96];
+            format(aviso, sizeof(aviso), "Tu membresia actual te permite %d casa(s).", limiteCasas);
+            return SendClientMessage(playerid, -1, aviso);
+        }
         if(GetPlayerMoney(playerid) < CasaData[casa][cPrecio]) return SendClientMessage(playerid, -1, "No tienes suficiente dinero.");
         GivePlayerMoney(playerid, -CasaData[casa][cPrecio]);
         new name[MAX_PLAYER_NAME];
@@ -2674,7 +2680,7 @@ stock bool:GetCasaInteriorData(slot, &interiorid, &Float:px, &Float:py, &Float:p
 stock ShowCrearCasaInteriorDialog(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT,
         "Crear casa",
-        "1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Willowfield safehouse (ID 11)\n4) Vank Hoff Hotel (ID 5)\n5) Safe House 3 (ID 6)\n\nIngresa el numero de interior (1-5):",
+        "1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Vank Hoff Hotel (ID 5)\n4) Willowfield safehouse (ID 11)\n5) Unknown safe house (ID 9)\n\nIngresa el numero de interior (1-5):",
         "Siguiente", "Cancelar");
 }
 
@@ -2803,16 +2809,16 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 632.0, 385.0, "~w~");
-    PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.82);
-    PlayerTextDrawAlignment(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_ALIGN_RIGHT);
+    AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 320.0, 380.0, "~w~");
+    PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.22, 1.00);
+    PlayerTextDrawAlignment(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_ALIGN_CENTER);
     PlayerTextDrawColour(playerid, AnuncioTextDraw[playerid], 0xFFFFFFFF);
     PlayerTextDrawBackgroundColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
     PlayerTextDrawFont(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetProportional(playerid, AnuncioTextDraw[playerid], true);
     PlayerTextDrawUseBox(playerid, AnuncioTextDraw[playerid], false);
     PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
-    PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 440.0, 0.0);
+    PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 620.0, 0.0);
     AnuncioTimerOcultar[playerid] = -1;
     PlayerInCasa[playerid] = -1;
     CasaInteriorPendiente[playerid] = -1;
@@ -3114,7 +3120,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_CREAR_CASA_INTERIOR) {
         if(!response) { CasaInteriorPendiente[playerid] = -1; return 1; }
         new interiorSlot = strval(inputtext);
-        if(interiorSlot < 1 || interiorSlot > 5) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT, "Crear casa", "Interior invalido.\n\n1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Willowfield safehouse (ID 11)\n4) Vank Hoff Hotel (ID 5)\n5) Safe House 3 (ID 6)\n\nIngresa el numero de interior (1-5):", "Siguiente", "Cancelar");
+        if(interiorSlot < 1 || interiorSlot > 5) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT, "Crear casa", "Interior invalido.\n\n1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Vank Hoff Hotel (ID 5)\n4) Willowfield safehouse (ID 11)\n5) Unknown safe house (ID 9)\n\nIngresa el numero de interior (1-5):", "Siguiente", "Cancelar");
         CasaInteriorPendiente[playerid] = interiorSlot;
         return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio de la casa:", "Crear", "Atras");
     }
@@ -3155,7 +3161,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir. Limites: Normal/VIP 1 casa, Diamante 2 casas.\n\n{66FFFF}Membresias:{FFFFFF} VIP y Diamante en tienda virtual con diamantes, incluyen bonus de trabajos.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowReglasDialog(playerid);
         return 1;
     }
@@ -6362,8 +6368,8 @@ stock GetMembresiaNombre(tipo, dest[], len) {
 
 stock GetMembresiaColor(tipo) {
     switch(tipo) {
-        case MEMBRESIA_VIP: return 0xF1C40FFF;
-        case MEMBRESIA_DIAMANTE: return 0x00E5FFFF;
+        case MEMBRESIA_VIP: return 0xFFD700FF;
+        case MEMBRESIA_DIAMANTE: return 0x1E90FFFF;
     }
     return 0xFFFFFFFF;
 }
@@ -6396,6 +6402,12 @@ stock GetBonusTrabajoMembresia(playerid) {
     if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 500;
     if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 100;
     return 0;
+}
+
+stock GetLimiteCasasJugador(playerid) {
+    ExpirarMembresiaSiCorresponde(playerid);
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 2;
+    return 1;
 }
 
 stock ExpirarMembresiaSiCorresponde(playerid) {
@@ -6459,7 +6471,7 @@ stock MostrarAnuncioJugador(playerid, const texto[]) {
 
 stock MostrarAnuncioGlobal(const emisor[], const texto[]) {
     new anuncio[196];
-    format(anuncio, sizeof(anuncio), "~g~[ANUNCIO] ~y~%s~w~: ~c~%s", emisor, texto);
+    format(anuncio, sizeof(anuncio), "~y~[ANUNCIO] ~w~%s~g~: ~w~%s", emisor, texto);
     for(new i = 0; i < MAX_PLAYERS; i++) {
         if(IsPlayerConnected(i)) MostrarAnuncioJugador(i, anuncio);
     }
@@ -7074,7 +7086,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} Normal (1 casa), VIP (1 casa) y Diamante (2 casas), bonus en trabajos y beneficios en tienda virtual.\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -9157,7 +9169,7 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
 
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
 
-    new texto[256], faccionNombre[24], faccionNombreLimpio[24], dineroCorto[16];
+    new texto[256], faccionNombre[24], faccionNombreLimpio[24], dineroCorto[16], membresiaNombre[24], membresiaHex[8];
     faccionNombre[0] = EOS;
 
     if(PlayerFaccionId[playerid] != -1) format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
@@ -9165,15 +9177,17 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
 
     SanearTextoLabel(faccionNombre, faccionNombreLimpio, sizeof(faccionNombreLimpio));
     FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
+    GetMembresiaNombre(PlayerMembresiaTipo[playerid], membresiaNombre, sizeof(membresiaNombre));
+    ConvertirColorAHexRGB(GetMembresiaColor(PlayerMembresiaTipo[playerid]), membresiaHex, sizeof(membresiaHex));
 
     if(PlayerFaccionId[playerid] == -1) {
-        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", GetNivelPJ(playerid), dineroCorto);
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
     } else {
         new colorHex[8];
         ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], colorHex, sizeof(colorHex));
-        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", colorHex, faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", colorHex, faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", colorHex, faccionNombreLimpio, membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", colorHex, faccionNombreLimpio, membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
     }
 
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 30.0, 0);
