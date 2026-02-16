@@ -1745,6 +1745,23 @@ stock CanceladoTrabajoPizzero(playerid) {
     return 1;
 }
 
+stock EnviarEntornoAccion(playerid, const accion[]) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    if(!accion[0]) return 0;
+
+    new mensaje[180], nombre[MAX_PLAYER_NAME], Float:pos[3];
+    GetPlayerName(playerid, nombre, sizeof(nombre));
+    GetPlayerPos(playerid, pos[0], pos[1], pos[2]);
+    format(mensaje, sizeof(mensaje), "[ENTORNO] %s %s", nombre, accion);
+
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, pos[0], pos[1], pos[2])) {
+            SendClientMessage(i, 0x33CC33FF, mensaje);
+        }
+    }
+    return 1;
+}
+
 // ================= [ SISTEMA DE CASAS - COMANDOS ] =================
 
 public OnPlayerCommandText(playerid, cmdtext[])
