@@ -166,6 +166,11 @@
 #define DIALOG_ADMIN_MEMBRESIA_ID 140
 #define DIALOG_ADMIN_MEMBRESIA_DIAS 141
 #define DIALOG_ADMIN_MEMBRESIA_ELIMINAR_ID 142
+#define DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU 143
+#define DIALOG_ADMIN_PRECIO_VIP_DINERO 144
+#define DIALOG_ADMIN_PRECIO_VIP_DIAMANTES 145
+#define DIALOG_ADMIN_PRECIO_DIAMANTE 146
+#define DIALOG_ANUNCIO_TEXTO 147
 #define DIALOG_GPS_VEHICULOS 46
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
@@ -268,6 +273,7 @@
 #define PRECIO_MEMBRESIA_VIP 200000
 #define DURACION_MEMBRESIA_VIP_DIAS 10
 #define PRECIO_DIAMANTE_TIENDA 20000
+#define COSTO_ANUNCIO 2000
 #define COSTO_COLOR_CREAR_FACCION 100000
 #define COSTO_COMPRAR_COLOR_FACCION 200000
 #define POS_FACCION_X 2504.40
@@ -336,6 +342,7 @@ new PlayerMembresiaTipo[MAX_PLAYERS];
 new PlayerMembresiaExpiraTick[MAX_PLAYERS];
 new AdminMembresiaTipoPendiente[MAX_PLAYERS];
 new AdminMembresiaTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new AdminPrecioVipDineroPendiente[MAX_PLAYERS];
 
 // Variables Camionero
 new TrabajandoCamionero[MAX_PLAYERS];
@@ -412,6 +419,8 @@ new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
 new Text3D:PlayerPrefixLabel[MAX_PLAYERS] = {Text3D:-1, ...};
 new UltimaActualizacionLabelFaccionTick[MAX_PLAYERS];
+new PlayerText:AnuncioTextDraw[MAX_PLAYERS];
+new AnuncioTimerOcultar[MAX_PLAYERS] = {-1, ...};
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
@@ -516,6 +525,10 @@ enum ePuntoMovible {
 #define MEMBRESIA_NINGUNA 0
 #define MEMBRESIA_VIP 1
 #define MEMBRESIA_DIAMANTE 2
+
+new PrecioMembresiaVIPDinero = PRECIO_MEMBRESIA_VIP;
+new PrecioMembresiaVIPDiamantes = 1;
+new PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
 new Float:PuntoPos[totalPuntosMovibles][3];
 new PuntoPickup[totalPuntosMovibles] = {0, ...};
 new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
@@ -787,6 +800,7 @@ forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
 forward TeleportVehiculoLlamado(playerid);
 forward ProcesarBandasPVE();
+forward OcultarAnuncioJugador(playerid);
 stock CargarMinas();
 stock GuardarMinas();
 stock CargarHornos();
@@ -961,6 +975,9 @@ stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0);
 stock FormatearDineroCorto(monto, dest[], len);
 stock SanearTextoLabel(const origen[], destino[], len);
 stock ConvertirColorAHexRGB(color, dest[], len);
+stock MostrarMenuAdminPreciosMembresia(playerid);
+stock MostrarAnuncioGlobal(const emisor[], const texto[]);
+stock MostrarAnuncioJugador(playerid, const texto[]);
 stock InicializarSistemaFacciones();
 stock CargarFacciones();
 stock GuardarFacciones();
@@ -1254,6 +1271,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
         if(IsNearVentaSkins(playerid)) return ShowVentaSkinsAdminMenu(playerid);
+        if(IsNearTiendaVirtual(playerid)) return MostrarMenuAdminPreciosMembresia(playerid);
     }
 
     // Teclas B/L deshabilitadas por estabilidad del sistema.
@@ -1823,6 +1841,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return ShowPlayerDialog(playerid, DIALOG_RD_TARGET, DIALOG_STYLE_INPUT, "Responder Duda", "Ingresa el ID del jugador que hizo la duda:", "Siguiente", "Cancelar");
     }
 
+    if(!strcmp(cmd, "/anuncio", true)) {
+        if(GetPlayerMoney(playerid) < COSTO_ANUNCIO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para publicar un anuncio ($2000).");
+        return ShowPlayerDialog(playerid, DIALOG_ANUNCIO_TEXTO, DIALOG_STYLE_INPUT, "Publicar anuncio", "Escribe el texto del anuncio (max 120).\nCosto por anuncio: $2000", "Publicar", "Cancelar");
+    }
+
     if(!strcmp(cmd, "/telefono", true)) {
         if(!PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "No tienes un telefono. Compralo en Tienda Kame House por $10000.");
         return ShowTelefonoMenu(playerid);
@@ -1845,9 +1868,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new body[1024], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48];
-        if(PlayerFaccionId[playerid] != -1) format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
-        else format(faccionTexto, sizeof(faccionTexto), "Ninguna");
+        new body[1024], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8];
+        if(PlayerFaccionId[playerid] != -1) {
+            format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
+            ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], faccionColorHex, sizeof(faccionColorHex));
+        } else {
+            format(faccionTexto, sizeof(faccionTexto), "Ninguna");
+            format(faccionColorHex, sizeof(faccionColorHex), "FFFFFF");
+        }
 
         GetMembresiaNombre(PlayerMembresiaTipo[playerid], membresiaTexto, sizeof(membresiaTexto));
         if(PlayerMembresiaTipo[playerid] == MEMBRESIA_NINGUNA) format(vigenciaTexto, sizeof(vigenciaTexto), "Sin membresia activa");
@@ -1864,7 +1892,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new limiteTrabajos = GetLimiteTrabajosJugador(playerid);
         new bonusTrabajo = GetBonusTrabajoMembresia(playerid);
 
-        format(body, sizeof(body), "{33CCFF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {FFFFFF}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo);
+        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -2775,6 +2803,18 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
+
+    AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 632.0, 385.0, "~w~");
+    PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.82);
+    PlayerTextDrawAlignment(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_ALIGN_RIGHT);
+    PlayerTextDrawColour(playerid, AnuncioTextDraw[playerid], 0xFFFFFFFF);
+    PlayerTextDrawBackgroundColour(playerid, AnuncioTextDraw[playerid], 0x00000066);
+    PlayerTextDrawFont(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_FONT_1);
+    PlayerTextDrawSetProportional(playerid, AnuncioTextDraw[playerid], true);
+    PlayerTextDrawUseBox(playerid, AnuncioTextDraw[playerid], true);
+    PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000055);
+    PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 440.0, 0.0);
+    AnuncioTimerOcultar[playerid] = -1;
     PlayerInCasa[playerid] = -1;
     CasaInteriorPendiente[playerid] = -1;
     TrabajandoCamionero[playerid] = 0;
@@ -2803,6 +2843,7 @@ public OnPlayerConnect(playerid) {
     PlayerMembresiaExpiraTick[playerid] = 0;
     AdminMembresiaTipoPendiente[playerid] = MEMBRESIA_NINGUNA;
     AdminMembresiaTargetPendiente[playerid] = -1;
+    AdminPrecioVipDineroPendiente[playerid] = 0;
     format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
     GasRefuelTimer[playerid] = -1;
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
@@ -3291,10 +3332,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) {
             if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return SendClientMessage(playerid, -1, "Ya tienes membresia Diamante.");
-            if(PlayerDiamantes[playerid] < 1) return SendClientMessage(playerid, -1, "Necesitas al menos 1 diamante para comprar VIP.");
-            if(GetPlayerMoney(playerid) < PRECIO_MEMBRESIA_VIP) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para VIP.");
-            GivePlayerMoney(playerid, -PRECIO_MEMBRESIA_VIP);
-            PlayerDiamantes[playerid]--;
+            if(PlayerDiamantes[playerid] < PrecioMembresiaVIPDiamantes) return SendClientMessage(playerid, -1, "No tienes suficientes diamantes para comprar VIP.");
+            if(GetPlayerMoney(playerid) < PrecioMembresiaVIPDinero) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para VIP.");
+            GivePlayerMoney(playerid, -PrecioMembresiaVIPDinero);
+            PlayerDiamantes[playerid] -= PrecioMembresiaVIPDiamantes;
             PlayerMembresiaTipo[playerid] = MEMBRESIA_VIP;
             PlayerMembresiaExpiraTick[playerid] = GetTickCount() + (DURACION_MEMBRESIA_VIP_DIAS * 86400000);
             GuardarCuenta(playerid);
@@ -3315,7 +3356,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return ShowTiendaVirtualMenu(playerid);
         new cantidad = strval(inputtext);
         if(cantidad <= 0 || cantidad > 1000) return SendClientMessage(playerid, -1, "Cantidad invalida (1-1000).");
-        new costoTotal = cantidad * PRECIO_DIAMANTE_TIENDA;
+        new costoTotal = cantidad * PrecioDiamanteTienda;
         if(GetPlayerMoney(playerid) < costoTotal) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
         GivePlayerMoney(playerid, -costoTotal);
         PlayerDiamantes[playerid] += cantidad;
@@ -3323,6 +3364,28 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new msgd2[144];
         format(msgd2, sizeof(msgd2), "Compraste %d diamante(s) por $%d.", cantidad, costoTotal);
         SendClientMessage(playerid, 0x66FF66FF, msgd2);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ANUNCIO_TEXTO) {
+        if(!response) return 1;
+        if(strlen(inputtext) < 4) return SendClientMessage(playerid, -1, "El anuncio es muy corto (min 4 caracteres).");
+        if(strlen(inputtext) > 120) return SendClientMessage(playerid, -1, "El anuncio es muy largo (max 120 caracteres).");
+        if(GetPlayerMoney(playerid) < COSTO_ANUNCIO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para publicar un anuncio ($2000).");
+
+        new limpio[128], j = 0;
+        for(new i = 0; inputtext[i] != EOS && j < sizeof(limpio) - 1; i++) {
+            new c = inputtext[i];
+            if(c == '\n' || c == '\r' || c == '\t') c = ' ';
+            limpio[j++] = c;
+        }
+        limpio[j] = EOS;
+
+        GivePlayerMoney(playerid, -COSTO_ANUNCIO);
+        new nombre[MAX_PLAYER_NAME];
+        GetPlayerName(playerid, nombre, sizeof(nombre));
+        MostrarAnuncioGlobal(nombre, limpio);
+        SendClientMessage(playerid, 0x66FF66FF, "Anuncio publicado por 10 segundos.");
         return 1;
     }
 
@@ -4344,6 +4407,48 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 1) { AdminMembresiaTipoPendiente[playerid] = MEMBRESIA_DIAMANTE; return ShowPlayerDialog(playerid, DIALOG_ADMIN_MEMBRESIA_ID, DIALOG_STYLE_INPUT, "Admin - Membresia Diamante", "ID del jugador:", "Siguiente", "Atras"); }
         if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_MEMBRESIA_ELIMINAR_ID, DIALOG_STYLE_INPUT, "Admin - Eliminar membresia", "ID del jugador:", "Eliminar", "Atras");
         return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU) {
+        if(!response) return 1;
+        if(PlayerAdmin[playerid] < 1) return 1;
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_VIP_DINERO, DIALOG_STYLE_INPUT, "Admin - Precio VIP", "Ingresa el precio en dinero para VIP:", "Siguiente", "Atras");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_DIAMANTE, DIALOG_STYLE_INPUT, "Admin - Precio Diamante", "Ingresa el precio por diamante:", "Guardar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_PRECIO_VIP_DINERO) {
+        if(!response) return MostrarMenuAdminPreciosMembresia(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new precioDinero = strval(inputtext);
+        if(precioDinero <= 0) return SendClientMessage(playerid, -1, "Precio invalido. Debe ser mayor a 0.");
+        AdminPrecioVipDineroPendiente[playerid] = precioDinero;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_VIP_DIAMANTES, DIALOG_STYLE_INPUT, "Admin - Costo VIP en diamantes", "Ingresa la cantidad de diamantes requerida para VIP:", "Guardar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_PRECIO_VIP_DIAMANTES) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_VIP_DINERO, DIALOG_STYLE_INPUT, "Admin - Precio VIP", "Ingresa el precio en dinero para VIP:", "Siguiente", "Atras");
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new costoDiamantes = strval(inputtext);
+        if(costoDiamantes < 0) return SendClientMessage(playerid, -1, "Cantidad de diamantes invalida.");
+        PrecioMembresiaVIPDinero = AdminPrecioVipDineroPendiente[playerid];
+        PrecioMembresiaVIPDiamantes = costoDiamantes;
+        new aviso[144];
+        format(aviso, sizeof(aviso), "Precio VIP actualizado: $%d + %d diamante(s).", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes);
+        SendClientMessage(playerid, 0x66FF66FF, aviso);
+        return MostrarMenuAdminPreciosMembresia(playerid);
+    }
+
+    if(dialogid == DIALOG_ADMIN_PRECIO_DIAMANTE) {
+        if(!response) return MostrarMenuAdminPreciosMembresia(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new nuevoPrecio = strval(inputtext);
+        if(nuevoPrecio <= 0) return SendClientMessage(playerid, -1, "Precio invalido. Debe ser mayor a 0.");
+        PrecioDiamanteTienda = nuevoPrecio;
+        new aviso[128];
+        format(aviso, sizeof(aviso), "Precio de diamante actualizado: $%d por unidad.", PrecioDiamanteTienda);
+        SendClientMessage(playerid, 0x66FF66FF, aviso);
+        return MostrarMenuAdminPreciosMembresia(playerid);
     }
 
     if(dialogid == DIALOG_ADMIN_MEMBRESIA_ID) {
@@ -5983,6 +6088,13 @@ public OnPlayerWeaponShot(playerid, WEAPON:weaponid, BULLET_HIT_TYPE:hittype, hi
     return 1;
 }
 
+public OcultarAnuncioJugador(playerid) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    PlayerTextDrawHide(playerid, AnuncioTextDraw[playerid]);
+    AnuncioTimerOcultar[playerid] = -1;
+    return 1;
+}
+
 public OnPlayerDisconnect(playerid, reason) {
     #pragma unused reason
     if(PlayerInCasa[playerid] != -1) {
@@ -5998,6 +6110,8 @@ public OnPlayerDisconnect(playerid, reason) {
         SancionLabel[playerid] = Text3D:-1;
     }
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
+    if(AnuncioTimerOcultar[playerid] != -1) { KillTimer(AnuncioTimerOcultar[playerid]); AnuncioTimerOcultar[playerid] = -1; }
+    PlayerTextDrawDestroy(playerid, AnuncioTextDraw[playerid]);
     PlayerSancionado[playerid] = false;
     GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
@@ -6313,7 +6427,7 @@ stock ContarTrabajosActivos(playerid) {
 
 stock ShowTiendaVirtualMenu(playerid) {
     new body[256];
-    format(body, sizeof(body), "Comprar membresia VIP ($%d + 1 Diamante)\nComprar diamantes ($%d c/u)\nVer mis diamantes", PRECIO_MEMBRESIA_VIP, PRECIO_DIAMANTE_TIENDA);
+    format(body, sizeof(body), "Comprar membresia VIP ($%d + %d Diamante(s))\nComprar diamantes ($%d c/u)\nVer mis diamantes", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
     ShowPlayerDialog(playerid, DIALOG_TIENDA_VIRTUAL_MENU, DIALOG_STYLE_LIST, "Tienda Virtual Kame House", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -6325,6 +6439,34 @@ stock ActualizarBeneficiosMembresia(playerid) {
 
 stock MostrarMenuAdminMembresias(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_ADMIN_MEMBRESIAS_MENU, DIALOG_STYLE_LIST, "Admin - Membresias", "Asignar VIP\nAsignar Diamante\nEliminar membresia", "Abrir", "Atras");
+}
+
+stock MostrarMenuAdminPreciosMembresia(playerid) {
+    if(PlayerAdmin[playerid] < 1) return 0;
+    new cuerpo[256];
+    format(cuerpo, sizeof(cuerpo), "VIP - $%d + %d diamante(s)\nDiamante - $%d c/u", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
+    return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU, DIALOG_STYLE_LIST, "Admin - Editar precios (Y)", cuerpo, "Editar", "Cerrar");
+}
+
+stock MostrarAnuncioJugador(playerid, const texto[]) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    if(AnuncioTimerOcultar[playerid] != -1) {
+        KillTimer(AnuncioTimerOcultar[playerid]);
+        AnuncioTimerOcultar[playerid] = -1;
+    }
+    PlayerTextDrawSetString(playerid, AnuncioTextDraw[playerid], texto);
+    PlayerTextDrawShow(playerid, AnuncioTextDraw[playerid]);
+    AnuncioTimerOcultar[playerid] = SetTimerEx("OcultarAnuncioJugador", 10000, false, "d", playerid);
+    return 1;
+}
+
+stock MostrarAnuncioGlobal(const emisor[], const texto[]) {
+    new anuncio[196];
+    format(anuncio, sizeof(anuncio), "~w~[ANUNCIO] %s: %s", emisor, texto);
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(IsPlayerConnected(i)) MostrarAnuncioJugador(i, anuncio);
+    }
+    return 1;
 }
 
 stock IsNearPrendas(playerid) {
@@ -9122,11 +9264,13 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
     FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
 
     if(PlayerFaccionId[playerid] == -1) {
-        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- Nivel %d - Dinero $%s - Owner -", GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{FFFFFF}- Nivel %d - Dinero $%s -", GetNivelPJ(playerid), dineroCorto);
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", GetNivelPJ(playerid), dineroCorto);
     } else {
-        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- Faccion %s - Nivel %d - Dinero $%s - Owner -", faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{FFFFFF}- Faccion %s - Nivel %d - Dinero $%s -", faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
+        new colorHex[8];
+        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], colorHex, sizeof(colorHex));
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", colorHex, faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {3399FF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", colorHex, faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
     }
 
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 30.0, 0);
