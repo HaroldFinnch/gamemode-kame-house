@@ -282,7 +282,7 @@
 #define POS_FACCION_Y -1663.20
 #define POS_FACCION_Z 13.35
 
-#define MAX_PLANTAS_POR_JUGADOR 5
+#define MAX_PLANTAS_POR_JUGADOR 15
 #define BOLSA_OBJ_MODEL 1264
 #define BASURERO_NPC_SKIN 16
 #define BASURERO_FLORES_CHANCE 30
@@ -884,7 +884,9 @@ stock GetLimiteMaleteroJugador(playerid);
 stock GetLimiteTrabajosJugador(playerid);
 stock GetBonusTrabajoMembresia(playerid);
 stock GetLimiteCasasJugador(playerid);
+stock GetLimitePlantasJugador(playerid);
 stock ExpirarMembresiaSiCorresponde(playerid);
+stock bool:NombreRoleplayValido(const nombre[]);
 stock TieneTrabajoActivo(playerid);
 stock ContarTrabajosActivos(playerid);
 stock MostrarMenuAdminMembresias(playerid);
@@ -998,6 +1000,25 @@ stock strtok_sep(const string[], &index, separator = ' ') {
     result[pos] = EOS;
     index = offset;
     return result;
+}
+
+stock bool:NombreRoleplayValido(const nombre[]) {
+    new largo = strlen(nombre);
+    if(largo < 3 || largo > 24) return false;
+
+    new posGuion = -1;
+    for(new i = 0; i < largo; i++) {
+        new c = nombre[i];
+        if(c == '_') {
+            if(posGuion != -1) return false;
+            posGuion = i;
+            continue;
+        }
+        if(!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) return false;
+    }
+
+    if(posGuion <= 0 || posGuion >= largo - 1) return false;
+    return true;
 }
 
 stock BuscarFaccionLibre();
@@ -1893,7 +1914,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new limiteTrabajos = GetLimiteTrabajosJugador(playerid);
         new bonusTrabajo = GetBonusTrabajoMembresia(playerid);
 
-        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo);
+        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -1995,7 +2016,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/plantar", true)) {
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
-        if(PlantasColocadas[playerid] >= MAX_PLANTAS_POR_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 5 plantas por jugador en casa.");
+        if(PlantasColocadas[playerid] >= GetLimitePlantasJugador(playerid)) {
+            new aviso[96];
+            format(aviso, sizeof(aviso), "Limite alcanzado: maximo %d plantas segun tu membresia.", GetLimitePlantasJugador(playerid));
+            return SendClientMessage(playerid, -1, aviso);
+        }
         ShowPlayerDialog(playerid, DIALOG_PLANTAR, DIALOG_STYLE_LIST, "Plantar", "Hierba verde\nFlores", "Plantar", "Cerrar");
         return 1;
     }
@@ -2048,7 +2073,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/gps", true)) return SendClientMessage(playerid, -1, "El GPS ahora solo se usa desde /telefono.");
 
     if(!strcmp(cmd, "/ayuda", true)) {
-        ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nSistemas\nRol y reglas", "Ver", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nSistemas\nMembresias\nRol y reglas", "Ver", "Cerrar");
         return 1;
     }
 
@@ -2755,6 +2780,14 @@ public OnPlayerText(playerid, text[]) {
 }
 
 public OnPlayerConnect(playerid) {
+    new nombreJugador[MAX_PLAYER_NAME];
+    GetPlayerName(playerid, nombreJugador, sizeof(nombreJugador));
+    if(!NombreRoleplayValido(nombreJugador)) {
+        SendClientMessage(playerid, 0xFF4444FF, "Debes usar formato Nombre_Apellido para jugar (ej: Juan_Perez).");
+        SendClientMessage(playerid, 0xFF4444FF, "Cambia tu nombre antes de registrarte para evitar nombres antirol.");
+        return Kick(playerid);
+    }
+
     IsPlayerLoggedIn[playerid] = false;
     TogglePlayerSpectating(playerid, true);
     TogglePlayerControllable(playerid, false);
@@ -3161,8 +3194,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir. Limites: Normal/VIP 1 casa, Diamante 2 casas.\n\n{66FFFF}Membresias:{FFFFFF}\n- {FFFFFF}Normal: 1 casa y maletero base (5 slots).\n- {FFD54F}VIP: 1 casa, +$100 por entrega de trabajo, maletero de 7 slots.\n- {00E5FF}Diamante: 2 casas, +$500 por entrega de trabajo, maletero de 15 slots.\n\n{AAAAAA}Como obtenerlas:{FFFFFF} compra VIP en Tienda Virtual Kame House (H en el punto), o solicitala a un Owner en eventos/promociones.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
-        if(listitem == 3) return ShowReglasDialog(playerid);
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
+        if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
     }
     if(dialogid == DIALOG_GPS) {
@@ -4581,7 +4615,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_PLANTAR) {
         if(!response) return 1;
         if(PlayerInCasa[playerid] == -1) return SendClientMessage(playerid, -1, "Solo puedes plantar dentro de una casa.");
-        if(PlantasColocadas[playerid] >= MAX_PLANTAS_POR_JUGADOR) return SendClientMessage(playerid, -1, "Limite alcanzado: maximo 5 plantas por jugador en casa.");
+        if(PlantasColocadas[playerid] >= GetLimitePlantasJugador(playerid)) {
+            new aviso[96];
+            format(aviso, sizeof(aviso), "Limite alcanzado: maximo %d plantas segun tu membresia.", GetLimitePlantasJugador(playerid));
+            return SendClientMessage(playerid, -1, aviso);
+        }
 
         new slot = GetPrimerSlotCultivoLibre(playerid);
         if(slot == -1) return SendClientMessage(playerid, -1, "No tienes espacios libres para plantar.");
@@ -4619,7 +4657,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         new plantmsg[120];
-        format(plantmsg, sizeof(plantmsg), "Semilla plantada (%d/%d). Revisa el tiempo en el texto de la planta.", PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
+        format(plantmsg, sizeof(plantmsg), "Semilla plantada (%d/%d). Revisa el tiempo en el texto de la planta.", PlantasColocadas[playerid], GetLimitePlantasJugador(playerid));
         SendClientMessage(playerid, 0x00FF00FF, plantmsg);
         return 1;
     }
@@ -6375,8 +6413,10 @@ stock GetMembresiaColor(tipo) {
 }
 
 stock GetLimiteVehiculosJugador(playerid) {
-    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 5;
-    return 2;
+    ExpirarMembresiaSiCorresponde(playerid);
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 10;
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 3;
+    return 1;
 }
 
 stock GetLimitePrendasJugador(playerid) {
@@ -6406,8 +6446,16 @@ stock GetBonusTrabajoMembresia(playerid) {
 
 stock GetLimiteCasasJugador(playerid) {
     ExpirarMembresiaSiCorresponde(playerid);
-    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 2;
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 10;
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 3;
     return 1;
+}
+
+stock GetLimitePlantasJugador(playerid) {
+    ExpirarMembresiaSiCorresponde(playerid);
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 15;
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 5;
+    return 3;
 }
 
 stock ExpirarMembresiaSiCorresponde(playerid) {
@@ -6939,6 +6987,9 @@ stock CosecharCultivoCercano(playerid) {
     ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
     new extra = random(3);
     new total = CultivoCantidadBase[playerid][slot] + extra;
+    ExpirarMembresiaSiCorresponde(playerid);
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE && random(100) < 30) total *= 4;
+    else if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP && random(100) < 30) total *= 2;
     new semillasExtra = 0;
     new bool:esHierba = (CultivoTipo[playerid][slot] == 1);
     if(esHierba) InvHierba[playerid] += total;
@@ -6959,7 +7010,7 @@ stock CosecharCultivoCercano(playerid) {
 
     new ok[160], tipo[16];
     format(tipo, sizeof(tipo), esHierba ? "hierba" : "flores");
-    format(ok, sizeof(ok), "Cosechaste %d %s y %d semilla(s). Plantas activas: %d/%d.", total, tipo, semillasExtra, PlantasColocadas[playerid], MAX_PLANTAS_POR_JUGADOR);
+    format(ok, sizeof(ok), "Cosechaste %d %s y %d semilla(s). Plantas activas: %d/%d.", total, tipo, semillasExtra, PlantasColocadas[playerid], GetLimitePlantasJugador(playerid));
     SendClientMessage(playerid, 0x00FF00FF, ok);
     return 1;
 }
@@ -7086,7 +7137,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} Normal (1 casa), VIP (1 casa) y Diamante (2 casas), bonus en trabajos y beneficios en tienda virtual.\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -8799,15 +8850,40 @@ stock CargarTiendaVirtualConfig() {
     new File:h = fopen(PATH_TIENDA_VIRTUAL, io_read), line[96];
     if(!h) return GuardarTiendaVirtualConfig();
 
-    if(fread(h, line)) {
-        new idx = 0;
-        new vipDinero = strval(strtok(line, idx));
-        new vipDiamantes = strval(strtok(line, idx));
-        new precioDiamante = strval(strtok(line, idx));
+    while(fread(h, line)) {
+        if(!line[0] || line[0] == '\n' || line[0] == '\r' || line[0] == '#') continue;
 
-        if(vipDinero > 0) PrecioMembresiaVIPDinero = vipDinero;
-        if(vipDiamantes >= 0) PrecioMembresiaVIPDiamantes = vipDiamantes;
-        if(precioDiamante > 0) PrecioDiamanteTienda = precioDiamante;
+        if(strfind(line, "VIP_DINERO=", true) == 0) {
+            new valor[16];
+            strmid(valor, line, 11, strlen(line), sizeof(valor));
+            new vipDinero = strval(valor);
+            if(vipDinero > 0) PrecioMembresiaVIPDinero = vipDinero;
+            continue;
+        }
+
+        if(strfind(line, "VIP_DIAMANTES=", true) == 0) {
+            new valor[16];
+            strmid(valor, line, 14, strlen(line), sizeof(valor));
+            new vipDiamantes = strval(valor);
+            if(vipDiamantes >= 0) PrecioMembresiaVIPDiamantes = vipDiamantes;
+            continue;
+        }
+
+        if(strfind(line, "DIAMANTE_PRECIO=", true) == 0) {
+            new valor[16];
+            strmid(valor, line, 15, strlen(line), sizeof(valor));
+            new precioDiamante = strval(valor);
+            if(precioDiamante > 0) PrecioDiamanteTienda = precioDiamante;
+            continue;
+        }
+
+        new idx = 0;
+        new vipDineroLegacy = strval(strtok(line, idx));
+        new vipDiamantesLegacy = strval(strtok(line, idx));
+        new precioDiamanteLegacy = strval(strtok(line, idx));
+        if(vipDineroLegacy > 0) PrecioMembresiaVIPDinero = vipDineroLegacy;
+        if(vipDiamantesLegacy >= 0) PrecioMembresiaVIPDiamantes = vipDiamantesLegacy;
+        if(precioDiamanteLegacy > 0) PrecioDiamanteTienda = precioDiamanteLegacy;
     }
 
     fclose(h);
@@ -8821,7 +8897,11 @@ stock GuardarTiendaVirtualConfig() {
     if(!h) return 0;
 
     new line[96];
-    format(line, sizeof(line), "%d %d %d\n", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
+    format(line, sizeof(line), "VIP_DINERO=%d\n", PrecioMembresiaVIPDinero);
+    fwrite(h, line);
+    format(line, sizeof(line), "VIP_DIAMANTES=%d\n", PrecioMembresiaVIPDiamantes);
+    fwrite(h, line);
+    format(line, sizeof(line), "DIAMANTE_PRECIO=%d\n", PrecioDiamanteTienda);
     fwrite(h, line);
 
     fclose(h);
