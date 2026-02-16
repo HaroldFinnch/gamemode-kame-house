@@ -95,7 +95,6 @@
 #define PATH_HORNOS "hornos.txt"
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
-#define PATH_BANDAS_SPAWNS "bandas_spawns.txt"
 #define PATH_FACCIONES "facciones.txt"
 #define PATH_FACCIONES_BAK "facciones.bak"
 #define PATH_FACCIONES_LEGACY "scriptfiles/kame_house/facciones.txt"
@@ -243,9 +242,6 @@
 #define DIALOG_DUDA_TEXTO 108
 #define DIALOG_RD_TARGET 109
 #define DIALOG_RD_RESPUESTA 110
-#define DIALOG_ADMIN_BANDAS_MENU 116
-#define DIALOG_ADMIN_BANDAS_SPAWN_BORRAR 117
-#define DIALOG_ADMIN_BANDAS_SPAWN_CONFIRM 118
 
 #define RANGO_NINGUNO 0
 #define RANGO_DUENO 1
@@ -289,25 +285,9 @@
 #define GAS_PRECIO_POR_PUNTO 10
 #define GAS_CONSUMO_POR_MINUTO 5
 
-#define MAX_BANDAS_PVE 30
 #define MAX_FACCIONES 30
 #define MAX_MIEMBROS_FACCION 10
 #define MAX_COLORES_FACCION 10
-#define MAX_BANDEROS_POR_GRUPO 5
-#define MAX_BANDA_SPAWNS 30
-#define MIN_BANDEROS_POR_GRUPO 2
-#define VIDA_BANDERO_PVE 200.0
-#define BANDA_RANGO_VISION 35.0
-#define BANDA_DANO_MIN 6.0
-#define BANDA_DANO_MAX 14.0
-#define BANDA_INACTIVA_MS 300000
-#define BANDA_DROP_DINERO_MAX 800
-#define BANDA_DISTANCIA_ATAQUE 18.0
-#define BANDA_DISTANCIA_CUERPO 2.6
-#define BANDA_PASO_CORRER 1.25
-#define BANDA_PASO_CAMINAR 0.55
-#define BANDA_PASO_PATRULLA 0.38
-#define BANDA_RECALCULO_PATRULLA_MS 4500
 
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
@@ -444,8 +424,6 @@ static const Float:CasaInteriorPos[5][3] = {
     {2318.16, -1026.75, 1050.21}
 };
 
-new Float:BandaSpawnPos[MAX_BANDA_SPAWNS][4];
-new TotalBandaSpawns;
 
 enum eFaccionData {
     bool:facActiva,
@@ -601,26 +579,11 @@ new bool:PlayerSancionado[MAX_PLAYERS];
 new SancionConcepto[MAX_PLAYERS];
 new SancionAdminIdPendiente[MAX_PLAYERS] = {-1, ...};
 new UnsanTargetPendiente[MAX_PLAYERS] = {-1, ...};
-new BandaSpawnBorrarPendiente[MAX_PLAYERS] = {-1, ...};
 new SancionFinTick[MAX_PLAYERS];
 new Float:SancionPos[MAX_PLAYERS][3];
 new SancionPrevVW[MAX_PLAYERS];
 new SancionPrevInterior[MAX_PLAYERS];
 new Text3D:SancionLabel[MAX_PLAYERS] = {Text3D:-1, ...};
-new bool:BandasPVEActivas = true;
-new bool:BandaGrupoActivo[MAX_BANDAS_PVE];
-new BandaGrupoMiembros[MAX_BANDAS_PVE];
-new BandaUltimaAccionTick[MAX_BANDAS_PVE];
-new Float:BandaGrupoCentro[MAX_BANDAS_PVE][3];
-new BandaActorId[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
-new BandaArmaObjetoId[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
-new Float:BandaVida[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
-new BandaArma[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
-new bool:BandaVivo[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
-new BandaGrupoAtacandoA[MAX_BANDAS_PVE] = {-1, ...};
-new BandaSpawnAsignado[MAX_BANDAS_PVE] = {-1, ...};
-new Float:BandaPatrullaObjetivo[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO][2];
-new BandaPatrullaRecalculoTick[MAX_BANDAS_PVE][MAX_BANDEROS_POR_GRUPO];
 new UltimoControlArmaProhibidaTick[MAX_PLAYERS];
 
 #define MAX_AUTOS_VENTA 20
@@ -799,7 +762,6 @@ forward FinalizarCajaBusqueda(playerid, cajaidx);
 forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
 forward TeleportVehiculoLlamado(playerid);
-forward ProcesarBandasPVE();
 forward OcultarAnuncioJugador(playerid);
 stock CargarMinas();
 stock GuardarMinas();
@@ -810,6 +772,7 @@ stock GuardarCajasLoot();
 stock CargarPrepiezaPoints();
 stock GuardarPrepiezaPoints();
 stock MostrarDialogoAdmin(playerid);
+stock MostrarPanelStaffSegunRango(playerid);
 stock AplicarTexturaMinaEstatica(objectid);
 stock ObtenerDatosCrafteoArmero(tier, listitem, &weaponid, weaponName[], weaponNameLen, &needM, &needH, &needP, &needPr, &needC);
 stock GetHornoMasCercano(playerid);
@@ -1039,19 +1002,8 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos);
 stock RemoverSancionJugador(targetid);
 stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
-stock InicializarSistemaBandasPVE();
-stock LimpiarBandasPVE();
-stock CrearGrupoBandaPVE(slot);
-stock RespawnBandasPVE();
-stock EncontrarBanderoCercano(Float:x, Float:y, Float:z, &grupo, &miembro);
-stock GetNombreArmaPVE(weaponid, dest[], len);
-stock CargarBandasSpawns();
-stock GuardarBandasSpawns();
 stock EnviarEntornoAccion(playerid, const accion[]);
-stock LimpiarIconosBandasParaJugador(playerid);
 stock bool:EsArmaProhibida(weaponid);
-stock ShowAdminBandasSpawnBorrarList(playerid);
-stock EliminarSpawnBandaPorIndice(index);
 
 stock ResetMaleteroVehiculo(vehid, ownerid = -1) {
     if(vehid <= 0 || vehid >= MAX_VEHICLES) return 0;
@@ -2204,14 +2156,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-
-    if(!strcmp(cmd, "/crearbanda", true) || !strcmp(cmd, "/borrarbanda", true)) {
-        return SendClientMessage(playerid, -1, "El sistema de Bandas fue eliminado de esta gamemode.");
-    }
-
-
-
-
     if(!EsStaff(playerid)) return SendClientMessage(playerid, 0xFF4444FF, "[SEERVER] Comando no encontrado en Kame House RP");
 
     if(!strcmp(cmd, "/crearparada", true)) {
@@ -2906,7 +2850,6 @@ public OnPlayerConnect(playerid) {
     SancionConcepto[playerid] = 0;
     SancionAdminIdPendiente[playerid] = -1;
     UnsanTargetPendiente[playerid] = -1;
-    BandaSpawnBorrarPendiente[playerid] = -1;
     MineroGPSActivo[playerid] = false;
     OmitirArmasEnProximoSpawn[playerid] = false;
     PlayerFaccionId[playerid] = -1;
@@ -4181,7 +4124,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_ADMIN_DAR_MINERAL_ID) { if(!response) return ShowPlayerDialog(playerid,DIALOG_ADMIN_DAR_MINERAL_MONTO,DIALOG_STYLE_INPUT,"Admin - Dar minerales","Monto","Siguiente","Atras"); new id=strval(inputtext),cant=AdminMineralCantidadPendiente[playerid],tipo=AdminMineralTipoPendiente[playerid]; if(!IsPlayerConnected(id)||cant<=0||tipo<0) return SendClientMessage(playerid,-1,"Datos invalidos."); if(tipo==0) InvPiedra[id]+=cant; else if(tipo==1) InvCobre[id]+=cant; else if(tipo==2) InvHierroMineral[id]+=cant; else if(tipo==3) InvMadera[id]+=cant; else if(tipo==4) InvPolvora[id]+=cant; else if(tipo==5) InvPrepieza[id]+=cant; else InvCarbon[id]+=cant; return SendClientMessage(playerid,0x66FF66FF,"Minerales entregados."); }
 
     if(dialogid == DIALOG_ADMIN_IR_JUGADOR_ID) {
-        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!response) return MostrarPanelStaffSegunRango(playerid);
         if(PlayerAdmin[playerid] < 1) return 1;
         new id = strval(inputtext);
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
@@ -4285,7 +4228,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
     if(dialogid == DIALOG_ADMIN_SANCION_CONCEPTO) {
-        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!response) return MostrarPanelStaffSegunRango(playerid);
         if(PlayerAdmin[playerid] < 1) return 1;
         if(listitem < 0 || listitem > 8) return 1;
         SancionConcepto[playerid] = listitem;
@@ -4311,7 +4254,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
     if(dialogid == DIALOG_ADMIN_UNSAN_ID) {
-        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!response) return MostrarPanelStaffSegunRango(playerid);
         if(!EsStaff(playerid)) return 1;
         new id = strval(inputtext);
         if(!IsPlayerConnected(id) || !PlayerSancionado[id]) return SendClientMessage(playerid, -1, "ID invalido o el jugador no esta sancionado.");
@@ -4333,69 +4276,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         SendClientMessageToAll(0x66FF66FF, msg);
         return 1;
     }
-
-    if(dialogid == DIALOG_ADMIN_BANDAS_MENU) {
-        if(!response) return MostrarDialogoAdmin(playerid);
-        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        if(listitem == 0) {
-            BandasPVEActivas = true;
-            SendClientMessage(playerid, 0x66FF66FF, "[Bandas PVE] Sistema activado.");
-        } else if(listitem == 1) {
-            DesactivarSistemaBandasPVE();
-            SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Sistema desactivado.");
-        } else if(listitem == 2) {
-            if(!BandasPVEActivas) return SendClientMessage(playerid, 0xFFAA00FF, "[Bandas PVE] Activa el sistema antes de reiniciar.");
-            RespawnBandasPVE();
-            SendClientMessage(playerid, 0x66CCFFFF, "[Bandas PVE] Bandas reiniciadas.");
-        } else if(listitem == 3) {
-            new cmdCrearBanda[] = "/crearbanda";
-            return OnPlayerCommandText(playerid, cmdCrearBanda);
-        } else if(listitem == 4) {
-            return ShowAdminBandasSpawnBorrarList(playerid);
-        }
-        return MostrarDialogoAdmin(playerid);
-    }
-
-    if(dialogid == DIALOG_ADMIN_BANDAS_SPAWN_BORRAR) {
-        if(!response) {
-            new textoBandas[144];
-            format(textoBandas, sizeof(textoBandas), "Sistema de Bandas PVE: %s\nSpawns cargados: %d/%d\n\nActivar sistema\nDesactivar sistema\nReiniciar bandas\nAgregar spawn aqui\nBorrar spawn por lista", BandasPVEActivas ? "ACTIVO" : "INACTIVO", TotalBandaSpawns, MAX_BANDA_SPAWNS);
-            return ShowPlayerDialog(playerid, DIALOG_ADMIN_BANDAS_MENU, DIALOG_STYLE_LIST, "Admin - Bandas", textoBandas, "Seleccionar", "Atras");
-        }
-        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        if(listitem < 0 || listitem >= TotalBandaSpawns) return SendClientMessage(playerid, -1, "Indice invalido de spawn.");
-
-        BandaSpawnBorrarPendiente[playerid] = listitem;
-        new texto[160];
-        format(texto, sizeof(texto), "Vas a eliminar el punto ID %d\nPosicion: X %.2f | Y %.2f | Z %.2f\n\nEsta accion no se puede deshacer.", listitem, BandaSpawnPos[listitem][0], BandaSpawnPos[listitem][1], BandaSpawnPos[listitem][2]);
-        return ShowPlayerDialog(playerid, DIALOG_ADMIN_BANDAS_SPAWN_CONFIRM, DIALOG_STYLE_MSGBOX, "Bandas - Confirmar borrado", texto, "Eliminar punto", "Volver");
-    }
-
-    if(dialogid == DIALOG_ADMIN_BANDAS_SPAWN_CONFIRM) {
-        if(!response) return ShowAdminBandasSpawnBorrarList(playerid);
-        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-
-        new idxBorrar = BandaSpawnBorrarPendiente[playerid];
-        BandaSpawnBorrarPendiente[playerid] = -1;
-        MineroGPSActivo[playerid] = false;
-        OmitirArmasEnProximoSpawn[playerid] = false;
-        PlayerFaccionId[playerid] = -1;
-        PlayerFaccionRango[playerid] = 0;
-        InvitacionFaccionId[playerid] = -1;
-        InvitacionFaccionOwner[playerid] = -1;
-        FaccionCrearColorPendiente[playerid] = -1;
-        FaccionCrearCompraColor[playerid] = false;
-        FaccionAdminSeleccion[playerid] = -1;
-        if(!EliminarSpawnBandaPorIndice(idxBorrar)) return SendClientMessage(playerid, -1, "No se pudo borrar el punto seleccionado.");
-
-        GuardarBandasSpawns();
-        RespawnBandasPVE();
-        new msg[96];
-        format(msg, sizeof(msg), "Spawn de banda ID %d eliminado.", idxBorrar);
-        SendClientMessage(playerid, 0xFFAA00FF, msg);
-        return ShowAdminBandasSpawnBorrarList(playerid);
-    }
-
     if(dialogid == DIALOG_ADMIN_MODO_DIOS) {
         if(!response) return MostrarDialogoAdmin(playerid);
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
@@ -5577,436 +5457,6 @@ public SubirTiempoJugado() {
     return 1;
 }
 
-stock GetNombreArmaPVE(weaponid, dest[], len) {
-    if(weaponid == 22) return format(dest, len, "Colt 45");
-    if(weaponid == 23) return format(dest, len, "Silenciada");
-    if(weaponid == 24) return format(dest, len, "Desert Eagle");
-    if(weaponid == 25) return format(dest, len, "Escopeta");
-    if(weaponid == 29) return format(dest, len, "MP5");
-    if(weaponid == 30) return format(dest, len, "AK-47");
-    if(weaponid == 31) return format(dest, len, "M4");
-    if(weaponid == 3) return format(dest, len, "Palo de billar");
-    if(weaponid == 4) return format(dest, len, "Cuchillo");
-    return format(dest, len, "Arma %d", weaponid);
-}
-
-stock LimpiarBandasPVE() {
-    for(new g = 0; g < MAX_BANDAS_PVE; g++) {
-        BandaGrupoActivo[g] = false;
-        BandaGrupoMiembros[g] = 0;
-        BandaUltimaAccionTick[g] = 0;
-        BandaGrupoAtacandoA[g] = -1;
-        BandaSpawnAsignado[g] = -1;
-        for(new m = 0; m < MAX_BANDEROS_POR_GRUPO; m++) {
-            if(BandaActorId[g][m] != INVALID_ACTOR_ID) DestroyActor(BandaActorId[g][m]);
-            BandaActorId[g][m] = INVALID_ACTOR_ID;
-            if(BandaArmaObjetoId[g][m] != INVALID_OBJECT_ID) DestroyObject(BandaArmaObjetoId[g][m]);
-            BandaArmaObjetoId[g][m] = INVALID_OBJECT_ID;
-            BandaVida[g][m] = 0.0;
-            BandaArma[g][m] = 0;
-            BandaVivo[g][m] = false;
-            BandaPatrullaObjetivo[g][m][0] = 0.0;
-            BandaPatrullaObjetivo[g][m][1] = 0.0;
-            BandaPatrullaRecalculoTick[g][m] = 0;
-        }
-    }
-    for(new i = 0; i < MAX_PLAYERS; i++) if(IsPlayerConnected(i)) LimpiarIconosBandasParaJugador(i);
-    return 1;
-}
-
-stock GetModeloObjetoArmaBandero(weaponid) {
-    switch(weaponid) {
-        case 22: return 346;
-        case 23: return 347;
-        case 24: return 348;
-        case 25: return 349;
-        case 29: return 353;
-        case 30: return 355;
-        case 31: return 356;
-        case 3: return 336;
-        case 4: return 335;
-    }
-    return 0;
-}
-
-stock ActualizarArmaVisibleBandero(grupo, miembro) {
-    if(grupo < 0 || grupo >= MAX_BANDAS_PVE || miembro < 0 || miembro >= MAX_BANDEROS_POR_GRUPO) return 0;
-
-    if(BandaArmaObjetoId[grupo][miembro] != INVALID_OBJECT_ID) {
-        DestroyObject(BandaArmaObjetoId[grupo][miembro]);
-        BandaArmaObjetoId[grupo][miembro] = INVALID_OBJECT_ID;
-    }
-
-    if(!BandaVivo[grupo][miembro] || BandaActorId[grupo][miembro] == INVALID_ACTOR_ID) return 1;
-
-    new model = GetModeloObjetoArmaBandero(BandaArma[grupo][miembro]);
-    if(model == 0) return 1;
-
-    new Float:x, Float:y, Float:z;
-    GetActorPos(BandaActorId[grupo][miembro], x, y, z);
-    BandaArmaObjetoId[grupo][miembro] = CreateObject(model, x, y, z + 0.85, 0.0, 0.0, 0.0);
-    return 1;
-}
-
-stock AplicarAnimacionBandero(actorid, weaponid, bool:atacando = false, bool:corriendo = false) {
-    if(actorid == INVALID_ACTOR_ID) return 0;
-
-    if(atacando) {
-        switch(weaponid) {
-            case 22, 23:
-                ApplyActorAnimation(actorid, "COLT45", "colt45_fire", 4.1, false, false, false, true, 0);
-            case 24:
-                ApplyActorAnimation(actorid, "COLT45", "sawnoff_reload", 4.1, false, false, false, true, 0);
-            case 25:
-                ApplyActorAnimation(actorid, "SHOTGUN", "shotgun_fire", 4.1, false, false, false, true, 0);
-            case 29:
-                ApplyActorAnimation(actorid, "UZI", "UZI_fire", 4.1, false, false, false, true, 0);
-            case 30, 31:
-                ApplyActorAnimation(actorid, "RIFLE", "RIFLE_fire", 4.1, false, false, false, true, 0);
-            case 3, 4:
-                ApplyActorAnimation(actorid, "KNIFE", "KILL_Knife_Ped_Damage", 4.1, false, false, false, true, 0);
-            default:
-                ApplyActorAnimation(actorid, "PED", "IDLE_GANG1", 4.1, true, false, false, true, 0);
-        }
-        return 1;
-    }
-
-    if(corriendo) {
-        ApplyActorAnimation(actorid, "PED", "JOG_maleA", 4.1, true, false, false, true, 0);
-        return 1;
-    }
-
-    ApplyActorAnimation(actorid, "PED", "WALK_gang1", 4.1, true, false, false, true, 0);
-    return 1;
-}
-
-stock RecalcularPatrullaBandero(grupo, miembro) {
-    if(grupo < 0 || grupo >= MAX_BANDAS_PVE || miembro < 0 || miembro >= MAX_BANDEROS_POR_GRUPO) return 0;
-    if(BandaSpawnAsignado[grupo] < 0 || BandaSpawnAsignado[grupo] >= TotalBandaSpawns) return 0;
-
-    new idxSpawn = BandaSpawnAsignado[grupo];
-    new Float:baseX = BandaSpawnPos[idxSpawn][0];
-    new Float:baseY = BandaSpawnPos[idxSpawn][1];
-    new Float:ox = float(random(900) - 450) / 100.0;
-    new Float:oy = float(random(900) - 450) / 100.0;
-
-    BandaPatrullaObjetivo[grupo][miembro][0] = baseX + ox;
-    BandaPatrullaObjetivo[grupo][miembro][1] = baseY + oy;
-    BandaPatrullaRecalculoTick[grupo][miembro] = GetTickCount();
-    return 1;
-}
-
-stock MoverBanderoHaciaObjetivo(grupo, miembro, Float:tx, Float:ty, Float:distancia) {
-    if(grupo < 0 || grupo >= MAX_BANDAS_PVE || miembro < 0 || miembro >= MAX_BANDEROS_POR_GRUPO) return 0;
-    if(!BandaVivo[grupo][miembro] || BandaActorId[grupo][miembro] == INVALID_ACTOR_ID) return 0;
-
-    new Float:ax, Float:ay, Float:az;
-    GetActorPos(BandaActorId[grupo][miembro], ax, ay, az);
-
-    new Float:dx = tx - ax;
-    new Float:dy = ty - ay;
-    new Float:plano = floatsqroot((dx * dx) + (dy * dy));
-    if(plano < 0.05) return 1;
-
-    new Float:paso = (distancia > BANDA_DISTANCIA_ATAQUE) ? BANDA_PASO_CORRER : BANDA_PASO_CAMINAR;
-    if(distancia < BANDA_DISTANCIA_CUERPO) paso = BANDA_PASO_PATRULLA;
-    if(plano < paso) paso = plano;
-
-    new Float:nx = ax + (dx / plano) * paso;
-    new Float:ny = ay + (dy / plano) * paso;
-    new Float:angulo = atan2(dy, dx);
-
-    SetActorPos(BandaActorId[grupo][miembro], nx, ny, az);
-    SetActorFacingAngle(BandaActorId[grupo][miembro], angulo);
-
-    if(BandaArmaObjetoId[grupo][miembro] != INVALID_OBJECT_ID) {
-        SetObjectPos(BandaArmaObjetoId[grupo][miembro], nx, ny, az + 0.85);
-        SetObjectRot(BandaArmaObjetoId[grupo][miembro], 0.0, 0.0, angulo);
-    }
-    return 1;
-}
-
-stock DesactivarSistemaBandasPVE() {
-    BandasPVEActivas = false;
-    LimpiarBandasPVE();
-    return 1;
-}
-
-stock CrearGrupoBandaPVE(slot) {
-    if(slot < 0 || slot >= MAX_BANDAS_PVE) return 0;
-    if(TotalBandaSpawns <= 0) return 0;
-    new idxSpawn = random(TotalBandaSpawns);
-    new miembros = MIN_BANDEROS_POR_GRUPO + random((MAX_BANDEROS_POR_GRUPO - MIN_BANDEROS_POR_GRUPO) + 1);
-    BandaGrupoActivo[slot] = true;
-    BandaGrupoMiembros[slot] = miembros;
-    BandaUltimaAccionTick[slot] = GetTickCount();
-    BandaGrupoAtacandoA[slot] = -1;
-    BandaSpawnAsignado[slot] = idxSpawn;
-
-    BandaGrupoCentro[slot][0] = BandaSpawnPos[idxSpawn][0];
-    BandaGrupoCentro[slot][1] = BandaSpawnPos[idxSpawn][1];
-    BandaGrupoCentro[slot][2] = BandaSpawnPos[idxSpawn][2];
-
-    static const armasDisponibles[] = {22, 23, 24, 25, 29, 30, 31, 3, 4};
-
-    for(new m = 0; m < MAX_BANDEROS_POR_GRUPO; m++) {
-        if(BandaActorId[slot][m] != INVALID_ACTOR_ID) DestroyActor(BandaActorId[slot][m]);
-        BandaActorId[slot][m] = INVALID_ACTOR_ID;
-        if(BandaArmaObjetoId[slot][m] != INVALID_OBJECT_ID) DestroyObject(BandaArmaObjetoId[slot][m]);
-        BandaArmaObjetoId[slot][m] = INVALID_OBJECT_ID;
-        BandaVida[slot][m] = 0.0;
-        BandaArma[slot][m] = 0;
-        BandaVivo[slot][m] = false;
-        if(m >= miembros) continue;
-
-        new Float:ox = float(random(500) - 250) / 100.0;
-        new Float:oy = float(random(500) - 250) / 100.0;
-        new Float:x = BandaGrupoCentro[slot][0] + ox;
-        new Float:y = BandaGrupoCentro[slot][1] + oy;
-        new Float:z = BandaGrupoCentro[slot][2];
-        new Float:a = BandaSpawnPos[idxSpawn][3] + float(random(90) - 45);
-        new skin = 102 + random(3);
-
-        BandaActorId[slot][m] = CreateActor(skin, x, y, z, a);
-        BandaVida[slot][m] = VIDA_BANDERO_PVE;
-        BandaArma[slot][m] = armasDisponibles[random(sizeof(armasDisponibles))];
-        BandaVivo[slot][m] = true;
-        RecalcularPatrullaBandero(slot, m);
-        SetActorHealth(BandaActorId[slot][m], VIDA_BANDERO_PVE);
-        ActualizarArmaVisibleBandero(slot, m);
-        AplicarAnimacionBandero(BandaActorId[slot][m], BandaArma[slot][m]);
-    }
-    return 1;
-}
-
-stock InicializarSistemaBandasPVE() {
-    LimpiarBandasPVE();
-    if(!BandasPVEActivas) return 1;
-    for(new g = 0; g < MAX_BANDAS_PVE; g++) CrearGrupoBandaPVE(g);
-    return 1;
-}
-
-stock RespawnBandasPVE() {
-    if(!BandasPVEActivas) return 0;
-    LimpiarBandasPVE();
-    for(new g = 0; g < MAX_BANDAS_PVE; g++) CrearGrupoBandaPVE(g);
-    SendClientMessageToAll(0xCC66FFFF, "[Bandas PVE] Las bandas fueron reiniciadas por administracion.");
-    return 1;
-}
-
-stock EncontrarBanderoCercano(Float:x, Float:y, Float:z, &grupo, &miembro) {
-    grupo = -1; miembro = -1;
-    new Float:minDist = 2.2;
-    for(new g = 0; g < MAX_BANDAS_PVE; g++) {
-        if(!BandaGrupoActivo[g]) continue;
-        for(new m = 0; m < BandaGrupoMiembros[g]; m++) {
-            if(!BandaVivo[g][m] || BandaActorId[g][m] == INVALID_ACTOR_ID) continue;
-            new Float:ax, Float:ay, Float:az;
-            GetActorPos(BandaActorId[g][m], ax, ay, az);
-            new Float:dist = GetDistanceBetweenPoints(x, y, z, ax, ay, az);
-            if(dist < minDist) {
-                minDist = dist;
-                grupo = g;
-                miembro = m;
-            }
-        }
-    }
-    return (grupo != -1);
-}
-
-public ProcesarBandasPVE() {
-    if(!BandasPVEActivas) return 1;
-    new now = GetTickCount();
-
-    for(new g = 0; g < MAX_BANDAS_PVE; g++) {
-        if(!BandaGrupoActivo[g]) continue;
-
-        new vivos;
-        for(new m = 0; m < BandaGrupoMiembros[g]; m++) if(BandaVivo[g][m]) vivos++;
-        if(vivos == 0) {
-            CrearGrupoBandaPVE(g);
-            continue;
-        }
-
-        if(now - BandaUltimaAccionTick[g] >= BANDA_INACTIVA_MS) {
-            CrearGrupoBandaPVE(g);
-            continue;
-        }
-
-        new objetivo = -1;
-        new Float:mejor = BANDA_RANGO_VISION;
-        for(new i = 0; i < MAX_PLAYERS; i++) {
-            if(!IsPlayerConnected(i) || !IsPlayerLoggedIn[i]) continue;
-            if(GetPlayerInterior(i) != 0 || GetPlayerVirtualWorld(i) != 0 || PlayerInCasa[i] != -1) continue;
-            new Float:px, Float:py, Float:pz;
-            GetPlayerPos(i, px, py, pz);
-            new Float:d = GetDistanceBetweenPoints(px, py, pz, BandaGrupoCentro[g][0], BandaGrupoCentro[g][1], BandaGrupoCentro[g][2]);
-            if(d < mejor) {
-                mejor = d;
-                objetivo = i;
-            }
-        }
-
-        BandaGrupoAtacandoA[g] = objetivo;
-        for(new i = 0; i < MAX_PLAYERS; i++) {
-            if(!IsPlayerConnected(i) || !IsPlayerLoggedIn[i]) continue;
-            if(objetivo == -1) RemovePlayerMapIcon(i, 60 + g);
-            else SetPlayerMapIcon(i, 60 + g, BandaGrupoCentro[g][0], BandaGrupoCentro[g][1], BandaGrupoCentro[g][2], 0, 0xFF0000FF, MAPICON_LOCAL);
-        }
-
-        if(objetivo != -1) BandaUltimaAccionTick[g] = now;
-
-        new Float:px, Float:py, Float:pz;
-        if(objetivo != -1) GetPlayerPos(objetivo, px, py, pz);
-
-        for(new m = 0; m < BandaGrupoMiembros[g]; m++) {
-            if(!BandaVivo[g][m] || BandaActorId[g][m] == INVALID_ACTOR_ID) continue;
-
-            new Float:ax, Float:ay, Float:az;
-            GetActorPos(BandaActorId[g][m], ax, ay, az);
-
-            if(objetivo == -1) {
-                if(BandaPatrullaRecalculoTick[g][m] == 0 || now - BandaPatrullaRecalculoTick[g][m] >= BANDA_RECALCULO_PATRULLA_MS) {
-                    RecalcularPatrullaBandero(g, m);
-                }
-
-                new Float:patX = BandaPatrullaObjetivo[g][m][0];
-                new Float:patY = BandaPatrullaObjetivo[g][m][1];
-                new Float:patDist = GetDistanceBetweenPoints(ax, ay, az, patX, patY, az);
-                if(patDist <= 0.60) {
-                    RecalcularPatrullaBandero(g, m);
-                    AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m], false, false);
-                    continue;
-                }
-
-                MoverBanderoHaciaObjetivo(g, m, patX, patY, BANDA_DISTANCIA_CUERPO - 0.1);
-                AplicarAnimacionBandero(BandaActorId[g][m], BandaArma[g][m], false, false);
-                continue;
-            }
-
-            new Float:dist = GetDistanceBetweenPoints(ax, ay, az, px, py, pz);
-            new arma = BandaArma[g][m];
-            new bool:esMelee = (arma == 3 || arma == 4);
-
-            if(esMelee) {
-                if(dist > BANDA_DISTANCIA_CUERPO) {
-                    MoverBanderoHaciaObjetivo(g, m, px, py, dist);
-                    AplicarAnimacionBandero(BandaActorId[g][m], arma, false, true);
-                    continue;
-                }
-            } else {
-                if(dist > BANDA_DISTANCIA_ATAQUE) {
-                    MoverBanderoHaciaObjetivo(g, m, px, py, dist);
-                    AplicarAnimacionBandero(BandaActorId[g][m], arma, false, true);
-                    continue;
-                }
-                SetActorFacingAngle(BandaActorId[g][m], atan2(py - ay, px - ax));
-            }
-
-            new Float:vida;
-            GetPlayerHealth(objetivo, vida);
-            if(vida <= 0.0) break;
-
-            new Float:danio = BANDA_DANO_MIN + float(random(floatround((BANDA_DANO_MAX - BANDA_DANO_MIN) * 10.0) + 1)) / 10.0;
-            if(!esMelee && dist > (BANDA_DISTANCIA_CUERPO + 2.0)) danio += 2.0;
-            SetPlayerHealth(objetivo, vida - danio);
-            AplicarAnimacionBandero(BandaActorId[g][m], arma, true, false);
-            PlayerPlaySound(objetivo, 17802, px, py, pz);
-        }
-
-    }
-    return 1;
-}
-
-
-stock EliminarSpawnBandaPorIndice(index) {
-    if(index < 0 || index >= TotalBandaSpawns) return 0;
-    for(new j = index; j < TotalBandaSpawns - 1; j++) {
-        BandaSpawnPos[j][0] = BandaSpawnPos[j + 1][0];
-        BandaSpawnPos[j][1] = BandaSpawnPos[j + 1][1];
-        BandaSpawnPos[j][2] = BandaSpawnPos[j + 1][2];
-        BandaSpawnPos[j][3] = BandaSpawnPos[j + 1][3];
-    }
-    TotalBandaSpawns--;
-    return 1;
-}
-
-stock ShowAdminBandasSpawnBorrarList(playerid) {
-    if(TotalBandaSpawns <= 0) return SendClientMessage(playerid, -1, "No hay spawns de banda para borrar.");
-
-    new list[2048], line[128];
-    list[0] = EOS;
-    for(new i = 0; i < TotalBandaSpawns; i++) {
-        format(line, sizeof(line), "ID %d | X: %.1f Y: %.1f Z: %.1f", i, BandaSpawnPos[i][0], BandaSpawnPos[i][1], BandaSpawnPos[i][2]);
-        strcat(list, line);
-        if(i < TotalBandaSpawns - 1) strcat(list, "\n");
-    }
-    return ShowPlayerDialog(playerid, DIALOG_ADMIN_BANDAS_SPAWN_BORRAR, DIALOG_STYLE_LIST, "Bandas - Selecciona punto a borrar", list, "Seleccionar punto", "Atras");
-}
-
-stock CargarBandasSpawns() {
-    TotalBandaSpawns = 0;
-    new File:h = fopen(PATH_BANDAS_SPAWNS, io_read);
-    new line[128];
-    if(h) {
-        while(fread(h, line)) {
-            LimpiarLinea(line);
-            if(!line[0]) continue;
-            if(TotalBandaSpawns >= MAX_BANDA_SPAWNS) break;
-            new Float:x, Float:y, Float:z, Float:a;
-            new idx = 0;
-            x = floatstr(strtok(line, idx));
-            y = floatstr(strtok(line, idx));
-            z = floatstr(strtok(line, idx));
-            a = floatstr(strtok(line, idx));
-            BandaSpawnPos[TotalBandaSpawns][0] = x;
-            BandaSpawnPos[TotalBandaSpawns][1] = y;
-            BandaSpawnPos[TotalBandaSpawns][2] = z;
-            BandaSpawnPos[TotalBandaSpawns][3] = a;
-            TotalBandaSpawns++;
-        }
-        fclose(h);
-    }
-    if(TotalBandaSpawns == 0) {
-        BandaSpawnPos[0][0] = 1958.40; BandaSpawnPos[0][1] = -1115.20; BandaSpawnPos[0][2] = 26.60; BandaSpawnPos[0][3] = 90.0;
-        BandaSpawnPos[1][0] = 2215.70; BandaSpawnPos[1][1] = -1723.30; BandaSpawnPos[1][2] = 13.30; BandaSpawnPos[1][3] = 180.0;
-        BandaSpawnPos[2][0] = 2060.30; BandaSpawnPos[2][1] = -1901.10; BandaSpawnPos[2][2] = 13.20; BandaSpawnPos[2][3] = 0.0;
-        BandaSpawnPos[3][0] = 1688.40; BandaSpawnPos[3][1] = -2102.40; BandaSpawnPos[3][2] = 13.10; BandaSpawnPos[3][3] = 45.0;
-        BandaSpawnPos[4][0] = 1510.50; BandaSpawnPos[4][1] = -1678.10; BandaSpawnPos[4][2] = 13.10; BandaSpawnPos[4][3] = 270.0;
-        TotalBandaSpawns = 5;
-        GuardarBandasSpawns();
-    }
-    return 1;
-}
-
-stock GuardarBandasSpawns() {
-    new File:h = fopen(PATH_BANDAS_SPAWNS, io_write);
-    if(!h) return 0;
-    new line[128];
-    for(new i = 0; i < TotalBandaSpawns; i++) {
-        format(line, sizeof(line), "%f %f %f %f\n", BandaSpawnPos[i][0], BandaSpawnPos[i][1], BandaSpawnPos[i][2], BandaSpawnPos[i][3]);
-        fwrite(h, line);
-    }
-    fclose(h);
-    return 1;
-}
-
-stock EnviarEntornoAccion(playerid, const accion[]) {
-    new string[196], name[MAX_PLAYER_NAME], Float:p[3];
-    GetPlayerName(playerid, name, sizeof(name));
-    GetPlayerPos(playerid, p[0], p[1], p[2]);
-    format(string, sizeof(string), "[ENTORNO] %s %s", name, accion);
-    for(new i = 0; i < MAX_PLAYERS; i++) {
-        if(IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, RADIO_CHAT_LOCAL + 10.0, p[0], p[1], p[2])) SendClientMessage(i, 0x33CC33FF, string);
-    }
-    return 1;
-}
-
-stock LimpiarIconosBandasParaJugador(playerid) {
-    for(new g = 0; g < MAX_BANDAS_PVE; g++) RemovePlayerMapIcon(playerid, 60 + g);
-    return 1;
-}
-
 stock bool:EsArmaProhibida(weaponid) {
     return weaponid == 16 || weaponid == 17 || weaponid == 18 || weaponid == 35 || weaponid == 36 || weaponid == 37 || weaponid == 38 || weaponid == 39;
 }
@@ -6062,74 +5512,6 @@ public AutoGuardadoGlobal() {
 
 public OnGameModeExit() {
     AutoGuardadoGlobal();
-    LimpiarBandasPVE();
-    return 1;
-}
-
-public OnPlayerWeaponShot(playerid, WEAPON:weaponid, BULLET_HIT_TYPE:hittype, hitid, Float:fX, Float:fY, Float:fZ) {
-    #pragma unused hitid
-    if(!BandasPVEActivas) return 1;
-    if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 1;
-    if(hittype != BULLET_HIT_TYPE_NONE && hittype != BULLET_HIT_TYPE_PLAYER && hittype != BULLET_HIT_TYPE_VEHICLE) return 1;
-
-    new grupo, miembro;
-    if(!EncontrarBanderoCercano(fX, fY, fZ, grupo, miembro)) return 1;
-
-    new Float:damage;
-    switch(_:weaponid) {
-        case 34: damage = 95.0;
-        case 33: damage = 72.0;
-        case 31: damage = 44.0;
-        case 30: damage = 40.0;
-        case 29: damage = 34.0;
-        case 25, 27: damage = 46.0;
-        case 24: damage = 52.0;
-        case 23: damage = 30.0;
-        case 22: damage = 24.0;
-        case 4, 8: damage = 18.0;
-        case 3: damage = 20.0;
-        default: damage = 14.0;
-    }
-
-    BandaVida[grupo][miembro] -= damage;
-    BandaUltimaAccionTick[grupo] = GetTickCount();
-    BandaGrupoAtacandoA[grupo] = playerid;
-    PlayerPlaySound(playerid, 17802, fX, fY, fZ);
-
-    if(BandaVida[grupo][miembro] > 0.0) {
-        if(BandaActorId[grupo][miembro] != INVALID_ACTOR_ID) SetActorHealth(BandaActorId[grupo][miembro], BandaVida[grupo][miembro]);
-        return 1;
-    }
-
-    BandaVivo[grupo][miembro] = false;
-    BandaVida[grupo][miembro] = 0.0;
-    if(BandaActorId[grupo][miembro] != INVALID_ACTOR_ID) {
-        DestroyActor(BandaActorId[grupo][miembro]);
-        BandaActorId[grupo][miembro] = INVALID_ACTOR_ID;
-    }
-    if(BandaArmaObjetoId[grupo][miembro] != INVALID_OBJECT_ID) {
-        DestroyObject(BandaArmaObjetoId[grupo][miembro]);
-        BandaArmaObjetoId[grupo][miembro] = INVALID_OBJECT_ID;
-    }
-
-    new roll = random(100);
-    if(roll < 35) {
-        new dinero = 100 + random(BANDA_DROP_DINERO_MAX - 99);
-        GivePlayerMoney(playerid, dinero);
-        new msg[96];
-        format(msg, sizeof(msg), "[Bandas PVE] Eliminaste un bandero y encontro $%d.", dinero);
-        SendClientMessage(playerid, 0x66FF66FF, msg);
-    } else if(roll < 41) {
-        new arma = BandaArma[grupo][miembro];
-        new muni = 12 + random(40);
-        GivePlayerWeapon(playerid, WEAPON:arma, muni);
-        new armaNombre[32], msg[128];
-        GetNombreArmaPVE(arma, armaNombre, sizeof(armaNombre));
-        format(msg, sizeof(msg), "[Bandas PVE] Drop raro: recogiste %s con %d balas.", armaNombre, muni);
-        SendClientMessage(playerid, 0xB388FFFF, msg);
-    } else {
-        SendClientMessage(playerid, 0xAAAAAAFF, "[Bandas PVE] Eliminaste un bandero, no solto loot.");
-    }
     return 1;
 }
 
@@ -8055,6 +7437,12 @@ stock MostrarDialogoAdmin(playerid) {
 
 stock MostrarDialogoMod(playerid) {
     ShowPlayerDialog(playerid, DIALOG_MOD_MENU, DIALOG_STYLE_LIST, "{85C1E9}Panel Moderador", "{58D68D}Ir a jugador (ID)\n{58D68D}Traer jugador (ID)\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{5DADE2}Teleport a marca (/tp)\n{5DADE2}Fly\n{5DADE2}Reparar vehiculo (/rc)", "Abrir", "Cerrar");
+    return 1;
+}
+
+stock MostrarPanelStaffSegunRango(playerid) {
+    if(EsDueno(playerid)) return MostrarDialogoAdmin(playerid);
+    if(EsModerador(playerid)) return MostrarDialogoMod(playerid);
     return 1;
 }
 
