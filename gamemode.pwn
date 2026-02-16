@@ -2659,48 +2659,48 @@ public OnPlayerConnect(playerid) {
     UltimoControlArmaProhibidaTick[playerid] = 0;
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaVisibleObj[playerid][w] = INVALID_OBJECT_ID;
 
-    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 510.0, 150.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.7);
-    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 565.0, 0.0);
+    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.55);
+    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 326.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambreFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraHambreFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawFont(playerid, BarraHambreFondo[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 496.0, 149.0, "H");
-    PlayerTextDrawLetterSize(playerid, TextoBarraHambre[playerid], 0.18, 0.75);
+    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 272.0, 408.4, "H");
+    PlayerTextDrawLetterSize(playerid, TextoBarraHambre[playerid], 0.16, 0.62);
     PlayerTextDrawAlignment(playerid, TextoBarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraHambre[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 510.0, 150.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.7);
-    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 565.0, 0.0);
+    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.55);
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 326.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawUseBox(playerid, BarraHambre[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 492.0, 162.5, "Gas");
-    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.18, 0.75);
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 269.0, 417.2, "Gas");
+    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.16, 0.62);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 510.0, 163.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.7);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 565.0, 0.0);
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 418.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.55);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 326.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x00000099);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 510.0, 163.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.7);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 565.0, 0.0);
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 286.0, 418.0, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.55);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 326.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
@@ -2854,8 +2854,6 @@ public OnPlayerSpawn(playerid) {
         }
     }
     OmitirArmasEnProximoSpawn[playerid] = false;
-    PlayerFaccionId[playerid] = -1;
-    PlayerFaccionRango[playerid] = 0;
     InvitacionFaccionId[playerid] = -1;
     InvitacionFaccionOwner[playerid] = -1;
     FaccionCrearColorPendiente[playerid] = -1;
@@ -5061,17 +5059,23 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 GetPlayerName(playerid, nombreCuenta, sizeof(nombreCuenta));
                 for(new f = 0; f < MAX_FACCIONES; f++) {
                     if(!FaccionData[f][facActiva]) continue;
+                    if(FaccionOwnerNombre[f][0] && !strcmp(FaccionOwnerNombre[f], nombreCuenta, true)) {
+                        FaccionData[f][facOwner] = playerid;
+                        GuardarNombreJugadorEnFaccion(playerid, f);
+                    }
                     for(new m = 0; m < MAX_MIEMBROS_FACCION; m++) {
                         if(FaccionMiembroNombre[f][m][0] && !strcmp(FaccionMiembroNombre[f][m], nombreCuenta, true)) {
                             FaccionData[f][facMiembros][m] = playerid;
                             PlayerFaccionId[playerid] = f;
                             PlayerFaccionRango[playerid] = FaccionData[f][facRangos][m];
+                            if(PlayerFaccionRango[playerid] == FACCION_RANGO_OWNER) FaccionData[f][facOwner] = playerid;
                             GuardarNombreJugadorEnFaccion(playerid, f, m);
                             break;
                         }
                     }
                     if(PlayerFaccionId[playerid] != -1) break;
                 }
+                if(PlayerFaccionId[playerid] != -1) GuardarFacciones();
 
                 ActualizarNivelPJ(playerid);
                 SendClientMessage(playerid, 0x66CCFFFF, "{33CCFF}Bienvenido de nuevo a Kame House.");
@@ -6807,8 +6811,8 @@ stock ActualizarBarrasEstado(playerid) {
     if(gas < 0) gas = 0;
     if(gas > 100) gas = 100;
 
-    new Float:anchoMax = 55.0;
-    new Float:inicio = 510.0;
+    new Float:anchoMax = 40.0;
+    new Float:inicio = 286.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicio + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicio + (anchoMax * float(gas) / 100.0), 0.0);
     return 1;
@@ -8805,33 +8809,25 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
 
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
 
-    new texto[256], faccionNombre[24], faccionNombreLimpio[24], colorHex[16], prefijo[16], dineroCorto[16];
+    new texto[256], faccionNombre[24], faccionNombreLimpio[24], dineroCorto[16];
     faccionNombre[0] = EOS;
-    prefijo[0] = EOS;
 
-    if(PlayerFaccionId[playerid] != -1) {
-        format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
-        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], colorHex, sizeof(colorHex));
-    } else {
-        format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
-        format(colorHex, sizeof(colorHex), "FFFFFF");
-    }
+    if(PlayerFaccionId[playerid] != -1) format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
+    else format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
 
     SanearTextoLabel(faccionNombre, faccionNombreLimpio, sizeof(faccionNombreLimpio));
     FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
 
-    if(EsDueno(playerid)) format(prefijo, sizeof(prefijo), "Owner - ");
-
-    format(texto, sizeof(texto), "{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%s{FFFFFF}]",
-        prefijo,
-        colorHex,
-        faccionNombreLimpio,
-        GetNivelPJ(playerid),
-        dineroCorto
-    );
+    if(PlayerFaccionId[playerid] == -1) {
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- Nivel %d - Dinero $%s - Owner -", GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- Nivel %d - Dinero $%s -", GetNivelPJ(playerid), dineroCorto);
+    } else {
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- Faccion %s - Nivel %d - Dinero $%s - Owner -", faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- Faccion %s - Nivel %d - Dinero $%s -", faccionNombreLimpio, GetNivelPJ(playerid), dineroCorto);
+    }
 
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 30.0, 0);
-    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.52);
+    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.46);
     return 1;
 }
 
