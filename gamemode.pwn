@@ -109,6 +109,8 @@
 #define PATH_VENTA_SKINS_LEGACY "venta_skins_config.txt"
 #define PATH_ARMERIA "scriptfiles/kame_house/armeria_config.txt"
 #define PATH_ARMERIA_LEGACY "armeria_config.txt"
+#define PATH_TIENDA_VIRTUAL "scriptfiles/kame_house/tienda_virtual_config.txt"
+#define PATH_TIENDA_VIRTUAL_LEGACY "tienda_virtual_config.txt"
 #define MAX_CASAS           50
 
 #define DIALOG_GPS          10
@@ -491,8 +493,6 @@ new ArmeriaMuniItemJugador[MAX_PLAYERS] = {-1, ...};
 new ArmeriaAdminArmaPendiente[MAX_PLAYERS];
 new bool:PlayerArmaComprada[MAX_PLAYERS][MAX_WEAPON_ID_GM];
 new PlayerAmmoInventario[MAX_PLAYERS][MAX_WEAPON_ID_GM];
-new PlayerArmaVisibleObj[MAX_PLAYERS][MAX_WEAPON_ID_GM];
-new UltimaActualizacionArmaVisibleTick[MAX_PLAYERS];
 
 #define MAX_RUTAS_BASURA 128
 new Float:BasuraRuta[MAX_RUTAS_BASURA][3];
@@ -939,6 +939,8 @@ stock GetVentaSkinByAnyListIndex(listindex);
 stock IsNearVentaSkins(playerid);
 stock CargarArmeriaConfig();
 stock GuardarArmeriaConfig();
+stock CargarTiendaVirtualConfig();
+stock GuardarTiendaVirtualConfig();
 stock SetDefaultCJAnimations(playerid);
 stock CrearPrendasDefault();
 stock ShowPrendasMenu(playerid);
@@ -1002,10 +1004,6 @@ stock bool:AgregarMiembroFaccion(fid, playerid, rango);
 stock RemoverMiembroFaccion(fid, playerid);
 stock ActualizarMiembrosFaccion(fid);
 stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1);
-stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false);
-stock LimpiarArmasVisiblesJugador(playerid);
-stock GetModeloObjetoArmaVisible(weaponid);
-stock ObtenerPosicionArmaVisible(weaponid, indice, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ);
 stock GuardarEditMap();
 stock CargarEditMap();
 stock ShowEditMapMenu(playerid);
@@ -1180,11 +1178,13 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
     MigrarArchivoLegacy(PATH_VENTA_SKINS_LEGACY, PATH_VENTA_SKINS);
     MigrarArchivoLegacy(PATH_ARMERIA_LEGACY, PATH_ARMERIA);
+    MigrarArchivoLegacy(PATH_TIENDA_VIRTUAL_LEGACY, PATH_TIENDA_VIRTUAL);
     MigrarArchivoLegacy(PATH_FACCIONES_LEGACY, PATH_FACCIONES);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
     CargarVentaSkinsConfig();
     CargarArmeriaConfig();
+    CargarTiendaVirtualConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
@@ -2754,7 +2754,6 @@ public OnPlayerConnect(playerid) {
     TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
     UltimoControlArmaProhibidaTick[playerid] = 0;
-    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaVisibleObj[playerid][w] = INVALID_OBJECT_ID;
 
     BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.55);
@@ -2808,11 +2807,11 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.82);
     PlayerTextDrawAlignment(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_ALIGN_RIGHT);
     PlayerTextDrawColour(playerid, AnuncioTextDraw[playerid], 0xFFFFFFFF);
-    PlayerTextDrawBackgroundColour(playerid, AnuncioTextDraw[playerid], 0x00000066);
+    PlayerTextDrawBackgroundColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
     PlayerTextDrawFont(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetProportional(playerid, AnuncioTextDraw[playerid], true);
-    PlayerTextDrawUseBox(playerid, AnuncioTextDraw[playerid], true);
-    PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000055);
+    PlayerTextDrawUseBox(playerid, AnuncioTextDraw[playerid], false);
+    PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
     PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 440.0, 0.0);
     AnuncioTimerOcultar[playerid] = -1;
     PlayerInCasa[playerid] = -1;
@@ -2828,7 +2827,6 @@ public OnPlayerConnect(playerid) {
     BasureroTieneBolsa[playerid] = false;
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
-    LimpiarArmasVisiblesJugador(playerid);
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
@@ -4436,6 +4434,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new aviso[144];
         format(aviso, sizeof(aviso), "Precio VIP actualizado: $%d + %d diamante(s).", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes);
         SendClientMessage(playerid, 0x66FF66FF, aviso);
+        GuardarTiendaVirtualConfig();
         return MostrarMenuAdminPreciosMembresia(playerid);
     }
 
@@ -4448,6 +4447,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new aviso[128];
         format(aviso, sizeof(aviso), "Precio de diamante actualizado: $%d por unidad.", PrecioDiamanteTienda);
         SendClientMessage(playerid, 0x66FF66FF, aviso);
+        GuardarTiendaVirtualConfig();
         return MostrarMenuAdminPreciosMembresia(playerid);
     }
 
@@ -6011,6 +6011,7 @@ public AutoGuardadoGlobal() {
     GuardarVentaAutosConfig();
     GuardarVentaSkinsConfig();
     GuardarArmeriaConfig();
+    GuardarTiendaVirtualConfig();
     GuardarFacciones();
     return 1;
 }
@@ -6128,7 +6129,6 @@ public OnPlayerDisconnect(playerid, reason) {
     BasureroTieneBolsa[playerid] = false;
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
-    LimpiarArmasVisiblesJugador(playerid);
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
@@ -6147,7 +6147,6 @@ public OnPlayerDisconnect(playerid, reason) {
         MaleteroFloresVeh[v] = 0;
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
-    LimpiarArmasVisiblesJugador(playerid);
     return 1;
 }
 
@@ -6286,7 +6285,6 @@ public OnPlayerUpdate(playerid) {
             }
         }
     }
-    ActualizarArmasVisiblesJugador(playerid);
     if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
         new vehid = GetPlayerVehicleID(playerid);
         if(vehid != INVALID_VEHICLE_ID) {
@@ -6317,7 +6315,6 @@ public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
         PlayerAmmoInventario[playerid][w] = 0;
     }
     ResetPlayerWeapons(playerid);
-    LimpiarArmasVisiblesJugador(playerid);
     SetSpawnInfo(playerid, 255, PlayerSkinGuardada[playerid], 2494.24, -1671.19, 13.33, 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
     return 1;
 }
@@ -6462,7 +6459,7 @@ stock MostrarAnuncioJugador(playerid, const texto[]) {
 
 stock MostrarAnuncioGlobal(const emisor[], const texto[]) {
     new anuncio[196];
-    format(anuncio, sizeof(anuncio), "~w~[ANUNCIO] %s: %s", emisor, texto);
+    format(anuncio, sizeof(anuncio), "~g~[ANUNCIO] ~y~%s~w~: ~c~%s", emisor, texto);
     for(new i = 0; i < MAX_PLAYERS; i++) {
         if(IsPlayerConnected(i)) MostrarAnuncioJugador(i, anuncio);
     }
@@ -8780,6 +8777,41 @@ stock CargarArmeriaConfig() {
     return 1;
 }
 
+stock CargarTiendaVirtualConfig() {
+    PrecioMembresiaVIPDinero = PRECIO_MEMBRESIA_VIP;
+    PrecioMembresiaVIPDiamantes = 1;
+    PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
+
+    new File:h = fopen(PATH_TIENDA_VIRTUAL, io_read), line[96];
+    if(!h) return GuardarTiendaVirtualConfig();
+
+    if(fread(h, line)) {
+        new idx = 0;
+        new vipDinero = strval(strtok(line, idx));
+        new vipDiamantes = strval(strtok(line, idx));
+        new precioDiamante = strval(strtok(line, idx));
+
+        if(vipDinero > 0) PrecioMembresiaVIPDinero = vipDinero;
+        if(vipDiamantes >= 0) PrecioMembresiaVIPDiamantes = vipDiamantes;
+        if(precioDiamante > 0) PrecioDiamanteTienda = precioDiamante;
+    }
+
+    fclose(h);
+    return 1;
+}
+
+stock GuardarTiendaVirtualConfig() {
+    new File:h = fopen(PATH_TIENDA_VIRTUAL, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    format(line, sizeof(line), "%d %d %d\n", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
+    fwrite(h, line);
+
+    fclose(h);
+    return 1;
+}
+
 stock GetMinaDisponibleMasCercana(playerid, ignorar = -1) {
     new elegido = -1;
     new Float:px, Float:py, Float:pz;
@@ -9031,149 +9063,6 @@ stock ConvertirColorAHexRGB(color, dest[], len) {
     dest[4] = HexChars[(rgb >> 4) & 0xF];
     dest[5] = HexChars[rgb & 0xF];
     dest[6] = EOS;
-    return 1;
-}
-
-stock GetModeloObjetoArmaVisible(weaponid) {
-    switch(weaponid) {
-        case 1: return 331;
-        case 2: return 333;
-        case 3: return 334;
-        case 4: return 335;
-        case 5: return 336;
-        case 6: return 337;
-        case 7: return 338;
-        case 8: return 339;
-        case 9: return 341;
-        case 10: return 321;
-        case 11: return 322;
-        case 12: return 323;
-        case 13: return 324;
-        case 14: return 325;
-        case 15: return 326;
-        case 22: return 346;
-        case 23: return 347;
-        case 24: return 348;
-        case 25: return 349;
-        case 26: return 350;
-        case 27: return 351;
-        case 28: return 352;
-        case 29: return 353;
-        case 30: return 355;
-        case 31: return 356;
-        case 32: return 372;
-        case 33: return 357;
-        case 34: return 358;
-        case 41: return 365;
-        case 42: return 366;
-        case 43: return 367;
-        case 46: return 371;
-    }
-    return 0;
-}
-
-stock ObtenerPosicionArmaVisible(weaponid, indice, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ) {
-    new fila = indice / 2;
-    new lado = (indice % 2 == 0) ? 1 : -1;
-    offX = 0.0;
-    offY = -0.20;
-    offZ = 0.0;
-    rotX = 0.0;
-    rotY = 0.0;
-    rotZ = 0.0;
-
-    switch(weaponid) {
-        case 22, 23, 24: {
-            offX = 0.13 * lado;
-            offY = -0.03;
-            offZ = -0.12 - (fila * 0.06);
-            rotX = 5.0;
-            rotY = 95.0;
-            rotZ = 80.0 * lado;
-        }
-        case 25, 26, 27: {
-            offX = 0.10 * lado;
-            offY = -0.19;
-            offZ = -0.01 - (fila * 0.06);
-            rotX = 10.0;
-            rotY = 95.0;
-            rotZ = 14.0 * lado;
-        }
-        case 28, 29, 32: {
-            offX = 0.10 * lado;
-            offY = -0.23;
-            offZ = 0.06 + (fila * 0.05);
-            rotX = 0.0;
-            rotY = 88.0;
-            rotZ = 10.0 * lado;
-        }
-        case 30, 31, 33, 34: {
-            offX = 0.11 * lado;
-            offY = -0.27;
-            offZ = 0.14 + (fila * 0.05);
-            rotX = -4.0;
-            rotY = 94.0;
-            rotZ = 7.0 * lado;
-        }
-        case 41, 42, 43, 46: {
-            offX = 0.12 * lado;
-            offY = -0.16;
-            offZ = -0.02 - (fila * 0.05);
-            rotX = 0.0;
-            rotY = 88.0;
-            rotZ = 65.0 * lado;
-        }
-        default: {
-            offX = 0.11 * lado;
-            offY = -0.14;
-            offZ = -0.08 - (fila * 0.05);
-            rotX = 0.0;
-            rotY = 92.0;
-            rotZ = 55.0 * lado;
-        }
-    }
-    return 1;
-}
-
-stock LimpiarArmasVisiblesJugador(playerid) {
-    for(new i = 0; i < MAX_WEAPON_ID_GM; i++) {
-        if(PlayerArmaVisibleObj[playerid][i] != INVALID_OBJECT_ID) {
-            DestroyObject(PlayerArmaVisibleObj[playerid][i]);
-            PlayerArmaVisibleObj[playerid][i] = INVALID_OBJECT_ID;
-        }
-    }
-    return 1;
-}
-
-stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false) {
-    if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 0;
-
-    if(!forzar && GetTickCount() - UltimaActualizacionArmaVisibleTick[playerid] < 1200) return 1;
-    UltimaActualizacionArmaVisibleTick[playerid] = GetTickCount();
-
-    LimpiarArmasVisiblesJugador(playerid);
-    if(IsPlayerInAnyVehicle(playerid) || PlayerSancionado[playerid]) return 1;
-
-    new usados = 0;
-    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
-        if(PlayerAmmoInventario[playerid][w] <= 0 || !PlayerArmaComprada[playerid][w]) continue;
-        if(EsArmaProhibida(w)) continue;
-        if(_:GetPlayerWeapon(playerid) == w) continue;
-
-        new model = GetModeloObjetoArmaVisible(w);
-        if(model == 0) continue;
-
-        new Float:px, Float:py, Float:pz;
-        new Float:offX, Float:offY, Float:offZ, Float:rotX, Float:rotY, Float:rotZ;
-        GetPlayerPos(playerid, px, py, pz);
-        ObtenerPosicionArmaVisible(w, usados, offX, offY, offZ, rotX, rotY, rotZ);
-
-        PlayerArmaVisibleObj[playerid][usados] = CreateObject(model, px, py, pz + 0.8, 0.0, 0.0, 0.0);
-        AttachObjectToPlayer(PlayerArmaVisibleObj[playerid][usados], playerid, offX, offY, offZ, rotX, rotY, rotZ);
-
-        usados++;
-        if(usados >= MAX_WEAPON_ID_GM) break;
-    }
     return 1;
 }
 
