@@ -468,7 +468,7 @@ new ArmeriaMuniItemJugador[MAX_PLAYERS] = {-1, ...};
 new ArmeriaAdminArmaPendiente[MAX_PLAYERS];
 new bool:PlayerArmaComprada[MAX_PLAYERS][MAX_WEAPON_ID_GM];
 new PlayerAmmoInventario[MAX_PLAYERS][MAX_WEAPON_ID_GM];
-new PlayerArmaVisibleObj[MAX_PLAYERS][3] = {{INVALID_OBJECT_ID, INVALID_OBJECT_ID, INVALID_OBJECT_ID}, ...};
+new PlayerArmaVisibleObj[MAX_PLAYERS][MAX_WEAPON_ID_GM];
 new UltimaActualizacionArmaVisibleTick[MAX_PLAYERS];
 
 #define MAX_RUTAS_BASURA 128
@@ -926,6 +926,7 @@ stock GetTelefonoVehiculoByListIndex(playerid, listindex);
 stock GetNombreVehiculoVanilla(modelid, nombre[], len);
 stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0);
 stock FormatearDineroCorto(monto, dest[], len);
+stock SanearTextoLabel(const origen[], destino[], len);
 stock ConvertirColorAHexRGB(color, dest[], len);
 stock InicializarSistemaFacciones();
 stock CargarFacciones();
@@ -954,6 +955,7 @@ stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1);
 stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false);
 stock LimpiarArmasVisiblesJugador(playerid);
 stock GetModeloObjetoArmaVisible(weaponid);
+stock ObtenerPosicionArmaVisible(weaponid, indice, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ);
 stock GuardarEditMap();
 stock CargarEditMap();
 stock ShowEditMapMenu(playerid);
@@ -2655,6 +2657,7 @@ public OnPlayerConnect(playerid) {
     TogglePlayerControllable(playerid, false);
     PlayerHambre[playerid] = 100;
     UltimoControlArmaProhibidaTick[playerid] = 0;
+    for(new w = 0; w < MAX_WEAPON_ID_GM; w++) PlayerArmaVisibleObj[playerid][w] = INVALID_OBJECT_ID;
 
     BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 510.0, 150.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.7);
@@ -8546,8 +8549,21 @@ stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0) {
 
 stock FormatearDineroCorto(monto, dest[], len) {
     if(monto >= 1000000) return format(dest, len, "%dM", monto / 1000000);
-    if(monto >= 1000) return format(dest, len, "%dK", monto / 1000);
+    if(monto >= 1000) return format(dest, len, "%dk", monto / 1000);
     return format(dest, len, "%d", monto);
+}
+
+stock SanearTextoLabel(const origen[], destino[], len) {
+    new j = 0;
+    for(new i = 0; origen[i] != EOS && j < len - 1; i++) {
+        new c = origen[i];
+        if((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' || c == '-') {
+            destino[j++] = c;
+        }
+    }
+    destino[j] = EOS;
+    if(j == 0) format(destino, len, "Sin faccion");
+    return 1;
 }
 
 stock ConvertirColorAHexRGB(color, dest[], len) {
@@ -8557,6 +8573,21 @@ stock ConvertirColorAHexRGB(color, dest[], len) {
 
 stock GetModeloObjetoArmaVisible(weaponid) {
     switch(weaponid) {
+        case 1: return 331;
+        case 2: return 333;
+        case 3: return 334;
+        case 4: return 335;
+        case 5: return 336;
+        case 6: return 337;
+        case 7: return 338;
+        case 8: return 339;
+        case 9: return 341;
+        case 10: return 321;
+        case 11: return 322;
+        case 12: return 323;
+        case 13: return 324;
+        case 14: return 325;
+        case 15: return 326;
         case 22: return 346;
         case 23: return 347;
         case 24: return 348;
@@ -8570,12 +8601,79 @@ stock GetModeloObjetoArmaVisible(weaponid) {
         case 32: return 372;
         case 33: return 357;
         case 34: return 358;
+        case 41: return 365;
+        case 42: return 366;
+        case 43: return 367;
+        case 46: return 371;
     }
     return 0;
 }
 
+stock ObtenerPosicionArmaVisible(weaponid, indice, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ) {
+    new fila = indice / 2;
+    new lado = (indice % 2 == 0) ? 1 : -1;
+    offX = 0.0;
+    offY = -0.20;
+    offZ = 0.0;
+    rotX = 0.0;
+    rotY = 0.0;
+    rotZ = 0.0;
+
+    switch(weaponid) {
+        case 22, 23, 24: {
+            offX = 0.13 * lado;
+            offY = -0.03;
+            offZ = -0.12 - (fila * 0.06);
+            rotX = 5.0;
+            rotY = 95.0;
+            rotZ = 80.0 * lado;
+        }
+        case 25, 26, 27: {
+            offX = 0.10 * lado;
+            offY = -0.19;
+            offZ = -0.01 - (fila * 0.06);
+            rotX = 10.0;
+            rotY = 95.0;
+            rotZ = 14.0 * lado;
+        }
+        case 28, 29, 32: {
+            offX = 0.10 * lado;
+            offY = -0.23;
+            offZ = 0.06 + (fila * 0.05);
+            rotX = 0.0;
+            rotY = 88.0;
+            rotZ = 10.0 * lado;
+        }
+        case 30, 31, 33, 34: {
+            offX = 0.11 * lado;
+            offY = -0.27;
+            offZ = 0.14 + (fila * 0.05);
+            rotX = -4.0;
+            rotY = 94.0;
+            rotZ = 7.0 * lado;
+        }
+        case 41, 42, 43, 46: {
+            offX = 0.12 * lado;
+            offY = -0.16;
+            offZ = -0.02 - (fila * 0.05);
+            rotX = 0.0;
+            rotY = 88.0;
+            rotZ = 65.0 * lado;
+        }
+        default: {
+            offX = 0.11 * lado;
+            offY = -0.14;
+            offZ = -0.08 - (fila * 0.05);
+            rotX = 0.0;
+            rotY = 92.0;
+            rotZ = 55.0 * lado;
+        }
+    }
+    return 1;
+}
+
 stock LimpiarArmasVisiblesJugador(playerid) {
-    for(new i = 0; i < 3; i++) {
+    for(new i = 0; i < MAX_WEAPON_ID_GM; i++) {
         if(PlayerArmaVisibleObj[playerid][i] != INVALID_OBJECT_ID) {
             DestroyObject(PlayerArmaVisibleObj[playerid][i]);
             PlayerArmaVisibleObj[playerid][i] = INVALID_OBJECT_ID;
@@ -8594,21 +8692,24 @@ stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false) {
     if(IsPlayerInAnyVehicle(playerid) || PlayerSancionado[playerid]) return 1;
 
     new usados = 0;
-    for(new w = 22; w <= 34; w++) {
+    for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
         if(PlayerAmmoInventario[playerid][w] <= 0 || !PlayerArmaComprada[playerid][w]) continue;
+        if(EsArmaProhibida(w)) continue;
         if(GetPlayerWeapon(playerid) == w) continue;
 
         new model = GetModeloObjetoArmaVisible(w);
         if(model == 0) continue;
 
         new Float:px, Float:py, Float:pz;
+        new Float:offX, Float:offY, Float:offZ, Float:rotX, Float:rotY, Float:rotZ;
         GetPlayerPos(playerid, px, py, pz);
+        ObtenerPosicionArmaVisible(w, usados, offX, offY, offZ, rotX, rotY, rotZ);
 
-        PlayerArmaVisibleObj[playerid][usados] = CreateObject(model, px, py, pz + 0.8 + (usados * 0.15), 0.0, 0.0, 0.0);
-        AttachObjectToPlayer(PlayerArmaVisibleObj[playerid][usados], playerid, 0.08 + (usados * 0.05), -0.18, 0.07 + (usados * 0.04), 0.0, 90.0, 0.0);
+        PlayerArmaVisibleObj[playerid][usados] = CreateObject(model, px, py, pz + 0.8, 0.0, 0.0, 0.0);
+        AttachObjectToPlayer(PlayerArmaVisibleObj[playerid][usados], playerid, offX, offY, offZ, rotX, rotY, rotZ);
 
         usados++;
-        if(usados >= 3) break;
+        if(usados >= MAX_WEAPON_ID_GM) break;
     }
     return 1;
 }
@@ -8704,7 +8805,7 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
 
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
 
-    new texto[256], faccionNombre[24], colorHex[16], prefijo[16];
+    new texto[256], faccionNombre[24], faccionNombreLimpio[24], colorHex[16], prefijo[16], dineroCorto[16];
     faccionNombre[0] = EOS;
     prefijo[0] = EOS;
 
@@ -8716,18 +8817,21 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
         format(colorHex, sizeof(colorHex), "FFFFFF");
     }
 
+    SanearTextoLabel(faccionNombre, faccionNombreLimpio, sizeof(faccionNombreLimpio));
+    FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
+
     if(EsDueno(playerid)) format(prefijo, sizeof(prefijo), "Owner - ");
 
-    format(texto, sizeof(texto), "{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%d{FFFFFF}]",
+    format(texto, sizeof(texto), "{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%s{FFFFFF}]",
         prefijo,
         colorHex,
-        faccionNombre,
+        faccionNombreLimpio,
         GetNivelPJ(playerid),
-        GetPlayerMoney(playerid)
+        dineroCorto
     );
 
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 30.0, 0);
-    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.62);
+    Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.52);
     return 1;
 }
 
