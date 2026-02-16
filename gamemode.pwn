@@ -9002,7 +9002,7 @@ stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false) {
     for(new w = 1; w < MAX_WEAPON_ID_GM; w++) {
         if(PlayerAmmoInventario[playerid][w] <= 0 || !PlayerArmaComprada[playerid][w]) continue;
         if(EsArmaProhibida(w)) continue;
-        if(GetPlayerWeapon(playerid) == w) continue;
+        if(_:GetPlayerWeapon(playerid) == w) continue;
 
         new model = GetModeloObjetoArmaVisible(w);
         if(model == 0) continue;
