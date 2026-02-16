@@ -96,9 +96,9 @@
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
 #define PATH_BANDAS_SPAWNS "bandas_spawns.txt"
-#define PATH_FACCIONES "scriptfiles/kame_house/facciones.txt"
-#define PATH_FACCIONES_BAK "scriptfiles/kame_house/facciones.bak"
-#define PATH_FACCIONES_LEGACY "facciones.txt"
+#define PATH_FACCIONES "facciones.txt"
+#define PATH_FACCIONES_BAK "facciones.bak"
+#define PATH_FACCIONES_LEGACY "scriptfiles/kame_house/facciones.txt"
 #define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
 #define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
@@ -397,6 +397,7 @@ new TotalCasas = 0;
 new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
 new Text3D:PlayerPrefixLabel[MAX_PLAYERS] = {Text3D:-1, ...};
+new UltimaActualizacionLabelFaccionTick[MAX_PLAYERS];
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
@@ -930,7 +931,7 @@ stock GuardarFacciones();
 stock CargarFaccionesDesdeArchivo(const path[]);
 stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
-stock ActualizarLabelJugadorFaccion(playerid);
+stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false);
 stock EliminarFaccion(fid);
 stock strtok_sep(const string[], &index, separator = ' ') {
     new length = strlen(string), offset = index, result[128], pos = 0;
@@ -2837,7 +2838,7 @@ public OnPlayerSpawn(playerid) {
         RemovePlayerAttachedObject(playerid, pi);
         if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
     }
-    ActualizarLabelJugadorFaccion(playerid);
+    ActualizarLabelJugadorFaccion(playerid, true);
     if(!OmitirArmasEnProximoSpawn[playerid]) {
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
             if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
@@ -2969,7 +2970,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_OWNER);
         DeletePVar(playerid, "FaccionNombreTmp");
         GuardarFacciones();
-        ActualizarLabelJugadorFaccion(playerid);
+        ActualizarLabelJugadorFaccion(playerid, true);
         SendClientMessage(playerid, 0x66FF66FF, "Faccion creada correctamente.");
         return 1;
     }
@@ -8397,20 +8398,138 @@ stock SetDefaultCJAnimations(playerid) {
 }
 
 stock GetNombreVehiculoVanilla(modelid, nombre[], len) {
-    format(nombre, len, "Modelo %d", modelid);
+    switch(modelid) {
+        case 400: format(nombre, len, "Landstalker");
+        case 401: format(nombre, len, "Bravura");
+        case 402: format(nombre, len, "Buffalo");
+        case 404: format(nombre, len, "Perennial");
+        case 405: format(nombre, len, "Sentinel");
+        case 409: format(nombre, len, "Stretch");
+        case 410: format(nombre, len, "Manana");
+        case 411: format(nombre, len, "Infernus");
+        case 412: format(nombre, len, "Voodoo");
+        case 415: format(nombre, len, "Cheetah");
+        case 416: format(nombre, len, "Ambulance");
+        case 418: format(nombre, len, "Moonbeam");
+        case 419: format(nombre, len, "Esperanto");
+        case 420: format(nombre, len, "Taxi");
+        case 421: format(nombre, len, "Washington");
+        case 422: format(nombre, len, "Bobcat");
+        case 423: format(nombre, len, "Mr. Whoopee");
+        case 424: format(nombre, len, "BF Injection");
+        case 426: format(nombre, len, "Premier");
+        case 427: format(nombre, len, "Enforcer");
+        case 429: format(nombre, len, "Banshee");
+        case 430: format(nombre, len, "Predator");
+        case 431: format(nombre, len, "Bus");
+        case 432: format(nombre, len, "Rhino (Tanque)");
+        case 433: format(nombre, len, "Barracks");
+        case 434: format(nombre, len, "Hotknife");
+        case 436: format(nombre, len, "Previon");
+        case 438: format(nombre, len, "Cabbie");
+        case 439: format(nombre, len, "Stallion");
+        case 440: format(nombre, len, "Rumpo");
+        case 441: format(nombre, len, "RC Bandit");
+        case 442: format(nombre, len, "Romero");
+        case 445: format(nombre, len, "Admiral");
+        case 451: format(nombre, len, "Turismo");
+        case 455: format(nombre, len, "Flatbed");
+        case 456: format(nombre, len, "Yankee");
+        case 457: format(nombre, len, "Caddy");
+        case 458: format(nombre, len, "Solair");
+        case 459: format(nombre, len, "Topfun Van");
+        case 466: format(nombre, len, "Glendale");
+        case 467: format(nombre, len, "Oceanic");
+        case 468: format(nombre, len, "Sanchez");
+        case 470: format(nombre, len, "Patriot");
+        case 471: format(nombre, len, "Quad");
+        case 474: format(nombre, len, "Hermes");
+        case 475: format(nombre, len, "Sabre");
+        case 477: format(nombre, len, "ZR-350");
+        case 478: format(nombre, len, "Walton");
+        case 479: format(nombre, len, "Regina");
+        case 480: format(nombre, len, "Comet");
+        case 481: format(nombre, len, "BMX");
+        case 482: format(nombre, len, "Burrito");
+        case 483: format(nombre, len, "Camper");
+        case 485: format(nombre, len, "Baggage");
+        case 486: format(nombre, len, "Dozer");
+        case 489: format(nombre, len, "Rancher");
+        case 490: format(nombre, len, "FBI Rancher");
+        case 491: format(nombre, len, "Virgo");
+        case 492: format(nombre, len, "Greenwood");
+        case 494: format(nombre, len, "Hotring Racer");
+        case 495: format(nombre, len, "Sandking");
+        case 496: format(nombre, len, "Blista Compact");
+        case 500: format(nombre, len, "Mesa");
+        case 502: format(nombre, len, "Hotring Racer A");
+        case 503: format(nombre, len, "Hotring Racer B");
+        case 504: format(nombre, len, "Bloodring Banger");
+        case 505: format(nombre, len, "Rancher Lure");
+        case 506: format(nombre, len, "Super GT");
+        case 507: format(nombre, len, "Elegant");
+        case 516: format(nombre, len, "Nebula");
+        case 517: format(nombre, len, "Majestic");
+        case 518: format(nombre, len, "Buccaneer");
+        case 526: format(nombre, len, "Fortune");
+        case 527: format(nombre, len, "Cadrona");
+        case 529: format(nombre, len, "Willard");
+        case 533: format(nombre, len, "Feltzer");
+        case 534: format(nombre, len, "Remington");
+        case 535: format(nombre, len, "Slamvan");
+        case 536: format(nombre, len, "Blade");
+        case 540: format(nombre, len, "Vincent");
+        case 541: format(nombre, len, "Bullet");
+        case 542: format(nombre, len, "Clover");
+        case 543: format(nombre, len, "Sadler");
+        case 545: format(nombre, len, "Hustler");
+        case 546: format(nombre, len, "Intruder");
+        case 547: format(nombre, len, "Primo");
+        case 549: format(nombre, len, "Tampa");
+        case 550: format(nombre, len, "Sunrise");
+        case 551: format(nombre, len, "Merit");
+        case 554: format(nombre, len, "Yosemite");
+        case 555: format(nombre, len, "Windsor");
+        case 558: format(nombre, len, "Uranus");
+        case 559: format(nombre, len, "Jester");
+        case 560: format(nombre, len, "Sultan");
+        case 561: format(nombre, len, "Stratum");
+        case 562: format(nombre, len, "Elegy");
+        case 565: format(nombre, len, "Flash");
+        case 566: format(nombre, len, "Tahoma");
+        case 567: format(nombre, len, "Savanna");
+        case 568: format(nombre, len, "Bandito");
+        case 575: format(nombre, len, "Broadway");
+        case 576: format(nombre, len, "Tornado");
+        case 579: format(nombre, len, "Huntley");
+        case 580: format(nombre, len, "Stafford");
+        case 585: format(nombre, len, "Emperor");
+        case 587: format(nombre, len, "Euros");
+        case 589: format(nombre, len, "Club");
+        case 596: format(nombre, len, "Police LS");
+        case 597: format(nombre, len, "Police SF");
+        case 598: format(nombre, len, "Police LV");
+        case 599: format(nombre, len, "Police Ranger");
+        case 600: format(nombre, len, "Picador");
+        case 602: format(nombre, len, "Alpha");
+        case 603: format(nombre, len, "Phoenix");
+        case 604: format(nombre, len, "Glendale Damaged");
+        case 605: format(nombre, len, "Sadler Damaged");
+        default: format(nombre, len, "Modelo %d", modelid);
+    }
     return 1;
 }
 
 stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0) {
     if(vehid <= 0 || vehid >= MAX_VEHICLES || VehModelData[vehid] < 400 || VehModelData[vehid] > 611) {
-        format(dest, len, "[ID %d] (Vehiculo desconocido)%s", vehid, valor > 0 ? " [Valor: $0]" : "");
+        format(dest, len, "Vehiculo desconocido%s", valor > 0 ? " [Valor: $0]" : "");
         return 1;
     }
     new nombre[32], extra[32];
     GetNombreVehiculoVanilla(VehModelData[vehid], nombre, sizeof(nombre));
     if(valor > 0) format(extra, sizeof(extra), " [Valor: $%d]", valor);
     else extra[0] = EOS;
-    format(dest, len, "[ID %d] (%s)%s", vehid, nombre, extra);
+    format(dest, len, "%s%s", nombre, extra);
     return 1;
 }
 
@@ -8440,7 +8559,7 @@ stock bool:AgregarMiembroFaccion(fid, playerid, rango) {
         GuardarNombreJugadorEnFaccion(playerid, fid, i);
         PlayerFaccionId[playerid] = fid;
         PlayerFaccionRango[playerid] = rango;
-        ActualizarLabelJugadorFaccion(playerid);
+        ActualizarLabelJugadorFaccion(playerid, true);
         return true;
     }
     return false;
@@ -8456,7 +8575,7 @@ stock RemoverMiembroFaccion(fid, playerid) {
     }
     PlayerFaccionId[playerid] = -1;
     PlayerFaccionRango[playerid] = 0;
-    ActualizarLabelJugadorFaccion(playerid);
+    ActualizarLabelJugadorFaccion(playerid, true);
     return 1;
 }
 
@@ -8467,7 +8586,7 @@ stock ActualizarMiembrosFaccion(fid) {
         if(pid == -1 || !IsPlayerConnected(pid)) continue;
         PlayerFaccionId[pid] = fid;
         PlayerFaccionRango[pid] = FaccionData[fid][facRangos][i];
-        ActualizarLabelJugadorFaccion(pid);
+        ActualizarLabelJugadorFaccion(pid, true);
     }
     return 1;
 }
@@ -8480,7 +8599,7 @@ stock EliminarFaccion(fid) {
         if(pid != -1) {
             PlayerFaccionId[pid] = -1;
             PlayerFaccionRango[pid] = 0;
-            if(IsPlayerConnected(pid)) ActualizarLabelJugadorFaccion(pid);
+            if(IsPlayerConnected(pid)) ActualizarLabelJugadorFaccion(pid, true);
         }
         FaccionData[fid][facMiembros][i] = -1;
         FaccionData[fid][facRangos][i] = 0;
@@ -8489,7 +8608,7 @@ stock EliminarFaccion(fid) {
     if(ownerid != -1) {
         PlayerFaccionId[ownerid] = -1;
         PlayerFaccionRango[ownerid] = 0;
-        if(IsPlayerConnected(ownerid)) ActualizarLabelJugadorFaccion(ownerid);
+        if(IsPlayerConnected(ownerid)) ActualizarLabelJugadorFaccion(ownerid, true);
     }
     FaccionData[fid][facActiva] = false;
     FaccionData[fid][facOwner] = -1;
@@ -8509,29 +8628,37 @@ stock MostrarPanelFaccionOwner(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_FACCION_OWNER_MENU, DIALOG_STYLE_LIST, "Panel Faccion", "Informacion\nAnadir miembro\nEditar rango\nEliminar miembro", "Abrir", "Cerrar");
 }
 
-stock ActualizarLabelJugadorFaccion(playerid) {
+stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
     if(!IsPlayerConnected(playerid)) return 0;
+
+    if(!forzar && PlayerPrefixLabel[playerid] != Text3D:-1 && (GetTickCount() - UltimaActualizacionLabelFaccionTick[playerid]) < 20000) return 1;
+    UltimaActualizacionLabelFaccionTick[playerid] = GetTickCount();
+
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
 
-    new texto[192], dineroCorto[16], faccionNombre[24], colorLabel = 0xFFFFFFFF;
-    FormatearDineroCorto(GetPlayerMoney(playerid), dineroCorto, sizeof(dineroCorto));
-
+    new texto[256], faccionNombre[24], facColor[16], prefijo[16];
     faccionNombre[0] = EOS;
+    prefijo[0] = EOS;
+
     if(PlayerFaccionId[playerid] != -1) {
-        colorLabel = FaccionData[PlayerFaccionId[playerid]][facColor];
         format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
-    }
-
-    if(EsDueno(playerid)) {
-        if(!faccionNombre[0]) format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
-        format(texto, sizeof(texto), "= [Owner - %s - Nivel %d - $%s] =", faccionNombre, GetNivelPJ(playerid), dineroCorto);
-    } else if(faccionNombre[0]) {
-        format(texto, sizeof(texto), "- [%s - Nivel %d - $%s] -", faccionNombre, GetNivelPJ(playerid), dineroCorto);
+        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], facColor, sizeof(facColor));
     } else {
-        format(texto, sizeof(texto), "- [Nivel %d - $%s] -", GetNivelPJ(playerid), dineroCorto);
+        format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
+        format(facColor, sizeof(facColor), "FFFFFF");
     }
 
-    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, colorLabel, 0.0, 0.0, 0.0, 30.0, 0);
+    if(EsDueno(playerid)) format(prefijo, sizeof(prefijo), "Owner - ");
+
+    format(texto, sizeof(texto), "{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%d{FFFFFF}]",
+        prefijo,
+        facColor,
+        faccionNombre,
+        GetNivelPJ(playerid),
+        GetPlayerMoney(playerid)
+    );
+
+    PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 30.0, 0);
     Attach3DTextLabelToPlayer(PlayerPrefixLabel[playerid], playerid, 0.0, 0.0, 0.62);
     return 1;
 }
@@ -8540,6 +8667,10 @@ stock GuardarFacciones() {
     new paths[2][64] = {PATH_FACCIONES, PATH_FACCIONES_BAK};
     for(new pidx = 0; pidx < 2; pidx++) {
         new File:h = fopen(paths[pidx], io_write);
+        if(!h) {
+            fcreatedir(DIR_DATA);
+            h = fopen(paths[pidx], io_write);
+        }
         if(!h) continue;
 
         new line[1024], part[96];
