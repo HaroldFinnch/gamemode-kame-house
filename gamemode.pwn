@@ -468,6 +468,8 @@ new ArmeriaMuniItemJugador[MAX_PLAYERS] = {-1, ...};
 new ArmeriaAdminArmaPendiente[MAX_PLAYERS];
 new bool:PlayerArmaComprada[MAX_PLAYERS][MAX_WEAPON_ID_GM];
 new PlayerAmmoInventario[MAX_PLAYERS][MAX_WEAPON_ID_GM];
+new PlayerArmaVisibleObj[MAX_PLAYERS][3] = {{INVALID_OBJECT_ID, INVALID_OBJECT_ID, INVALID_OBJECT_ID}, ...};
+new UltimaActualizacionArmaVisibleTick[MAX_PLAYERS];
 
 #define MAX_RUTAS_BASURA 128
 new Float:BasuraRuta[MAX_RUTAS_BASURA][3];
@@ -949,6 +951,9 @@ stock bool:AgregarMiembroFaccion(fid, playerid, rango);
 stock RemoverMiembroFaccion(fid, playerid);
 stock ActualizarMiembrosFaccion(fid);
 stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1);
+stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false);
+stock LimpiarArmasVisiblesJugador(playerid);
+stock GetModeloObjetoArmaVisible(weaponid);
 stock GuardarEditMap();
 stock CargarEditMap();
 stock ShowEditMapMenu(playerid);
@@ -2711,6 +2716,7 @@ public OnPlayerConnect(playerid) {
     BasureroTieneBolsa[playerid] = false;
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
+    LimpiarArmasVisiblesJugador(playerid);
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
@@ -5802,6 +5808,7 @@ public OnPlayerDisconnect(playerid, reason) {
     BasureroTieneBolsa[playerid] = false;
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
+    LimpiarArmasVisiblesJugador(playerid);
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
@@ -5820,6 +5827,7 @@ public OnPlayerDisconnect(playerid, reason) {
         MaleteroFloresVeh[v] = 0;
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
+    LimpiarArmasVisiblesJugador(playerid);
     return 1;
 }
 
@@ -5958,6 +5966,7 @@ public OnPlayerUpdate(playerid) {
             }
         }
     }
+    ActualizarArmasVisiblesJugador(playerid);
     if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
         new vehid = GetPlayerVehicleID(playerid);
         if(vehid != INVALID_VEHICLE_ID) {
@@ -5988,6 +5997,7 @@ public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
         PlayerAmmoInventario[playerid][w] = 0;
     }
     ResetPlayerWeapons(playerid);
+    LimpiarArmasVisiblesJugador(playerid);
     SetSpawnInfo(playerid, 255, PlayerSkinGuardada[playerid], 2494.24, -1671.19, 13.33, 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
     return 1;
 }
@@ -8543,6 +8553,64 @@ stock FormatearDineroCorto(monto, dest[], len) {
 stock ConvertirColorAHexRGB(color, dest[], len) {
     new rgb = (color >> 8) & 0xFFFFFF;
     return format(dest, len, "%06X", rgb);
+}
+
+stock GetModeloObjetoArmaVisible(weaponid) {
+    switch(weaponid) {
+        case 22: return 346;
+        case 23: return 347;
+        case 24: return 348;
+        case 25: return 349;
+        case 26: return 350;
+        case 27: return 351;
+        case 28: return 352;
+        case 29: return 353;
+        case 30: return 355;
+        case 31: return 356;
+        case 32: return 372;
+        case 33: return 357;
+        case 34: return 358;
+    }
+    return 0;
+}
+
+stock LimpiarArmasVisiblesJugador(playerid) {
+    for(new i = 0; i < 3; i++) {
+        if(PlayerArmaVisibleObj[playerid][i] != INVALID_OBJECT_ID) {
+            DestroyObject(PlayerArmaVisibleObj[playerid][i]);
+            PlayerArmaVisibleObj[playerid][i] = INVALID_OBJECT_ID;
+        }
+    }
+    return 1;
+}
+
+stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false) {
+    if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 0;
+
+    if(!forzar && GetTickCount() - UltimaActualizacionArmaVisibleTick[playerid] < 1200) return 1;
+    UltimaActualizacionArmaVisibleTick[playerid] = GetTickCount();
+
+    LimpiarArmasVisiblesJugador(playerid);
+    if(IsPlayerInAnyVehicle(playerid) || PlayerSancionado[playerid]) return 1;
+
+    new usados = 0;
+    for(new w = 22; w <= 34; w++) {
+        if(PlayerAmmoInventario[playerid][w] <= 0 || !PlayerArmaComprada[playerid][w]) continue;
+        if(GetPlayerWeapon(playerid) == w) continue;
+
+        new model = GetModeloObjetoArmaVisible(w);
+        if(model == 0) continue;
+
+        new Float:px, Float:py, Float:pz;
+        GetPlayerPos(playerid, px, py, pz);
+
+        PlayerArmaVisibleObj[playerid][usados] = CreateObject(model, px, py, pz + 0.8 + (usados * 0.15), 0.0, 0.0, 0.0);
+        AttachObjectToPlayer(PlayerArmaVisibleObj[playerid][usados], playerid, 0.08 + (usados * 0.05), -0.18, 0.07 + (usados * 0.04), 0.0, 90.0, 0.0);
+
+        usados++;
+        if(usados >= 3) break;
+    }
+    return 1;
 }
 
 stock BuscarFaccionLibre() { for(new i=0;i<MAX_FACCIONES;i++) if(!FaccionData[i][facActiva]) return i; return -1; }
