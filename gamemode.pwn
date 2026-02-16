@@ -1002,7 +1002,7 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos);
 stock RemoverSancionJugador(targetid);
 stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
-stock EnviarEntornoAccion(playerid, const accion[]);
+forward EnviarEntornoAccion(playerid, const accion[]);
 stock bool:EsArmaProhibida(weaponid);
 
 stock ResetMaleteroVehiculo(vehid, ownerid = -1) {
@@ -1745,7 +1745,7 @@ stock CanceladoTrabajoPizzero(playerid) {
     return 1;
 }
 
-stock EnviarEntornoAccion(playerid, const accion[]) {
+public EnviarEntornoAccion(playerid, const accion[]) {
     if(!IsPlayerConnected(playerid)) return 0;
     if(!accion[0]) return 0;
 
