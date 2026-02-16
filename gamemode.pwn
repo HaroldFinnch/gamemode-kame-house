@@ -1844,7 +1844,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/anuncio", true)) {
         if(GetPlayerMoney(playerid) < COSTO_ANUNCIO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para publicar un anuncio ($2000).");
-        return ShowPlayerDialog(playerid, DIALOG_ANUNCIO_TEXTO, DIALOG_STYLE_INPUT, "Publicar anuncio", "Escribe el texto del anuncio (max 120).\nCosto por anuncio: $2000", "Publicar", "Cancelar");
+        return ShowPlayerDialog(playerid, DIALOG_ANUNCIO_TEXTO, DIALOG_STYLE_INPUT, "Publicar anuncio", "Escribe el texto del anuncio (max 65).\nCosto por anuncio: $2000", "Publicar", "Cancelar");
     }
 
     if(!strcmp(cmd, "/telefono", true)) {
@@ -2809,16 +2809,16 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 320.0, 380.0, "~w~");
-    PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.22, 1.00);
-    PlayerTextDrawAlignment(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_ALIGN_CENTER);
+    AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 635.0, 218.0, "~w~");
+    PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.95);
+    PlayerTextDrawAlignment(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_ALIGN_RIGHT);
     PlayerTextDrawColour(playerid, AnuncioTextDraw[playerid], 0xFFFFFFFF);
     PlayerTextDrawBackgroundColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
     PlayerTextDrawFont(playerid, AnuncioTextDraw[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetProportional(playerid, AnuncioTextDraw[playerid], true);
     PlayerTextDrawUseBox(playerid, AnuncioTextDraw[playerid], false);
     PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
-    PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 620.0, 0.0);
+    PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 635.0, 0.0);
     AnuncioTimerOcultar[playerid] = -1;
     PlayerInCasa[playerid] = -1;
     CasaInteriorPendiente[playerid] = -1;
@@ -3161,7 +3161,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir. Limites: Normal/VIP 1 casa, Diamante 2 casas.\n\n{66FFFF}Membresias:{FFFFFF} VIP y Diamante en tienda virtual con diamantes, incluyen bonus de trabajos.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir. Limites: Normal/VIP 1 casa, Diamante 2 casas.\n\n{66FFFF}Membresias:{FFFFFF}\n- {FFFFFF}Normal: 1 casa y maletero base (5 slots).\n- {FFD54F}VIP: 1 casa, +$100 por entrega de trabajo, maletero de 7 slots.\n- {00E5FF}Diamante: 2 casas, +$500 por entrega de trabajo, maletero de 15 slots.\n\n{AAAAAA}Como obtenerlas:{FFFFFF} compra VIP en Tienda Virtual Kame House (H en el punto), o solicitala a un Owner en eventos/promociones.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowReglasDialog(playerid);
         return 1;
     }
@@ -3374,7 +3374,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_ANUNCIO_TEXTO) {
         if(!response) return 1;
         if(strlen(inputtext) < 4) return SendClientMessage(playerid, -1, "El anuncio es muy corto (min 4 caracteres).");
-        if(strlen(inputtext) > 120) return SendClientMessage(playerid, -1, "El anuncio es muy largo (max 120 caracteres).");
+        if(strlen(inputtext) > 65) return SendClientMessage(playerid, -1, "El anuncio es muy largo (max 65 caracteres).");
         if(GetPlayerMoney(playerid) < COSTO_ANUNCIO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para publicar un anuncio ($2000).");
 
         new limpio[128], j = 0;
@@ -8794,6 +8794,8 @@ stock CargarTiendaVirtualConfig() {
     PrecioMembresiaVIPDiamantes = 1;
     PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
 
+    fcreatedir(DIR_DATA);
+
     new File:h = fopen(PATH_TIENDA_VIRTUAL, io_read), line[96];
     if(!h) return GuardarTiendaVirtualConfig();
 
@@ -8813,6 +8815,8 @@ stock CargarTiendaVirtualConfig() {
 }
 
 stock GuardarTiendaVirtualConfig() {
+    fcreatedir(DIR_DATA);
+
     new File:h = fopen(PATH_TIENDA_VIRTUAL, io_write);
     if(!h) return 0;
 
