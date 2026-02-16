@@ -8596,7 +8596,7 @@ stock ActualizarArmasVisiblesJugador(playerid, bool:forzar = false) {
     new usados = 0;
     for(new w = 22; w <= 34; w++) {
         if(PlayerAmmoInventario[playerid][w] <= 0 || !PlayerArmaComprada[playerid][w]) continue;
-        if(GetPlayerWeapon(playerid) == t_WEAPON:w) continue;
+        if(GetPlayerWeapon(playerid) == w) continue;
 
         new model = GetModeloObjetoArmaVisible(w);
         if(model == 0) continue;
@@ -8704,23 +8704,23 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
 
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
 
-    new texto[256], faccionNombre[24], facColorHex[16], prefijo[16];
+    new texto[256], faccionNombre[24], colorHex[16], prefijo[16];
     faccionNombre[0] = EOS;
     prefijo[0] = EOS;
 
     if(PlayerFaccionId[playerid] != -1) {
         format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
-        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], facColorHex, sizeof(facColorHex));
+        ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], colorHex, sizeof(colorHex));
     } else {
         format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
-        format(facColorHex, sizeof(facColorHex), "FFFFFF");
+        format(colorHex, sizeof(colorHex), "FFFFFF");
     }
 
     if(EsDueno(playerid)) format(prefijo, sizeof(prefijo), "Owner - ");
 
     format(texto, sizeof(texto), "{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%d{FFFFFF}]",
         prefijo,
-        facColorHex,
+        colorHex,
         faccionNombre,
         GetNivelPJ(playerid),
         GetPlayerMoney(playerid)
