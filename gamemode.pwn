@@ -81,11 +81,10 @@
 
 #define DIALOG_REGISTRO     1
 #define DIALOG_LOGIN        2
-#define DIR_SCRIPTFILES     "scriptfiles"
-#define DIR_DATA            "scriptfiles/kame_house"
-#define DIR_USUARIOS        "scriptfiles/kame_house/usuarios"
+#define DIR_DATA            "kame_house"
+#define DIR_USUARIOS        "kame_house/usuarios"
 #define DIR_USUARIOS_LEGACY "usuarios"
-#define PATH_USUARIOS       "scriptfiles/kame_house/usuarios/%s.txt"
+#define PATH_USUARIOS       "kame_house/usuarios/%s.txt"
 #define PATH_USUARIOS_LEGACY "usuarios/%s.ini"
 #define PATH_RUTAS          "rutas_camionero.txt"
 #define PATH_RUTAS_PIZZA    "rutas_pizzero.txt"
@@ -100,17 +99,17 @@
 #define PATH_FACCIONES "facciones.txt"
 #define PATH_FACCIONES_BAK "facciones.bak"
 #define PATH_FACCIONES_LEGACY "scriptfiles/kame_house/facciones.txt"
-#define PATH_PRENDAS "scriptfiles/kame_house/prendas_config.txt"
+#define PATH_PRENDAS "kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
-#define PATH_EDITMAP "scriptfiles/kame_house/editmap.txt"
+#define PATH_EDITMAP "kame_house/editmap.txt"
 #define PATH_EDITMAP_LEGACY "editmap.txt"
-#define PATH_VENTA_AUTOS "scriptfiles/kame_house/venta_autos_config.txt"
+#define PATH_VENTA_AUTOS "kame_house/venta_autos_config.txt"
 #define PATH_VENTA_AUTOS_LEGACY "venta_autos_config.txt"
-#define PATH_VENTA_SKINS "scriptfiles/kame_house/venta_skins_config.txt"
+#define PATH_VENTA_SKINS "kame_house/venta_skins_config.txt"
 #define PATH_VENTA_SKINS_LEGACY "venta_skins_config.txt"
-#define PATH_ARMERIA "scriptfiles/kame_house/armeria_config.txt"
+#define PATH_ARMERIA "kame_house/armeria_config.txt"
 #define PATH_ARMERIA_LEGACY "armeria_config.txt"
-#define PATH_TIENDA_VIRTUAL "scriptfiles/kame_house/tienda_virtual_config.txt"
+#define PATH_TIENDA_VIRTUAL "kame_house/tienda_virtual_config.txt"
 #define PATH_TIENDA_VIRTUAL_LEGACY "tienda_virtual_config.txt"
 #define MAX_CASAS           50
 
@@ -8846,7 +8845,6 @@ stock CargarTiendaVirtualConfig() {
     PrecioMembresiaVIPDiamantes = 1;
     PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
 
-    fcreatedir(DIR_SCRIPTFILES);
     fcreatedir(DIR_DATA);
 
     new File:h = fopen(PATH_TIENDA_VIRTUAL, io_read), line[96];
@@ -8893,7 +8891,6 @@ stock CargarTiendaVirtualConfig() {
 }
 
 stock GuardarTiendaVirtualConfig() {
-    fcreatedir(DIR_SCRIPTFILES);
     fcreatedir(DIR_DATA);
 
     new File:h = fopen(PATH_TIENDA_VIRTUAL, io_write);
