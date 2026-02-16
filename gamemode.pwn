@@ -397,6 +397,7 @@ new TotalCasas = 0;
 new CasaPickup[MAX_CASAS];
 new Text3D:CasaLabel[MAX_CASAS];
 new Text3D:PlayerPrefixLabel[MAX_PLAYERS] = {Text3D:-1, ...};
+new UltimaActualizacionLabelFaccionTick[MAX_PLAYERS];
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
@@ -932,7 +933,7 @@ stock GuardarFacciones();
 stock CargarFaccionesDesdeArchivo(const path[]);
 stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
-stock ActualizarLabelJugadorFaccion(playerid);
+stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false);
 stock EliminarFaccion(fid);
 stock strtok_sep(const string[], &index, separator = ' ') {
     new length = strlen(string), offset = index, result[128], pos = 0;
@@ -2843,8 +2844,7 @@ public OnPlayerSpawn(playerid) {
         RemovePlayerAttachedObject(playerid, pi);
         if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
     }
-    ActualizarLabelJugadorFaccion(playerid);
-    ActualizarArmasVisiblesJugador(playerid, true);
+    ActualizarLabelJugadorFaccion(playerid, true);
     if(!OmitirArmasEnProximoSpawn[playerid]) {
         for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
             if(PlayerArmaComprada[playerid][w] && PlayerAmmoInventario[playerid][w] > 0) GivePlayerWeapon(playerid, WEAPON:w, PlayerAmmoInventario[playerid][w]);
@@ -2976,7 +2976,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_OWNER);
         DeletePVar(playerid, "FaccionNombreTmp");
         GuardarFacciones();
-        ActualizarLabelJugadorFaccion(playerid);
+        ActualizarLabelJugadorFaccion(playerid, true);
         SendClientMessage(playerid, 0x66FF66FF, "Faccion creada correctamente.");
         return 1;
     }
@@ -8532,14 +8532,14 @@ stock GetNombreVehiculoVanilla(modelid, nombre[], len) {
 
 stock FormatearVehiculoIdentificador(vehid, dest[], len, valor = 0) {
     if(vehid <= 0 || vehid >= MAX_VEHICLES || VehModelData[vehid] < 400 || VehModelData[vehid] > 611) {
-        format(dest, len, "[ID %d] (Vehiculo desconocido)%s", vehid, valor > 0 ? " [Valor: $0]" : "");
+        format(dest, len, "Vehiculo desconocido%s", valor > 0 ? " [Valor: $0]" : "");
         return 1;
     }
     new nombre[32], extra[32];
     GetNombreVehiculoVanilla(VehModelData[vehid], nombre, sizeof(nombre));
     if(valor > 0) format(extra, sizeof(extra), " [Valor: $%d]", valor);
     else extra[0] = EOS;
-    format(dest, len, "[ID %d] (%s)%s", vehid, nombre, extra);
+    format(dest, len, "%s%s", nombre, extra);
     return 1;
 }
 
@@ -8627,7 +8627,7 @@ stock bool:AgregarMiembroFaccion(fid, playerid, rango) {
         GuardarNombreJugadorEnFaccion(playerid, fid, i);
         PlayerFaccionId[playerid] = fid;
         PlayerFaccionRango[playerid] = rango;
-        ActualizarLabelJugadorFaccion(playerid);
+        ActualizarLabelJugadorFaccion(playerid, true);
         return true;
     }
     return false;
@@ -8643,7 +8643,7 @@ stock RemoverMiembroFaccion(fid, playerid) {
     }
     PlayerFaccionId[playerid] = -1;
     PlayerFaccionRango[playerid] = 0;
-    ActualizarLabelJugadorFaccion(playerid);
+    ActualizarLabelJugadorFaccion(playerid, true);
     return 1;
 }
 
@@ -8654,7 +8654,7 @@ stock ActualizarMiembrosFaccion(fid) {
         if(pid == -1 || !IsPlayerConnected(pid)) continue;
         PlayerFaccionId[pid] = fid;
         PlayerFaccionRango[pid] = FaccionData[fid][facRangos][i];
-        ActualizarLabelJugadorFaccion(pid);
+        ActualizarLabelJugadorFaccion(pid, true);
     }
     return 1;
 }
@@ -8667,7 +8667,7 @@ stock EliminarFaccion(fid) {
         if(pid != -1) {
             PlayerFaccionId[pid] = -1;
             PlayerFaccionRango[pid] = 0;
-            if(IsPlayerConnected(pid)) ActualizarLabelJugadorFaccion(pid);
+            if(IsPlayerConnected(pid)) ActualizarLabelJugadorFaccion(pid, true);
         }
         FaccionData[fid][facMiembros][i] = -1;
         FaccionData[fid][facRangos][i] = 0;
@@ -8676,7 +8676,7 @@ stock EliminarFaccion(fid) {
     if(ownerid != -1) {
         PlayerFaccionId[ownerid] = -1;
         PlayerFaccionRango[ownerid] = 0;
-        if(IsPlayerConnected(ownerid)) ActualizarLabelJugadorFaccion(ownerid);
+        if(IsPlayerConnected(ownerid)) ActualizarLabelJugadorFaccion(ownerid, true);
     }
     FaccionData[fid][facActiva] = false;
     FaccionData[fid][facOwner] = -1;
@@ -8696,13 +8696,17 @@ stock MostrarPanelFaccionOwner(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_FACCION_OWNER_MENU, DIALOG_STYLE_LIST, "Panel Faccion", "Informacion\nAnadir miembro\nEditar rango\nEliminar miembro", "Abrir", "Cerrar");
 }
 
-stock ActualizarLabelJugadorFaccion(playerid) {
+stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
     if(!IsPlayerConnected(playerid)) return 0;
+
+    if(!forzar && PlayerPrefixLabel[playerid] != Text3D:-1 && (GetTickCount() - UltimaActualizacionLabelFaccionTick[playerid]) < 20000) return 1;
+    UltimaActualizacionLabelFaccionTick[playerid] = GetTickCount();
+
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
 
-    new texto[256], faccionNombre[24], facColor[16], prefijo[24];
+    new texto[256], faccionNombre[24], facColor[16], prefijo[16];
     faccionNombre[0] = EOS;
-    format(prefijo, sizeof(prefijo), "");
+    prefijo[0] = EOS;
 
     if(PlayerFaccionId[playerid] != -1) {
         format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
@@ -8712,11 +8716,10 @@ stock ActualizarLabelJugadorFaccion(playerid) {
         format(facColor, sizeof(facColor), "FFFFFF");
     }
 
-    if(EsDueno(playerid)) format(prefijo, sizeof(prefijo), "{F5B041}Owner {FFFFFF}- ");
+    if(EsDueno(playerid)) format(prefijo, sizeof(prefijo), "Owner - ");
 
-    format(texto, sizeof(texto), "%s{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%d{FFFFFF}]",
+    format(texto, sizeof(texto), "{FFFFFF}[%s{%s}%s{FFFFFF} - {4DA6FF}Nivel %d{FFFFFF} - {66FF66}$%d{FFFFFF}]",
         prefijo,
-        PlayerFaccionId[playerid] != -1 ? "Faccion " : "",
         facColor,
         faccionNombre,
         GetNivelPJ(playerid),
