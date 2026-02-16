@@ -9016,8 +9016,22 @@ stock SanearTextoLabel(const origen[], destino[], len) {
 }
 
 stock ConvertirColorAHexRGB(color, dest[], len) {
-    new rgb = (color >> 8) & 0xFFFFFF;
-    return format(dest, len, "%06X", rgb);
+    if(len < 7) {
+        if(len > 0) dest[0] = EOS;
+        return 0;
+    }
+
+    static const HexChars[] = "0123456789ABCDEF";
+    new rgb = (color >>> 8) & 0xFFFFFF;
+
+    dest[0] = HexChars[(rgb >> 20) & 0xF];
+    dest[1] = HexChars[(rgb >> 16) & 0xF];
+    dest[2] = HexChars[(rgb >> 12) & 0xF];
+    dest[3] = HexChars[(rgb >> 8) & 0xF];
+    dest[4] = HexChars[(rgb >> 4) & 0xF];
+    dest[5] = HexChars[rgb & 0xF];
+    dest[6] = EOS;
+    return 1;
 }
 
 stock GetModeloObjetoArmaVisible(weaponid) {
