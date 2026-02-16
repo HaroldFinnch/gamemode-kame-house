@@ -172,6 +172,9 @@
 #define DIALOG_ADMIN_PRECIO_VIP_DIAMANTES 145
 #define DIALOG_ADMIN_PRECIO_DIAMANTE 146
 #define DIALOG_ANUNCIO_TEXTO 147
+#define DIALOG_REPORTE_ID 148
+#define DIALOG_REPORTE_CONCEPTO 149
+#define DIALOG_STAFF_REPORTES_LISTA 150
 #define DIALOG_GPS_VEHICULOS 46
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
@@ -288,6 +291,7 @@
 #define MAX_FACCIONES 30
 #define MAX_MIEMBROS_FACCION 10
 #define MAX_COLORES_FACCION 10
+#define MAX_REPORTES 20
 
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
@@ -712,6 +716,24 @@ new bool:MineroGPSActivo[MAX_PLAYERS];
 new bool:OmitirArmasEnProximoSpawn[MAX_PLAYERS];
 new TuningVehLista[MAX_PLAYERS][MAX_AUTOS_NORMALES_JUGADOR];
 new TuningVehCount[MAX_PLAYERS];
+new ReporteTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new bool:StaffEnSpec[MAX_PLAYERS];
+new StaffSpecTarget[MAX_PLAYERS] = {-1, ...};
+new bool:StaffSpecTieneRetorno[MAX_PLAYERS];
+new Float:StaffSpecReturnPos[MAX_PLAYERS][3];
+new StaffSpecReturnInterior[MAX_PLAYERS];
+new StaffSpecReturnVW[MAX_PLAYERS];
+
+enum eReporteData {
+    bool:repActivo,
+    repReportaId,
+    repReportadoId,
+    repReportaNombre[MAX_PLAYER_NAME],
+    repReportadoNombre[MAX_PLAYER_NAME],
+    repConcepto[24]
+}
+new ReporteData[MAX_REPORTES][eReporteData];
+new TotalReportes;
 
 enum ePrepiezaPoint {
     bool:ppActivo,
@@ -795,6 +817,11 @@ stock GetPrecioOriginalVehiculo(modelo);
 stock MostrarMenuTuning(playerid);
 stock MostrarListaVehiculosChatarra(playerid);
 stock EliminarVehiculoJugador(veh);
+stock MostrarDialogoReportesStaff(playerid);
+stock EnviarReporteAStaff(reporta, reportado, const concepto[]);
+stock AgregarReporte(reporta, reportado, const concepto[]);
+stock ActivarSpecStaff(staffid, targetid);
+stock SalirSpecStaff(staffid);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -2312,6 +2339,27 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return SendClientMessage(playerid, -1, "No eres staff.");
     }
 
+    if(!strcmp(cmd, "/r", true)) {
+        if(!IsPlayerLoggedIn[playerid]) return SendClientMessage(playerid, -1, "Debes iniciar sesion primero.");
+        return ShowPlayerDialog(playerid, DIALOG_REPORTE_ID, DIALOG_STYLE_INPUT, "Sistema de reportes", "Escribe el ID del jugador a reportar:", "Siguiente", "Cancelar");
+    }
+
+    if(!strcmp(cmd, "/spec", true)) {
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
+        new idTxt[16], target;
+        format(idTxt, sizeof(idTxt), "%s", strtok(cmdtext, idx));
+        if(!idTxt[0]) return SendClientMessage(playerid, -1, "Uso: /spec [id]");
+        target = strval(idTxt);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "ID invalido o jugador desconectado.");
+        if(target == playerid) return SendClientMessage(playerid, -1, "No puedes spectearte a ti mismo.");
+        return ActivarSpecStaff(playerid, target);
+    }
+
+    if(!strcmp(cmd, "/ssalir", true)) {
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
+        return SalirSpecStaff(playerid);
+    }
+
     if(!strcmp(cmd, "/reglas", true)) {
         return ShowReglasDialog(playerid);
     }
@@ -3155,10 +3203,46 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
     }
+    if(dialogid == DIALOG_REPORTE_ID) {
+        if(!response) return 1;
+        new target = strval(inputtext);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "ID invalido o jugador desconectado.");
+        if(target == playerid) return SendClientMessage(playerid, -1, "No puedes reportarte a ti mismo.");
+        ReporteTargetPendiente[playerid] = target;
+        return ShowPlayerDialog(playerid, DIALOG_REPORTE_CONCEPTO, DIALOG_STYLE_LIST, "Concepto del reporte", "PG\nMG\nDM\nRK\nCK\nNRE\nNVVPJ\nER\nFR\nBUG", "Enviar", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_REPORTE_CONCEPTO) {
+        if(!response) { ReporteTargetPendiente[playerid] = -1; return 1; }
+        new target = ReporteTargetPendiente[playerid];
+        if(target == -1 || !IsPlayerConnected(target)) {
+            ReporteTargetPendiente[playerid] = -1;
+            return SendClientMessage(playerid, -1, "El jugador reportado ya no esta conectado.");
+        }
+
+        static const conceptos[][] = {"PG", "MG", "DM", "RK", "CK", "NRE", "NVVPJ", "ER", "FR", "BUG"};
+        if(listitem < 0 || listitem >= sizeof(conceptos)) return SendClientMessage(playerid, -1, "Concepto invalido.");
+        EnviarReporteAStaff(playerid, target, conceptos[listitem]);
+        AgregarReporte(playerid, target, conceptos[listitem]);
+        ReporteTargetPendiente[playerid] = -1;
+        return SendClientMessage(playerid, 0x66FF66FF, "Tu reporte fue enviado al staff.");
+    }
+
+    if(dialogid == DIALOG_STAFF_REPORTES_LISTA) {
+        if(!response) return MostrarPanelStaffSegunRango(playerid);
+        if(!EsStaff(playerid)) return 1;
+        if(listitem < 0 || listitem >= TotalReportes) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(!ReporteData[listitem][repActivo]) return SendClientMessage(playerid, -1, "Ese reporte ya no esta disponible.");
+
+        new target = ReporteData[listitem][repReportadoId];
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "El jugador reportado ya no esta conectado.");
+        return ActivarSpecStaff(playerid, target);
+    }
+
     if(dialogid == DIALOG_GPS) {
         if(!response) return 1;
         if(listitem == 0) SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 6.0);
@@ -4053,6 +4137,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         if(listitem == 15) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_MENU, DIALOG_STYLE_LIST, "Admin - Facciones", "Renombrar faccion\nEliminar faccion\nEditar color\nUnir faccion", "Abrir", "Atras");
         if(listitem == 16) return MostrarMenuAdminMembresias(playerid);
+        if(listitem == 17) return MostrarDialogoReportesStaff(playerid);
         return 1;
     }
 
@@ -4066,6 +4151,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 4) { new cmdTp[] = "/tp"; return OnPlayerCommandText(playerid, cmdTp); }
         if(listitem == 5) { new cmdFly[] = "/fly"; return OnPlayerCommandText(playerid, cmdFly); }
         if(listitem == 6) { new cmdRc[] = "/rc"; return OnPlayerCommandText(playerid, cmdRc); }
+        if(listitem == 7) return MostrarDialogoReportesStaff(playerid);
         return 1;
     }
 
@@ -5590,6 +5676,10 @@ public OnPlayerDisconnect(playerid, reason) {
         MaleteroFloresVeh[v] = 0;
     }
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) { PlayerArmaComprada[playerid][w] = false; PlayerAmmoInventario[playerid][w] = 0; }
+    ReporteTargetPendiente[playerid] = -1;
+    StaffEnSpec[playerid] = false;
+    StaffSpecTarget[playerid] = -1;
+    StaffSpecTieneRetorno[playerid] = false;
     return 1;
 }
 
@@ -7448,12 +7538,12 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones\n{66FFFF}Membresias", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones\n{66FFFF}Membresias\n{FFB6C1}Ver reportes", "Abrir", "Cerrar");
     return 1;
 }
 
 stock MostrarDialogoMod(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_MOD_MENU, DIALOG_STYLE_LIST, "{85C1E9}Panel Moderador", "{58D68D}Ir a jugador (ID)\n{58D68D}Traer jugador (ID)\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{5DADE2}Teleport a marca (/tp)\n{5DADE2}Fly\n{5DADE2}Reparar vehiculo (/rc)", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_MOD_MENU, DIALOG_STYLE_LIST, "{85C1E9}Panel Moderador", "{58D68D}Ir a jugador (ID)\n{58D68D}Traer jugador (ID)\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{5DADE2}Teleport a marca (/tp)\n{5DADE2}Fly\n{5DADE2}Reparar vehiculo (/rc)\n{FFB6C1}Ver reportes", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -7461,6 +7551,98 @@ stock MostrarPanelStaffSegunRango(playerid) {
     if(EsDueno(playerid)) return MostrarDialogoAdmin(playerid);
     if(EsModerador(playerid)) return MostrarDialogoMod(playerid);
     return 1;
+}
+
+stock MostrarDialogoReportesStaff(playerid) {
+    if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "No eres staff.");
+    if(TotalReportes <= 0) return SendClientMessage(playerid, -1, "No hay reportes acumulados.");
+
+    new cuerpo[1536];
+    cuerpo[0] = EOS;
+    new linea[128];
+    for(new i = 0; i < TotalReportes; i++) {
+        format(linea, sizeof(linea), "[%d] %s -> %s (%s)", i + 1, ReporteData[i][repReportaNombre], ReporteData[i][repReportadoNombre], ReporteData[i][repConcepto]);
+        if(i > 0) strcat(cuerpo, "\n");
+        strcat(cuerpo, linea);
+    }
+    return ShowPlayerDialog(playerid, DIALOG_STAFF_REPORTES_LISTA, DIALOG_STYLE_LIST, "Reportes acumulados", cuerpo, "Spectear", "Cerrar");
+}
+
+stock EnviarReporteAStaff(reporta, reportado, const concepto[]) {
+    new nombreReporta[MAX_PLAYER_NAME], nombreReportado[MAX_PLAYER_NAME], msg[180];
+    GetPlayerName(reporta, nombreReporta, sizeof(nombreReporta));
+    GetPlayerName(reportado, nombreReportado, sizeof(nombreReportado));
+    format(msg, sizeof(msg), "[REPORTE] (%s) Reporta a (%s) por (%s).", nombreReporta, nombreReportado, concepto);
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(!IsPlayerConnected(i)) continue;
+        if(!EsStaff(i)) continue;
+        SendClientMessage(i, 0xFF9999FF, msg);
+    }
+    return 1;
+}
+
+stock AgregarReporte(reporta, reportado, const concepto[]) {
+    new slot = TotalReportes;
+    if(slot >= MAX_REPORTES) {
+        for(new i = 1; i < MAX_REPORTES; i++) {
+            ReporteData[i - 1][repActivo] = ReporteData[i][repActivo];
+            ReporteData[i - 1][repReportaId] = ReporteData[i][repReportaId];
+            ReporteData[i - 1][repReportadoId] = ReporteData[i][repReportadoId];
+            format(ReporteData[i - 1][repReportaNombre], MAX_PLAYER_NAME, "%s", ReporteData[i][repReportaNombre]);
+            format(ReporteData[i - 1][repReportadoNombre], MAX_PLAYER_NAME, "%s", ReporteData[i][repReportadoNombre]);
+            format(ReporteData[i - 1][repConcepto], 24, "%s", ReporteData[i][repConcepto]);
+        }
+        slot = MAX_REPORTES - 1;
+    } else {
+        TotalReportes++;
+    }
+
+    ReporteData[slot][repActivo] = true;
+    ReporteData[slot][repReportaId] = reporta;
+    ReporteData[slot][repReportadoId] = reportado;
+    GetPlayerName(reporta, ReporteData[slot][repReportaNombre], MAX_PLAYER_NAME);
+    GetPlayerName(reportado, ReporteData[slot][repReportadoNombre], MAX_PLAYER_NAME);
+    format(ReporteData[slot][repConcepto], 24, "%s", concepto);
+    return 1;
+}
+
+stock ActivarSpecStaff(staffid, targetid) {
+    if(!IsPlayerConnected(targetid)) return SendClientMessage(staffid, -1, "El jugador ya no esta conectado.");
+    if(targetid == staffid) return SendClientMessage(staffid, -1, "No puedes spectearte a ti mismo.");
+
+    if(!StaffEnSpec[staffid]) {
+        GetPlayerPos(staffid, StaffSpecReturnPos[staffid][0], StaffSpecReturnPos[staffid][1], StaffSpecReturnPos[staffid][2]);
+        StaffSpecReturnInterior[staffid] = GetPlayerInterior(staffid);
+        StaffSpecReturnVW[staffid] = GetPlayerVirtualWorld(staffid);
+        StaffSpecTieneRetorno[staffid] = true;
+    }
+
+    StaffSpecTarget[staffid] = targetid;
+    StaffEnSpec[staffid] = true;
+    TogglePlayerSpectating(staffid, true);
+    PlayerSpectatePlayer(staffid, targetid);
+
+    new aviso[96];
+    format(aviso, sizeof(aviso), "Entraste en modo espectador de %d. Usa /ssalir para volver.", targetid);
+    SendClientMessage(staffid, 0x66FF66FF, aviso);
+    return 1;
+}
+
+stock SalirSpecStaff(staffid) {
+    if(!StaffEnSpec[staffid]) return SendClientMessage(staffid, -1, "No estas en modo espectador.");
+
+    TogglePlayerSpectating(staffid, false);
+    if(StaffSpecTieneRetorno[staffid]) {
+        SetPlayerVirtualWorld(staffid, StaffSpecReturnVW[staffid]);
+        SetPlayerInterior(staffid, StaffSpecReturnInterior[staffid]);
+        SetPlayerPos(staffid, StaffSpecReturnPos[staffid][0], StaffSpecReturnPos[staffid][1], StaffSpecReturnPos[staffid][2]);
+        SetCameraBehindPlayer(staffid);
+    }
+
+    StaffEnSpec[staffid] = false;
+    StaffSpecTarget[staffid] = -1;
+    StaffSpecTieneRetorno[staffid] = false;
+    return SendClientMessage(staffid, 0x66FF66FF, "Saliste del modo espectador.");
 }
 
 stock GuardarMinas() {
