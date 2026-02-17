@@ -2173,14 +2173,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "Solo puedes usar el kit en un vehiculo propio.");
         SetVehicleHealth(veh, 900.0);
         PlayerTieneKitReparacion[playerid] = false;
-    MedicoNivel[playerid] = 0;
-    MedicoTratamientos[playerid] = 0;
-    MedicoTratando[playerid] = false;
-    MedicoTratamientoTimer[playerid] = -1;
-    MedicoTratamientoTarget[playerid] = -1;
-    MedicoTratamientoTipo[playerid] = 0;
-    MedicoTratamientoPrecio[playerid] = 0;
-    LimpiarSolicitudMedico(playerid);
         SendClientMessage(playerid, 0x66FF66FF, "Usaste tu Kit De Reparacion. El DL del vehiculo quedo en 900.");
         return 1;
     }
@@ -6154,14 +6146,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         MecanicoNivel[playerid] = 0;
                         MecanicoReparaciones[playerid] = 0;
                         PlayerTieneKitReparacion[playerid] = false;
-    MedicoNivel[playerid] = 0;
-    MedicoTratamientos[playerid] = 0;
-    MedicoTratando[playerid] = false;
-    MedicoTratamientoTimer[playerid] = -1;
-    MedicoTratamientoTarget[playerid] = -1;
-    MedicoTratamientoTipo[playerid] = 0;
-    MedicoTratamientoPrecio[playerid] = 0;
-    LimpiarSolicitudMedico(playerid);
+                        MedicoNivel[playerid] = 0;
+                        MedicoTratamientos[playerid] = 0;
+                        MedicoTratando[playerid] = false;
+                        MedicoTratamientoTimer[playerid] = -1;
+                        MedicoTratamientoTarget[playerid] = -1;
+                        MedicoTratamientoTipo[playerid] = 0;
+                        MedicoTratamientoPrecio[playerid] = 0;
+                        LimpiarSolicitudMedico(playerid);
                         if(dataVersion >= 8) {
                             if(fread(h, line)) PlayerDiamantes[playerid] = strval(line);
                             if(fread(h, line)) PlayerMembresiaTipo[playerid] = strval(line);
@@ -7529,9 +7521,9 @@ stock ActualizarTopDinero() {
         format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nSin jugadores conectados");
         format(TopDineroTextoDialogo, sizeof(TopDineroTextoDialogo), "Sin jugadores conectados.");
     } else {
-        new membresiaNombre1[24], faccionNombre1[24], colorMembresia1[8], colorFaccion1[8], nombre1[MAX_PLAYER_NAME], dinero1;
-        new membresiaNombre2[24], faccionNombre2[24], colorMembresia2[8], colorFaccion2[8], nombre2[MAX_PLAYER_NAME], dinero2;
-        new membresiaNombre3[24], faccionNombre3[24], colorMembresia3[8], colorFaccion3[8], nombre3[MAX_PLAYER_NAME], dinero3;
+        new membresiaNombre1[24], faccionNombre1[24], colorMembresia1[8], colorFaccion1[8], nombre1[MAX_PLAYER_NAME];
+        new membresiaNombre2[24], faccionNombre2[24], colorMembresia2[8], colorFaccion2[8], nombre2[MAX_PLAYER_NAME];
+        new membresiaNombre3[24], faccionNombre3[24], colorMembresia3[8], colorFaccion3[8], nombre3[MAX_PLAYER_NAME];
         new dineroCorto1[16], dineroCorto2[16], dineroCorto3[16];
 
         if(TopDineroCantidad > 0) {
@@ -7545,9 +7537,8 @@ stock ActualizarTopDinero() {
                 format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF");
             }
             format(nombre1, sizeof(nombre1), "%s", TopDineroNombre[0]);
-            dinero1 = TopDineroTotal[0];
-            FormatearDineroCorto(dinero1, dineroCorto1, sizeof(dineroCorto1));
-        } else { format(membresiaNombre1, sizeof(membresiaNombre1), "Ninguna"); format(colorMembresia1, sizeof(colorMembresia1), "FFFFFF"); format(faccionNombre1, sizeof(faccionNombre1), "Sin faccion"); format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF"); format(nombre1, sizeof(nombre1), "---"); dinero1 = 0; format(dineroCorto1, sizeof(dineroCorto1), "0"); }
+            FormatearDineroCorto(TopDineroTotal[0], dineroCorto1, sizeof(dineroCorto1));
+        } else { format(membresiaNombre1, sizeof(membresiaNombre1), "Ninguna"); format(colorMembresia1, sizeof(colorMembresia1), "FFFFFF"); format(faccionNombre1, sizeof(faccionNombre1), "Sin faccion"); format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF"); format(nombre1, sizeof(nombre1), "---"); format(dineroCorto1, sizeof(dineroCorto1), "0"); }
 
         if(TopDineroCantidad > 1) {
             GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[1]], membresiaNombre2, sizeof(membresiaNombre2));
@@ -7560,9 +7551,8 @@ stock ActualizarTopDinero() {
                 format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF");
             }
             format(nombre2, sizeof(nombre2), "%s", TopDineroNombre[1]);
-            dinero2 = TopDineroTotal[1];
-            FormatearDineroCorto(dinero2, dineroCorto2, sizeof(dineroCorto2));
-        } else { format(membresiaNombre2, sizeof(membresiaNombre2), "Ninguna"); format(colorMembresia2, sizeof(colorMembresia2), "FFFFFF"); format(faccionNombre2, sizeof(faccionNombre2), "Sin faccion"); format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF"); format(nombre2, sizeof(nombre2), "---"); dinero2 = 0; format(dineroCorto2, sizeof(dineroCorto2), "0"); }
+            FormatearDineroCorto(TopDineroTotal[1], dineroCorto2, sizeof(dineroCorto2));
+        } else { format(membresiaNombre2, sizeof(membresiaNombre2), "Ninguna"); format(colorMembresia2, sizeof(colorMembresia2), "FFFFFF"); format(faccionNombre2, sizeof(faccionNombre2), "Sin faccion"); format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF"); format(nombre2, sizeof(nombre2), "---"); format(dineroCorto2, sizeof(dineroCorto2), "0"); }
 
         if(TopDineroCantidad > 2) {
             GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[2]], membresiaNombre3, sizeof(membresiaNombre3));
@@ -7575,9 +7565,8 @@ stock ActualizarTopDinero() {
                 format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF");
             }
             format(nombre3, sizeof(nombre3), "%s", TopDineroNombre[2]);
-            dinero3 = TopDineroTotal[2];
-            FormatearDineroCorto(dinero3, dineroCorto3, sizeof(dineroCorto3));
-        } else { format(membresiaNombre3, sizeof(membresiaNombre3), "Ninguna"); format(colorMembresia3, sizeof(colorMembresia3), "FFFFFF"); format(faccionNombre3, sizeof(faccionNombre3), "Sin faccion"); format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF"); format(nombre3, sizeof(nombre3), "---"); dinero3 = 0; format(dineroCorto3, sizeof(dineroCorto3), "0"); }
+            FormatearDineroCorto(TopDineroTotal[2], dineroCorto3, sizeof(dineroCorto3));
+        } else { format(membresiaNombre3, sizeof(membresiaNombre3), "Ninguna"); format(colorMembresia3, sizeof(colorMembresia3), "FFFFFF"); format(faccionNombre3, sizeof(faccionNombre3), "Sin faccion"); format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF"); format(nombre3, sizeof(nombre3), "---"); format(dineroCorto3, sizeof(dineroCorto3), "0"); }
 
         format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nTop1: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}$%s\nTop2: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}$%s\nTop3: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}$%s\nUsa /topdinero",
             colorMembresia1, membresiaNombre1, colorFaccion1, faccionNombre1, nombre1, dineroCorto1,
@@ -7586,9 +7575,8 @@ stock ActualizarTopDinero() {
         );
     }
 
-    new Text3D:topLabel = PuntoLabel[puntoTopDinero];
-    if(topLabel != Text3D:-1) {
-        Update3DTextLabelText(topLabel, 0xFFD700FF, TopDineroTextoLabel);
+    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
