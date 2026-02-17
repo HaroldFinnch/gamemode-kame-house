@@ -35,6 +35,11 @@
 #define TIEMPO_CULTIVO_MIN   4
 #define TIEMPO_CULTIVO_MAX   5
 #define COOLDOWN_MINA_MS     600000
+#define COSTO_KIT_REPARACION 1000
+#define PAGO_REPARAR_MOTOR 1500
+#define PAGO_REPARAR_COMPLETO 2000
+#define NIVEL_MECANICO_REPARACION_COMPLETA 5
+#define PROGRESO_MECANICO_POR_NIVEL 5
 
 #define SEMILLA_HIERBA_PRECIO 45
 #define SEMILLA_FLOR_PRECIO   65
@@ -175,6 +180,14 @@
 #define DIALOG_REPORTE_ID 148
 #define DIALOG_REPORTE_CONCEPTO 149
 #define DIALOG_STAFF_REPORTES_LISTA 150
+#define DIALOG_MECANICO_REPARAR_ID 151
+#define DIALOG_MECANICO_SOLICITUD 152
+#define DIALOG_ADMIN_NIVELES_MENU 153
+#define DIALOG_ADMIN_SET_NIVEL_ID 154
+#define DIALOG_ADMIN_SET_NIVEL_VALOR 155
+#define DIALOG_ADMIN_TRABAJO_LISTA 156
+#define DIALOG_ADMIN_SET_TRABAJO_ID 157
+#define DIALOG_ADMIN_SET_TRABAJO_VALOR 158
 #define DIALOG_GPS_VEHICULOS 46
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
@@ -296,7 +309,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 8
+#define CUENTA_DATA_VERSION 9
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -354,6 +367,17 @@ new BasureroRecolectado[MAX_PLAYERS];
 new bool:BasureroTieneBolsa[MAX_PLAYERS];
 new bool:BasureroDepositandoBolsa[MAX_PLAYERS];
 new bool:BasureroBolsaVisible[MAX_PLAYERS];
+
+// Variables Mecanico
+new MecanicoNivel[MAX_PLAYERS];
+new MecanicoReparaciones[MAX_PLAYERS];
+new bool:MecanicoReparando[MAX_PLAYERS];
+new MecanicoRepairTimer[MAX_PLAYERS] = {-1, ...};
+new MecanicoRepairTarget[MAX_PLAYERS] = {-1, ...};
+new MecanicoRepairType[MAX_PLAYERS];
+new MecanicoSolicitudPendiente[MAX_PLAYERS] = {-1, ...};
+new MecanicoSolicitudTipoPendiente[MAX_PLAYERS];
+new bool:PlayerTieneKitReparacion[MAX_PLAYERS];
 
 // Variables Inventario/Cultivo
 new InvSemillaHierba[MAX_PLAYERS];
@@ -501,6 +525,7 @@ enum ePuntoMovible {
     puntoPrendas,
     puntoFacciones,
     puntoTiendaVirtual,
+    puntoMecanico,
     totalPuntosMovibles
 }
 
@@ -723,6 +748,7 @@ new bool:StaffSpecTieneRetorno[MAX_PLAYERS];
 new Float:StaffSpecReturnPos[MAX_PLAYERS][3];
 new StaffSpecReturnInterior[MAX_PLAYERS];
 new StaffSpecReturnVW[MAX_PLAYERS];
+new bool:StaffSpecRetornoBloqueado[MAX_PLAYERS];
 
 enum eReporteData {
     bool:repActivo,
@@ -751,6 +777,8 @@ new AdminMineralCantidadPendiente[MAX_PLAYERS];
 new AdminSkinTargetPendiente[MAX_PLAYERS] = {-1, ...};
 new AdminVidaChalecoTipoPendiente[MAX_PLAYERS];
 new AdminVidaChalecoTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new AdminSetNivelTarget[MAX_PLAYERS] = {-1, ...};
+new AdminSetTrabajoTipo[MAX_PLAYERS] = {-1, ...};
 
 // Adelantos de funciones usadas antes de su implementacion
 forward strtok(const string[], &index);
@@ -783,6 +811,7 @@ forward FinalizarMinado(playerid);
 forward FinalizarCajaBusqueda(playerid, cajaidx);
 forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
+forward FinalizarReparacionMecanico(playerid);
 forward TeleportVehiculoLlamado(playerid);
 forward OcultarAnuncioJugador(playerid);
 stock CargarMinas();
@@ -818,10 +847,13 @@ stock MostrarMenuTuning(playerid);
 stock MostrarListaVehiculosChatarra(playerid);
 stock EliminarVehiculoJugador(veh);
 stock MostrarDialogoReportesStaff(playerid);
+stock MostrarMenuAdminNiveles(playerid);
+stock MostrarMenuAdminNivelesTrabajo(playerid);
+stock ActivarSpecStaff(staffid, targetid, bool:bloquearRetorno = false);
+stock SalirSpecStaff(staffid);
+stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion);
 stock EnviarReporteAStaff(reporta, reportado, const concepto[]);
 stock AgregarReporte(reporta, reportado, const concepto[]);
-stock ActivarSpecStaff(staffid, targetid);
-stock SalirSpecStaff(staffid);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -863,6 +895,7 @@ stock ShowBankMenu(playerid);
 stock IsNearBusinessInterior(playerid);
 stock IsNearSemilleria(playerid);
 stock ShowSemilleriaMenu(playerid);
+stock GetNivelPJ(playerid);
 stock IsNearTiendaVirtual(playerid);
 stock ShowTiendaVirtualMenu(playerid);
 stock GetMembresiaNombre(tipo, dest[], len);
@@ -1152,6 +1185,10 @@ public OnGameModeInit() {
     PuntoPos[puntoSemilleria][1] = POS_SEMILLERIA_Y;
     PuntoPos[puntoSemilleria][2] = POS_SEMILLERIA_Z;
 
+    PuntoPos[puntoMecanico][0] = PuntoPos[puntoSemilleria][0] - 6.0;
+    PuntoPos[puntoMecanico][1] = PuntoPos[puntoSemilleria][1];
+    PuntoPos[puntoMecanico][2] = PuntoPos[puntoSemilleria][2];
+
     PuntoPos[puntoArmeria][0] = POS_ARMERIA_X;
     PuntoPos[puntoArmeria][1] = POS_ARMERIA_Y;
     PuntoPos[puntoArmeria][2] = POS_ARMERIA_Z;
@@ -1366,6 +1403,18 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Sistema de prendas
     if(IsNearPrendas(playerid)) {
         ShowPrendasMenu(playerid);
+        return 1;
+    }
+
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMecanico][0], PuntoPos[puntoMecanico][1], PuntoPos[puntoMecanico][2])) {
+        if(MecanicoNivel[playerid] <= 0) {
+            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+            MecanicoNivel[playerid] = 1;
+            MecanicoReparaciones[playerid] = 0;
+            SendClientMessage(playerid, 0x66CCFFFF, "[Mecanico] Trabajo activado. Usa /reparar para ofrecer servicio.");
+        } else {
+            SendClientMessage(playerid, 0x66CCFFFF, "[Mecanico] Ya tienes este trabajo activo. Usa /reparar para atender clientes.");
+        }
         return 1;
     }
 
@@ -1870,9 +1919,32 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/skills", true)) {
-        new str[512];
-        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3", CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid]);
+        new str[640];
+        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d",
+            CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL,
+            PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL,
+            BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL,
+            ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid],
+            MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/reparar", true)) {
+        if(MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de mecanico primero.");
+        if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
+        return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_ID, DIALOG_STYLE_INPUT, "Trabajo De Mecanico", "Ingresa el ID del jugador al que deseas ofrecer reparacion:", "Enviar", "Cancelar");
+    }
+
+    if(!strcmp(cmd, "/usarkit", true)) {
+        if(!PlayerTieneKitReparacion[playerid]) return SendClientMessage(playerid, -1, "No tienes Kit De Reparacion.");
+        if(MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Necesitas nivel 5 de mecanico para usar /usarkit.");
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo tu vehiculo.");
+        new veh = GetPlayerVehicleID(playerid);
+        if(VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "Solo puedes usar el kit en un vehiculo propio.");
+        SetVehicleHealth(veh, 900.0);
+        PlayerTieneKitReparacion[playerid] = false;
+        SendClientMessage(playerid, 0x66FF66FF, "Usaste tu Kit De Reparacion. El DL del vehiculo quedo en 900.");
         return 1;
     }
 
@@ -1886,7 +1958,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new body[1024], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8];
+        new body[1200], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8];
         if(PlayerFaccionId[playerid] != -1) {
             format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
             ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], faccionColorHex, sizeof(faccionColorHex));
@@ -1910,7 +1982,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new limiteTrabajos = GetLimiteTrabajosJugador(playerid);
         new bonusTrabajo = GetBonusTrabajoMembresia(playerid);
 
-        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo);
+        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d\n\n{66CCFF}Mecanico: {FFFFFF}Nivel %d/%d | Reparaciones %d/%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo, MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -2031,7 +2103,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid] && MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
         if(TrabajandoCamionero[playerid] > 0) {
             CanceladoTrabajo(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
@@ -2052,6 +2124,27 @@ public OnPlayerCommandText(playerid, cmdtext[])
             TogglePlayerControllable(playerid, true);
             RemovePlayerAttachedObject(playerid, 8);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de minero.");
+        }
+        if(MecanicoNivel[playerid] > 0) {
+            if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
+            if(MecanicoReparando[playerid]) {
+                ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+                TogglePlayerControllable(playerid, true);
+                new t = MecanicoRepairTarget[playerid];
+                if(IsPlayerConnected(t)) SendClientMessage(t, 0xFFAA00FF, "Tu reparacion fue cancelada porque el mecanico abandono el trabajo.");
+            }
+            MecanicoReparando[playerid] = false;
+            MecanicoRepairTarget[playerid] = -1;
+            MecanicoRepairType[playerid] = 0;
+            for(new i = 0; i < MAX_PLAYERS; i++) {
+                if(MecanicoSolicitudPendiente[i] == playerid) {
+                    MecanicoSolicitudPendiente[i] = -1;
+                    MecanicoSolicitudTipoPendiente[i] = 0;
+                }
+            }
+            MecanicoNivel[playerid] = 0;
+            MecanicoReparaciones[playerid] = 0;
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de mecanico.");
         }
         return 1;
     }
@@ -2352,7 +2445,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         target = strval(idTxt);
         if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "ID invalido o jugador desconectado.");
         if(target == playerid) return SendClientMessage(playerid, -1, "No puedes spectearte a ti mismo.");
-        return ActivarSpecStaff(playerid, target);
+        return ActivarSpecStaff(playerid, target, false);
     }
 
     if(!strcmp(cmd, "/ssalir", true)) {
@@ -2439,7 +2532,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -2877,6 +2970,25 @@ public OnPlayerConnect(playerid) {
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
+    if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
+    MecanicoReparando[playerid] = false;
+    MecanicoRepairTarget[playerid] = -1;
+    MecanicoRepairType[playerid] = 0;
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(MecanicoSolicitudPendiente[i] == playerid) {
+            MecanicoSolicitudPendiente[i] = -1;
+            MecanicoSolicitudTipoPendiente[i] = 0;
+        }
+    }
+    MecanicoNivel[playerid] = 0;
+    MecanicoReparaciones[playerid] = 0;
+    MecanicoReparando[playerid] = false;
+    MecanicoRepairTimer[playerid] = -1;
+    MecanicoRepairTarget[playerid] = -1;
+    MecanicoRepairType[playerid] = 0;
+    MecanicoSolicitudPendiente[playerid] = -1;
+    MecanicoSolicitudTipoPendiente[playerid] = 0;
+    PlayerTieneKitReparacion[playerid] = false;
     ArmeriaAdminArmaPendiente[playerid] = 0;
     VentaAutosAdminModeloPendiente[playerid] = 0;
     VentaAutosAdminPrecioPendiente[playerid] = 0;
@@ -2900,6 +3012,8 @@ public OnPlayerConnect(playerid) {
     AdminSkinTargetPendiente[playerid] = -1;
     AdminVidaChalecoTipoPendiente[playerid] = 0;
     AdminVidaChalecoTargetPendiente[playerid] = -1;
+    AdminSetNivelTarget[playerid] = -1;
+    AdminSetTrabajoTipo[playerid] = -1;
     PlayerTieneTelefono[playerid] = false;
     TelefonoMensajeDestino[playerid] = -1;
     CalcValor1Pendiente[playerid] = 0.0;
@@ -3201,7 +3315,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
@@ -3240,7 +3354,134 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         new target = ReporteData[listitem][repReportadoId];
         if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "El jugador reportado ya no esta conectado.");
-        return ActivarSpecStaff(playerid, target);
+        return ActivarSpecStaff(playerid, target, true);
+    }
+
+    if(dialogid == DIALOG_MECANICO_REPARAR_ID) {
+        if(!response) return 1;
+        if(MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de mecanico primero.");
+        if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
+        new target = strval(inputtext);
+        if(!IsPlayerConnected(target) || target == playerid) return SendClientMessage(playerid, -1, "ID invalido.");
+        if(MecanicoSolicitudPendiente[target] != -1) return SendClientMessage(playerid, -1, "Ese jugador ya tiene una solicitud pendiente.");
+        if(!IsPlayerInAnyVehicle(target)) return SendClientMessage(playerid, -1, "El jugador debe estar en un vehiculo para solicitar reparacion.");
+
+        MecanicoSolicitudPendiente[target] = playerid;
+        MecanicoSolicitudTipoPendiente[target] = 0;
+        new cuerpo[384], nombreMecanico[MAX_PLAYER_NAME], msg[160];
+        GetPlayerName(playerid, nombreMecanico, sizeof(nombreMecanico));
+        format(cuerpo, sizeof(cuerpo), "El mecanico %s te ofrece reparacion.\n\nReparar Motor ($%d)\n- Sube solo el DL del vehiculo a 1500\n\nReparar Carroceria y Motor ($%d)\n- Requiere mecanico nivel %d\n- Repara visual + DL a 2000", nombreMecanico, PAGO_REPARAR_MOTOR, PAGO_REPARAR_COMPLETO, NIVEL_MECANICO_REPARACION_COMPLETA);
+        ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_LIST, "Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
+        format(msg, sizeof(msg), "Solicitud enviada al jugador %d.", target);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_MECANICO_SOLICITUD) {
+        new mecanico = MecanicoSolicitudPendiente[playerid];
+        if(mecanico == -1 || !IsPlayerConnected(mecanico)) {
+            MecanicoSolicitudPendiente[playerid] = -1;
+            MecanicoSolicitudTipoPendiente[playerid] = 0;
+            return SendClientMessage(playerid, -1, "La solicitud ya no esta disponible.");
+        }
+
+        if(!response) {
+            MecanicoSolicitudPendiente[playerid] = -1;
+            MecanicoSolicitudTipoPendiente[playerid] = 0;
+            SendClientMessage(playerid, 0xFFAA00FF, "Rechazaste la solicitud de reparacion.");
+            SendClientMessage(mecanico, 0xFFAA00FF, "El jugador rechazo tu solicitud de reparacion.");
+            return 1;
+        }
+
+        if(listitem < 0 || listitem > 1) return SendClientMessage(playerid, -1, "Opcion invalida.");
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo el vehiculo a reparar.");
+        if(!IsPlayerInAnyVehicle(mecanico)) return SendClientMessage(playerid, -1, "El mecanico ya no esta en un vehiculo cercano para trabajar.");
+
+        new tipo = listitem + 1;
+        new costo = (tipo == 1) ? PAGO_REPARAR_MOTOR : PAGO_REPARAR_COMPLETO;
+        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esa reparacion.");
+        if(tipo == 2 && MecanicoNivel[mecanico] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Ese mecanico no tiene nivel suficiente para reparacion completa.");
+
+        MecanicoSolicitudPendiente[playerid] = -1;
+        MecanicoSolicitudTipoPendiente[playerid] = 0;
+        return IniciarReparacionMecanico(mecanico, playerid, tipo);
+    }
+
+    if(dialogid == DIALOG_ADMIN_NIVELES_MENU) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(!EsDueno(playerid)) return 1;
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_NIVEL_ID, DIALOG_STYLE_INPUT, "Niveles - Set Nivel PJ", "Ingresa ID del jugador:", "Siguiente", "Atras");
+        if(listitem == 1) return MostrarMenuAdminNivelesTrabajo(playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_SET_NIVEL_ID) {
+        if(!response) return MostrarMenuAdminNiveles(playerid);
+        if(!EsDueno(playerid)) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        AdminSetNivelTarget[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_NIVEL_VALOR, DIALOG_STYLE_INPUT, "Niveles - Set Nivel PJ", "Ingresa el nivel PJ deseado (1-1000):", "Aplicar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SET_NIVEL_VALOR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_NIVEL_ID, DIALOG_STYLE_INPUT, "Niveles - Set Nivel PJ", "Ingresa ID del jugador:", "Siguiente", "Atras");
+        if(!EsDueno(playerid)) return 1;
+        new id = AdminSetNivelTarget[playerid];
+        new nivel = strval(inputtext);
+        if(!IsPlayerConnected(id) || nivel < 1 || nivel > 1000) return SendClientMessage(playerid, -1, "Datos invalidos.");
+
+        new minutos = 0;
+        for(new n = 1; n < nivel; n++) minutos += HORAS_POR_NIVEL_PJ * n * 60;
+        PlayerTiempoJugadoMin[id] = minutos;
+        ActualizarNivelPJ(id);
+        GuardarCuenta(id);
+
+        new msg[144];
+        format(msg, sizeof(msg), "Nivel PJ de %d actualizado a %d.", id, GetNivelPJ(id));
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+        format(msg, sizeof(msg), "Un Owner actualizo tu nivel PJ a %d.", GetNivelPJ(id));
+        SendClientMessage(id, 0x66FF66FF, msg);
+        return MostrarMenuAdminNiveles(playerid);
+    }
+
+    if(dialogid == DIALOG_ADMIN_TRABAJO_LISTA) {
+        if(!response) return MostrarMenuAdminNiveles(playerid);
+        if(!EsDueno(playerid)) return 1;
+        if(listitem < 0 || listitem > 4) return 1;
+        AdminSetTrabajoTipo[playerid] = listitem;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_TRABAJO_ID, DIALOG_STYLE_INPUT, "Niveles - Trabajo", "Ingresa ID del jugador:", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SET_TRABAJO_ID) {
+        if(!response) return MostrarMenuAdminNivelesTrabajo(playerid);
+        if(!EsDueno(playerid)) return 1;
+        new id = strval(inputtext);
+        if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "ID invalido.");
+        AdminSetNivelTarget[playerid] = id;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_TRABAJO_VALOR, DIALOG_STYLE_INPUT, "Niveles - Trabajo", "Ingresa nivel del trabajo (0-10):", "Aplicar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_SET_TRABAJO_VALOR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_TRABAJO_ID, DIALOG_STYLE_INPUT, "Niveles - Trabajo", "Ingresa ID del jugador:", "Siguiente", "Atras");
+        if(!EsDueno(playerid)) return 1;
+        new id = AdminSetNivelTarget[playerid], nivel = strval(inputtext), tipo = AdminSetTrabajoTipo[playerid];
+        if(!IsPlayerConnected(id) || tipo < 0 || tipo > 4 || nivel < 0 || nivel > NIVEL_MAX_TRABAJO) return SendClientMessage(playerid, -1, "Datos invalidos.");
+
+        new msg[144], nombreTrabajo[24];
+        switch(tipo) {
+            case 0: { CamioneroNivel[id] = nivel; if(CamioneroViajes[id] >= PROGRESO_CAMIONERO_POR_NIVEL) CamioneroViajes[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Camionero"); }
+            case 1: { PizzeroNivel[id] = nivel; if(PizzeroEntregas[id] >= PROGRESO_PIZZERO_POR_NIVEL) PizzeroEntregas[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Pizzero"); }
+            case 2: { BasureroNivel[id] = nivel; if(BasureroRecorridos[id] >= PROGRESO_BASURERO_POR_NIVEL) BasureroRecorridos[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Basurero"); }
+            case 3: { ArmeroNivel[id] = nivel; if(ArmeroNivel[id] <= 0) ArmeroNivel[id] = 1; if(ArmeroExp[id] > 2) ArmeroExp[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Armero"); }
+            case 4: { MecanicoNivel[id] = nivel; if(MecanicoReparaciones[id] >= PROGRESO_MECANICO_POR_NIVEL) MecanicoReparaciones[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Mecanico"); }
+        }
+        GuardarCuenta(id);
+        format(msg, sizeof(msg), "Nivel de %s de %d actualizado a %d.", nombreTrabajo, id, nivel);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+        format(msg, sizeof(msg), "Un Owner actualizo tu nivel de %s a %d.", nombreTrabajo, nivel);
+        SendClientMessage(id, 0x66FF66FF, msg);
+        return MostrarMenuAdminNivelesTrabajo(playerid);
     }
 
     if(dialogid == DIALOG_GPS) {
@@ -3253,12 +3494,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         else if(listitem == 5) SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 6.0);
         else if(listitem == 6) SetPlayerCheckpoint(playerid, PuntoPos[puntoBanco][0], PuntoPos[puntoBanco][1], PuntoPos[puntoBanco][2], 6.0);
         else if(listitem == 7) SetPlayerCheckpoint(playerid, PuntoPos[puntoSemilleria][0], PuntoPos[puntoSemilleria][1], PuntoPos[puntoSemilleria][2], 6.0);
-        else if(listitem == 8) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
-        else if(listitem == 9) SetPlayerCheckpoint(playerid, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2], 6.0);
-        else if(listitem == 10) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
-        else if(listitem == 11) SetPlayerCheckpoint(playerid, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2], 6.0);
-        else if(listitem == 12) SetPlayerCheckpoint(playerid, PuntoPos[puntoTiendaVirtual][0], PuntoPos[puntoTiendaVirtual][1], PuntoPos[puntoTiendaVirtual][2], 6.0);
-        else if(listitem == 13) {
+        else if(listitem == 8) SetPlayerCheckpoint(playerid, PuntoPos[puntoMecanico][0], PuntoPos[puntoMecanico][1], PuntoPos[puntoMecanico][2], 6.0);
+        else if(listitem == 9) SetPlayerCheckpoint(playerid, PuntoPos[puntoArmeria][0], PuntoPos[puntoArmeria][1], PuntoPos[puntoArmeria][2], 6.0);
+        else if(listitem == 10) SetPlayerCheckpoint(playerid, PuntoPos[puntoVentaAutos][0], PuntoPos[puntoVentaAutos][1], PuntoPos[puntoVentaAutos][2], 6.0);
+        else if(listitem == 11) SetPlayerCheckpoint(playerid, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2], 6.0);
+        else if(listitem == 12) SetPlayerCheckpoint(playerid, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2], 6.0);
+        else if(listitem == 13) SetPlayerCheckpoint(playerid, PuntoPos[puntoTiendaVirtual][0], PuntoPos[puntoTiendaVirtual][1], PuntoPos[puntoTiendaVirtual][2], 6.0);
+        else if(listitem == 14) {
             new horno = GetHornoMasCercano(playerid);
             if(horno == -1) return SendClientMessage(playerid, -1, "No hay hornos disponibles en el mapa.");
             SetPlayerCheckpoint(playerid, HornoData[horno][hornoX], HornoData[horno][hornoY], HornoData[horno][hornoZ], 4.0);
@@ -3306,14 +3548,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 3: puntoMover = puntoCarga;
             case 4: puntoMover = puntoBanco;
             case 5: puntoMover = puntoSemilleria;
-            case 6: puntoMover = puntoArmeria;
-            case 7: puntoMover = puntoVentaAutos;
-            case 8: puntoMover = puntoVentaSkins;
-            case 9: puntoMover = puntoPintura;
-            case 10: puntoMover = puntoMinero;
-            case 11: puntoMover = puntoPrendas;
-            case 12: puntoMover = puntoFacciones;
-            case 13: puntoMover = puntoTiendaVirtual;
+            case 6: puntoMover = puntoMecanico;
+            case 7: puntoMover = puntoArmeria;
+            case 8: puntoMover = puntoVentaAutos;
+            case 9: puntoMover = puntoVentaSkins;
+            case 10: puntoMover = puntoPintura;
+            case 11: puntoMover = puntoMinero;
+            case 12: puntoMover = puntoPrendas;
+            case 13: puntoMover = puntoFacciones;
+            case 14: puntoMover = puntoTiendaVirtual;
             default: return SendClientMessage(playerid, -1, "Punto invalido.");
         }
 
@@ -3353,7 +3596,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_SEMILLERIA) {
         if(!response) return 1;
-        if(listitem < 0 || listitem > 3) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(listitem < 0 || listitem > 4) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         KameTiendaTipoPendiente[playerid] = listitem;
         if(listitem == 2) {
             if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
@@ -3368,6 +3611,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             GivePlayerMoney(playerid, -PRECIO_TELEFONO);
             PlayerTieneTelefono[playerid] = true;
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un telefono. Usa /telefono para abrirlo.");
+        }
+        if(listitem == 4) {
+            if(PlayerTieneKitReparacion[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un Kit De Reparacion.");
+            if(GetPlayerMoney(playerid) < COSTO_KIT_REPARACION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para el kit.");
+            GivePlayerMoney(playerid, -COSTO_KIT_REPARACION);
+            PlayerTieneKitReparacion[playerid] = true;
+            return SendClientMessage(playerid, 0x66FF66FF, "Compraste un Kit De Reparacion.");
         }
         ShowPlayerDialog(playerid, DIALOG_KAMETIENDA_CANTIDAD, DIALOG_STYLE_INPUT, "Tienda Kame House - Cantidad", "Ingresa la cantidad de productos que deseas comprar:", "Continuar", "Atras");
         return 1;
@@ -3492,7 +3742,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_ID, DIALOG_STYLE_INPUT, "Telefono - Enviar mensaje", "Ingresa el ID del jugador:", "Siguiente", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR1, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el primer valor:", "Siguiente", "Atras");
         if(listitem == 4) return ShowTelefonoVehiculosMenu(playerid);
-        if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{66FFFF}Tienda Virtual Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
+        if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{66CCFF}Trabajo De Mecanico\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{66FFFF}Tienda Virtual Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
         if(listitem == 6) {
             new restaurados = RestaurarVehiculosJugador(playerid);
             new msg[96];
@@ -4137,7 +4387,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         if(listitem == 15) return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_MENU, DIALOG_STYLE_LIST, "Admin - Facciones", "Renombrar faccion\nEliminar faccion\nEditar color\nUnir faccion", "Abrir", "Atras");
         if(listitem == 16) return MostrarMenuAdminMembresias(playerid);
-        if(listitem == 17) return MostrarDialogoReportesStaff(playerid);
+        if(listitem == 17) return MostrarMenuAdminNiveles(playerid);
+        if(listitem == 18) return MostrarDialogoReportesStaff(playerid);
         return 1;
     }
 
@@ -5321,10 +5572,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         PlayerDiamantes[playerid] = 0;
                         PlayerMembresiaTipo[playerid] = MEMBRESIA_NINGUNA;
                         PlayerMembresiaExpiraTick[playerid] = 0;
+                        MecanicoNivel[playerid] = 0;
+                        MecanicoReparaciones[playerid] = 0;
+                        PlayerTieneKitReparacion[playerid] = false;
                         if(dataVersion >= 8) {
                             if(fread(h, line)) PlayerDiamantes[playerid] = strval(line);
                             if(fread(h, line)) PlayerMembresiaTipo[playerid] = strval(line);
                             if(fread(h, line)) PlayerMembresiaExpiraTick[playerid] = strval(line);
+                        }
+                        if(dataVersion >= 9) {
+                            if(fread(h, line)) MecanicoNivel[playerid] = strval(line);
+                            if(fread(h, line)) MecanicoReparaciones[playerid] = strval(line);
+                            if(fread(h, line)) PlayerTieneKitReparacion[playerid] = strval(line) != 0;
                         }
                         format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
                         if(dataVersion >= 6) {
@@ -5428,10 +5687,10 @@ public GuardarCuenta(playerid) {
                 CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
             fwrite(h, line);
 
-            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
+            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
                 PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0,
-                PlayerDiamantes[playerid], PlayerMembresiaTipo[playerid], PlayerMembresiaExpiraTick[playerid]);
+                PlayerDiamantes[playerid], PlayerMembresiaTipo[playerid], PlayerMembresiaExpiraTick[playerid], MecanicoNivel[playerid], MecanicoReparaciones[playerid], PlayerTieneKitReparacion[playerid] ? 1 : 0);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
@@ -5660,6 +5919,16 @@ public OnPlayerDisconnect(playerid, reason) {
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
+    if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
+    MecanicoReparando[playerid] = false;
+    MecanicoRepairTarget[playerid] = -1;
+    MecanicoRepairType[playerid] = 0;
+    for(new i = 0; i < MAX_PLAYERS; i++) {
+        if(MecanicoSolicitudPendiente[i] == playerid) {
+            MecanicoSolicitudPendiente[i] = -1;
+            MecanicoSolicitudTipoPendiente[i] = 0;
+        }
+    }
     ArmeriaAdminArmaPendiente[playerid] = 0;
     VentaAutosAdminModeloPendiente[playerid] = 0;
     VentaAutosAdminPrecioPendiente[playerid] = 0;
@@ -5680,6 +5949,7 @@ public OnPlayerDisconnect(playerid, reason) {
     StaffEnSpec[playerid] = false;
     StaffSpecTarget[playerid] = -1;
     StaffSpecTieneRetorno[playerid] = false;
+    StaffSpecRetornoBloqueado[playerid] = false;
     return 1;
 }
 
@@ -5959,7 +6229,7 @@ stock ExpirarMembresiaSiCorresponde(playerid) {
 }
 
 stock TieneTrabajoActivo(playerid) {
-    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid]);
+    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid] || MecanicoNivel[playerid] > 0);
 }
 
 stock ContarTrabajosActivos(playerid) {
@@ -5968,6 +6238,7 @@ stock ContarTrabajosActivos(playerid) {
     if(TrabajandoPizzero[playerid] > 0) c++;
     if(TrabajandoBasurero[playerid] > 0) c++;
     if(MineroTrabajando[playerid]) c++;
+    if(MecanicoNivel[playerid] > 0) c++;
     return c;
 }
 
@@ -6399,8 +6670,8 @@ stock GetTelefonoVehiculoByListIndex(playerid, listindex) {
 }
 
 stock ShowSemilleriaMenu(playerid) {
-    new body[192];
-    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)\nTelefono celular ($10000)");
+    new body[256];
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)\nTelefono celular ($10000)\nKit De Reparacion ($%d)", COSTO_KIT_REPARACION);
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Tienda Kame House", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -6520,6 +6791,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoCarga: format(dest, len, "Deposito de carga");
         case puntoBanco: format(dest, len, "Banco");
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
+        case puntoMecanico: format(dest, len, "Trabajo De Mecanico");
         case puntoArmeria: format(dest, len, "Armeria");
         case puntoVentaAutos: format(dest, len, "Venta de autos");
         case puntoVentaSkins: format(dest, len, "Tienda De Skins");
@@ -6570,6 +6842,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoSemilleria: {
             PuntoPickup[punto] = CreatePickup(1275, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("Tienda Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoMecanico: {
+            PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("Trabajo De Mecanico\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para tomar trabajo", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoArmeria: {
             PuntoPickup[punto] = CreatePickup(1242, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -6626,7 +6902,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar /reparar /usarkit.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -7538,8 +7814,16 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones\n{66FFFF}Membresias\n{FFB6C1}Ver reportes", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones\n{66FFFF}Membresias\n{F7DC6F}Niveles\n{FFB6C1}Ver reportes", "Abrir", "Cerrar");
     return 1;
+}
+
+stock MostrarMenuAdminNiveles(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_ADMIN_NIVELES_MENU, DIALOG_STYLE_LIST, "Admin - Niveles", "Set Nivel PJ\nNiveles De Trabajo", "Abrir", "Atras");
+}
+
+stock MostrarMenuAdminNivelesTrabajo(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_ADMIN_TRABAJO_LISTA, DIALOG_STYLE_LIST, "Admin - Niveles De Trabajo", "Camionero\nPizzero\nBasurero\nArmero\nMecanico", "Seleccionar", "Atras");
 }
 
 stock MostrarDialogoMod(playerid) {
@@ -7606,7 +7890,7 @@ stock AgregarReporte(reporta, reportado, const concepto[]) {
     return 1;
 }
 
-stock ActivarSpecStaff(staffid, targetid) {
+stock ActivarSpecStaff(staffid, targetid, bool:bloquearRetorno = false) {
     if(!IsPlayerConnected(targetid)) return SendClientMessage(staffid, -1, "El jugador ya no esta conectado.");
     if(targetid == staffid) return SendClientMessage(staffid, -1, "No puedes spectearte a ti mismo.");
 
@@ -7616,6 +7900,7 @@ stock ActivarSpecStaff(staffid, targetid) {
         StaffSpecReturnVW[staffid] = GetPlayerVirtualWorld(staffid);
         StaffSpecTieneRetorno[staffid] = true;
     }
+    StaffSpecRetornoBloqueado[staffid] = bloquearRetorno;
 
     StaffSpecTarget[staffid] = targetid;
     StaffEnSpec[staffid] = true;
@@ -7632,7 +7917,7 @@ stock SalirSpecStaff(staffid) {
     if(!StaffEnSpec[staffid]) return SendClientMessage(staffid, -1, "No estas en modo espectador.");
 
     TogglePlayerSpectating(staffid, false);
-    if(StaffSpecTieneRetorno[staffid]) {
+    if(StaffSpecTieneRetorno[staffid] && !StaffSpecRetornoBloqueado[staffid]) {
         SetPlayerVirtualWorld(staffid, StaffSpecReturnVW[staffid]);
         SetPlayerInterior(staffid, StaffSpecReturnInterior[staffid]);
         SetPlayerPos(staffid, StaffSpecReturnPos[staffid][0], StaffSpecReturnPos[staffid][1], StaffSpecReturnPos[staffid][2]);
@@ -7642,7 +7927,91 @@ stock SalirSpecStaff(staffid) {
     StaffEnSpec[staffid] = false;
     StaffSpecTarget[staffid] = -1;
     StaffSpecTieneRetorno[staffid] = false;
+    StaffSpecRetornoBloqueado[staffid] = false;
     return SendClientMessage(staffid, 0x66FF66FF, "Saliste del modo espectador.");
+}
+
+stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion) {
+    if(!IsPlayerConnected(playerid) || !IsPlayerConnected(targetid)) return 0;
+    if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
+    if(tipoReparacion < 1 || tipoReparacion > 2) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
+    if(tipoReparacion == 2 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Necesitas nivel 5 de mecanico para reparacion completa.");
+    if(!IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El cliente debe estar conduciendo su vehiculo.");
+
+    MecanicoReparando[playerid] = true;
+    MecanicoRepairTarget[playerid] = targetid;
+    MecanicoRepairType[playerid] = tipoReparacion;
+    TogglePlayerControllable(playerid, false);
+    ApplyAnimation(playerid, "COP_AMBIENT", "Copbrowse_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
+    MecanicoRepairTimer[playerid] = SetTimerEx("FinalizarReparacionMecanico", 10000, false, "d", playerid);
+
+    new msg[160], tipoTxt[48];
+    format(tipoTxt, sizeof(tipoTxt), (tipoReparacion == 1) ? "motor" : "carroceria y motor");
+    format(msg, sizeof(msg), "Iniciaste reparacion de %s al jugador %d. Espera 10 segundos...", tipoTxt, targetid);
+    SendClientMessage(playerid, 0xFFFF66FF, msg);
+    format(msg, sizeof(msg), "El mecanico %d comenzo a reparar tu vehiculo. Espera 10 segundos.", playerid);
+    SendClientMessage(targetid, 0xFFFF66FF, msg);
+    return 1;
+}
+
+public FinalizarReparacionMecanico(playerid) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    MecanicoRepairTimer[playerid] = -1;
+    if(!MecanicoReparando[playerid]) return 1;
+
+    new targetid = MecanicoRepairTarget[playerid];
+    new tipo = MecanicoRepairType[playerid];
+    MecanicoReparando[playerid] = false;
+    MecanicoRepairTarget[playerid] = -1;
+    MecanicoRepairType[playerid] = 0;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+
+    if(!IsPlayerConnected(targetid) || !IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) {
+        SendClientMessage(playerid, 0xFFAA00FF, "La reparacion no pudo completarse: el cliente ya no esta en el vehiculo.");
+        return 1;
+    }
+
+    new veh = GetPlayerVehicleID(targetid);
+    if(veh == INVALID_VEHICLE_ID) return 1;
+
+    new costo = (tipo == 1) ? PAGO_REPARAR_MOTOR : PAGO_REPARAR_COMPLETO;
+    if(GetPlayerMoney(targetid) < costo) {
+        SendClientMessage(targetid, 0xFF0000FF, "No tienes dinero suficiente al finalizar la reparacion.");
+        SendClientMessage(playerid, 0xFF0000FF, "El cliente no tiene dinero suficiente. Reparacion cancelada.");
+        return 1;
+    }
+
+    GivePlayerMoney(targetid, -costo);
+    new pagoMecanico = floatround(float(costo) * 0.9, floatround_floor);
+    GivePlayerMoney(playerid, pagoMecanico);
+
+    if(tipo == 1) {
+        SetVehicleHealth(veh, 1500.0);
+        SendClientMessage(targetid, 0x66FF66FF, "Reparacion de motor completada (DL 1500).");
+        SendClientMessage(playerid, 0x66FF66FF, "Reparacion de motor completada. Recibiste tu pago.");
+    } else {
+        RepairVehicle(veh);
+        SetVehicleHealth(veh, 2000.0);
+        SendClientMessage(targetid, 0x66FF66FF, "Reparacion completa finalizada (carroceria + motor DL 2000).");
+        SendClientMessage(playerid, 0x66FF66FF, "Reparacion completa realizada. Recibiste tu pago.");
+    }
+
+    MecanicoReparaciones[playerid]++;
+    if(MecanicoReparaciones[playerid] >= PROGRESO_MECANICO_POR_NIVEL) {
+        MecanicoReparaciones[playerid] = 0;
+        if(MecanicoNivel[playerid] < NIVEL_MAX_TRABAJO) {
+            MecanicoNivel[playerid]++;
+            new lvlMsg[96];
+            format(lvlMsg, sizeof(lvlMsg), "Subiste al nivel %d de mecanico.", MecanicoNivel[playerid]);
+            SendClientMessage(playerid, 0xFFFF00FF, lvlMsg);
+        }
+    }
+
+    new msg[160];
+    format(msg, sizeof(msg), "Pagaste $%d por la reparacion. El mecanico recibio $%d.", costo, pagoMecanico);
+    SendClientMessage(targetid, 0x99FFFFFF, msg);
+    return 1;
 }
 
 stock GuardarMinas() {
