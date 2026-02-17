@@ -3002,33 +3002,33 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 231.0, 418.0, "GAS:");
-    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.22, 1.0);
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 264.0, 420.0, "GAS:");
+    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.20, 0.9);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoBarraGas[playerid], 0);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 277.0, 419.6, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 1.0);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 429.0, 0.0);
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 288.0, 420.4, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.85);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 360.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 277.0, 419.6, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 1.0);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 429.0, 0.0);
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 288.0, 420.4, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.85);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 360.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 334.0, 391.6, "0");
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 344.0, 391.6, "0");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.45, 1.9);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_CENTER);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
@@ -3036,7 +3036,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 362.0, 402.0, "K/H");
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 354.0, 402.0, "K/H");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.20, 1.0);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
@@ -3044,9 +3044,9 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
 
-    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 334.0, 435.0, "DL:1000");
+    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 366.0, 420.0, "DL:1000");
     PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.20, 1.0);
-    PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_CENTER);
+    PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
     PlayerTextDrawFont(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetOutline(playerid, TextoVehiculoDL[playerid], 0);
@@ -7411,8 +7411,8 @@ stock ActualizarBarrasEstado(playerid) {
 
     new Float:anchoMax = 100.0;
     new Float:inicioHambre = 525.0;
-    new Float:inicioGas = 294.0;
-    new Float:anchoGasMax = 90.0;
+    new Float:inicioGas = 288.0;
+    new Float:anchoGasMax = 72.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicioHambre + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoGasMax * float(gas) / 100.0), 0.0);
     return 1;
