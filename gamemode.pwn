@@ -979,6 +979,7 @@ public FinalizarRecolectaBasura(playerid) {
     }
     SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 4.5);
     SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Tienes una bolsa. Acercate a la Rumpo y presiona H para cargarla.");
+    EnviarEntornoAccion(playerid, "recoge una bolsa de basura y la carga sobre su hombro.");
 
     if(BasureroRecolectado[playerid] >= TotalRutasBasura) {
         SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ultima bolsa recolectada. Cargala en la Rumpo para ir automaticamente al vertedero.");
@@ -1439,6 +1440,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         SetTimerEx("FinalizarRecolectaBasura", 3000, false, "d", playerid);
         GameTextForPlayer(playerid, "~w~RECOLECTANDO BASURA", 2000, 3);
+        EnviarEntornoAccion(playerid, "se agacha para recolectar residuos de la calle.");
         return 1;
     }
 
@@ -1491,6 +1493,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(madera > 0) format(txtCarga, sizeof(txtCarga), "[Talador] Subiste 1 tronco. Probabilidad cumplida: recibiste %d madera(s). Total troncos: %d.", madera, LenadorMaderaRuta[playerid]);
         else format(txtCarga, sizeof(txtCarga), "[Talador] Subiste 1 tronco a la camioneta. Total troncos cargados: %d.", LenadorMaderaRuta[playerid]);
         SendClientMessage(playerid, 0x66FF66FF, txtCarga);
+        EnviarEntornoAccion(playerid, "carga un tronco en la caja de su camioneta.");
         if(SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Te marcamos el siguiente arbol.");
         return 1;
     }
@@ -1551,6 +1554,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             MecanicoNivel[playerid] = 1;
             MecanicoReparaciones[playerid] = 0;
             SendClientMessage(playerid, 0x66CCFFFF, "[Mecanico] Trabajo activado. Usa /reparar para ofrecer servicio.");
+            EnviarEntornoAccion(playerid, "se coloca el overol de mecanico y prepara sus herramientas de trabajo.");
         } else {
             SendClientMessage(playerid, 0x66CCFFFF, "[Mecanico] Ya tienes este trabajo activo. Usa /reparar para atender clientes.");
         }
@@ -1563,6 +1567,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             MedicoNivel[playerid] = 1;
             MedicoTratamientos[playerid] = 0;
             SendClientMessage(playerid, 0x66FF99FF, "[Medico] Trabajo activado. Usa /curar para atender pacientes.");
+            EnviarEntornoAccion(playerid, "se acomoda los guantes y comienza su turno medico.");
         } else {
             SendClientMessage(playerid, 0x66FF99FF, "[Medico] Ya tienes este trabajo activo. Usa /curar y /prote segun tu nivel.");
         }
@@ -1576,6 +1581,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         MineroGPSActivo[playerid] = true;
         SetCheckpointMinaMasCercana(playerid);
         SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ahora eres minero. Compra un mazo en la Tienda Kame House, usa /mina y sigue el checkpoint.");
+        EnviarEntornoAccion(playerid, "ajusta su casco y toma rumbo hacia la mina.");
         return 1;
     }
 
@@ -1591,6 +1597,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         PutPlayerInVehicle(playerid, LenadorVehiculo[playerid], 0);
         if(!SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0xFFAA00FF, "[Talador] No hay arboles disponibles por ahora.");
         else SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Trabajo activado. Toma tu hacha y tala arboles con H.");
+        EnviarEntornoAccion(playerid, "sube a su camioneta de trabajo y se dirige a la zona forestal.");
         return 1;
     }
 
@@ -1610,6 +1617,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         MineroTimer[playerid] = SetTimerEx("FinalizarMinado", segs * 1000, false, "d", playerid);
         new msgm[96]; format(msgm, sizeof(msgm), "[Minero] Minando... tiempo estimado: %d segundos.", segs);
         SendClientMessage(playerid, 0xFFFF66FF, msgm);
+        EnviarEntornoAccion(playerid, "empieza a golpear la veta de mineral con su mazo.");
         return 1;
     }
 
@@ -1626,6 +1634,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, 3000, t_FORCE_SYNC:SYNC_ALL);
             LenadorTimer[playerid] = SetTimerEx("FinalizarTalaArbol", 3000, false, "d", playerid);
             SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Talando arbol...");
+            EnviarEntornoAccion(playerid, "comienza a talar un arbol con golpes firmes de hacha.");
             return 1;
         }
 
@@ -1642,6 +1651,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         ArbolCooldownTick[a] = GetTickCount() + COOLDOWN_ARBOL_MS;
         SetPlayerAttachedObject(playerid, 9, 1463, 6, 0.11, 0.05, 0.03, 0.0, 0.0, 0.0, 0.75, 0.75, 0.75);
         SendClientMessage(playerid, 0xB87333FF, "[Talador] Recogiste los troncos. Cargalos en la Sadler con H.");
+        EnviarEntornoAccion(playerid, "carga un tronco pesado sobre su hombro.");
         return 1;
     }
 
@@ -1704,6 +1714,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         TrabajandoCamionero[playerid] = 1;
         SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 5.0);
         SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Sube al camion y ve al punto de carga.");
+        EnviarEntornoAccion(playerid, "enciende su camion de reparto e inicia una nueva ruta.");
         return 1;
     }
 
@@ -1717,6 +1728,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         TrabajandoPizzero[playerid] = 1;
         SetTimerEx("AsignarRutaPizzero", 200, false, "d", playerid);
         SendClientMessage(playerid, -1, "{FF4500}[Pizzero]{FFFFFF} Entrega pizzas y sigue el checkpoint para cobrar.");
+        EnviarEntornoAccion(playerid, "se coloca el casco y sale de la pizzeria con pedidos calientes.");
         return 1;
     }
     // Inicio de trabajo basurero
@@ -1734,6 +1746,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         TrabajandoBasurero[playerid] = 1;
         IniciarRutaBasurero(playerid);
         SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Recolecta basura y cargala en la Rumpo estando a su lado con H.");
+        EnviarEntornoAccion(playerid, "arranca la Rumpo municipal para comenzar su ruta de limpieza.");
         return 1;
     }
 
@@ -1762,6 +1775,7 @@ public OnPlayerEnterCheckpoint(playerid)
         GameTextForPlayer(playerid, "~w~CARGANDO...~n~~y~Espere", 3000, 3);
         SetTimerEx("FinalizarCarga", 20000, false, "d", playerid);
         TrabajandoCamionero[playerid] = 2;
+        EnviarEntornoAccion(playerid, "asegura la mercancia y comienza la carga del camion.");
     }
     else if(TrabajandoCamionero[playerid] == 3) { // Llegando a entregar
         DisablePlayerCheckpoint(playerid);
@@ -1769,6 +1783,7 @@ public OnPlayerEnterCheckpoint(playerid)
         GameTextForPlayer(playerid, "~w~DESCARGANDO...~n~~y~Espere", 3000, 3);
         SetTimerEx("FinalizarDescarga", 10000, false, "d", playerid);
         TrabajandoCamionero[playerid] = 4;
+        EnviarEntornoAccion(playerid, "maniobra el camion y empieza la descarga de mercancia.");
     }
     else if(TrabajandoCamionero[playerid] == 5) { // Volviendo a base
         DisablePlayerCheckpoint(playerid);
@@ -1819,6 +1834,7 @@ public OnPlayerEnterCheckpoint(playerid)
         new msg[160];
         format(msg, sizeof(msg), "[Talador] Entregaste %d tronco(s). Pago: $%d (+$%d bono).", LenadorMaderaRuta[playerid], totalPago, bonusMembresia);
         SendClientMessage(playerid, 0x66FF66FF, msg);
+        EnviarEntornoAccion(playerid, "descarga los troncos y cobra por el lote entregado.");
         LenadorMaderaRuta[playerid] = 0;
         LenadorEntregando[playerid] = false;
         SetCheckpointArbolMasCercano(playerid);
@@ -1837,6 +1853,7 @@ public OnPlayerEnterCheckpoint(playerid)
         GameTextForPlayer(playerid, "~r~ENTREGANDO PIZZA", 2500, 3);
         SetTimerEx("FinalizarEntregaPizza", 10000, false, "d", playerid);
         TrabajandoPizzero[playerid] = 2;
+        EnviarEntornoAccion(playerid, "entrega una pizza y verifica el recibo del pedido.");
         return 1;
     }
     return 1;
@@ -1888,6 +1905,7 @@ public FinalizarDescarga(playerid) {
     TrabajandoCamionero[playerid] = 5;
     SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 5.0);
     SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Descarga lista. Regresa al deposito para cobrar.");
+    EnviarEntornoAccion(playerid, "termina la descarga del camion y cierra la compuerta.");
     return 1;
 }
 
@@ -1944,6 +1962,7 @@ stock FinalizarTrabajo(playerid) {
     SendClientMessage(playerid, 0x00FF00FF, str);
     format(str, sizeof(str), "{FFD700}[Camionero]{FFFFFF} Pago recibido: {00FF00}$%d", pago);
     SendClientMessage(playerid, 0x00FF00FF, str);
+    EnviarEntornoAccion(playerid, "firma la hoja de ruta y finaliza su jornada de camionero.");
     GameTextForPlayer(playerid, "~g~Pago recibido", 2500, 3);
 
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
@@ -2019,6 +2038,7 @@ public FinalizarEntregaPizza(playerid) {
     SendClientMessage(playerid, 0x00FF00FF, info);
     format(info, sizeof(info), "{FF4500}[Pizzero]{FFFFFF} Pago recibido: {00FF00}$%d", pago);
     SendClientMessage(playerid, 0x00FF00FF, info);
+    EnviarEntornoAccion(playerid, "cobra la entrega y vuelve a tomar nuevos pedidos.");
     GameTextForPlayer(playerid, "~g~Pago recibido", 2000, 3);
 
     SetTimerEx("AsignarRutaPizzero", 300, false, "d", playerid);
@@ -3943,6 +3963,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         MedicoTratamientoTimer[medico] = SetTimerEx("FinalizarTratamientoMedico", 5000, false, "d", medico);
         SendClientMessage(medico, 0x66FF99FF, "[Medico] Aplicando tratamiento (5s)...");
         SendClientMessage(playerid, 0x66FF99FF, "[Medico] Estas recibiendo tratamiento. No te muevas.");
+        EnviarEntornoAccion(medico, "revisa signos vitales y comienza a aplicar un tratamiento.");
         return 1;
     }
 
@@ -7267,11 +7288,6 @@ stock FinalizarTrabajoBasurero(playerid) {
 
     if(BasureroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(BasureroVehiculo[playerid]);
     BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
-    LenadorVehiculo[playerid] = INVALID_VEHICLE_ID;
-    LenadorTrabajando[playerid] = false;
-    LenadorTieneTronco[playerid] = false;
-    LenadorEntregando[playerid] = false;
-    LenadorMaderaRuta[playerid] = 0;
     TrabajandoBasurero[playerid] = 0;
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
@@ -7575,8 +7591,8 @@ stock ActualizarTopDinero() {
         );
     }
 
-    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    if(PuntoLabel[_:puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[_:puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
@@ -8623,6 +8639,7 @@ public FinalizarMinado(playerid) {
     MineroMinaIndex[playerid] = -1;
     format(msg, sizeof(msg), "[Minero] Piedra:%d | Cobre:%d | Hierro:%d", piedra, cobre, hierro);
     SendClientMessage(playerid, 0x66FF66FF, msg);
+    EnviarEntornoAccion(playerid, "termina de picar la veta y guarda los minerales en su mochila.");
     if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
         if(SetCheckpointMinaMasCercana(playerid)) SendClientMessage(playerid, 0x66CCFFFF, "[Minero] Mina completada. Te marcamos la siguiente mina disponible mas cercana.");
         else SendClientMessage(playerid, 0xFFAA00FF, "[Minero] No hay otra mina disponible por ahora. Espera regeneracion.");
@@ -8660,6 +8677,7 @@ public FinalizarTalaArbol(playerid) {
             }
         }
         SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Arbol talado. Presiona H para recoger los troncos.");
+        EnviarEntornoAccion(playerid, "derriba el arbol y deja troncos listos para cargar.");
     }
     return 1;
 }
@@ -8988,6 +9006,7 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
     else format(tipoTxt, sizeof(tipoTxt), "DL 1000 (solo damage level)");
     format(msg, sizeof(msg), "Iniciaste reparacion de %s al jugador %d. Espera 10 segundos...", tipoTxt, targetid);
     SendClientMessage(playerid, 0xFFFF66FF, msg);
+    EnviarEntornoAccion(playerid, "abre su caja de herramientas y empieza a reparar un vehiculo.");
     format(msg, sizeof(msg), "El mecanico %d comenzo a reparar tu vehiculo. Espera 10 segundos.", playerid);
     SendClientMessage(targetid, 0xFFFF66FF, msg);
     return 1;
@@ -9131,6 +9150,7 @@ public FinalizarTratamientoMedico(playerid) {
         SendClientMessage(targetid, 0x66FF99FF, "[Medico] Tratamiento de chaleco aplicado.");
     }
     SendClientMessage(playerid, 0x66FF99FF, "[Medico] Tratamiento completado. Recibiste tu pago.");
+    EnviarEntornoAccion(playerid, "finaliza el tratamiento y guarda sus insumos medicos.");
 
     MedicoTratamientos[playerid]++;
     if(MedicoTratamientos[playerid] >= PROGRESO_MEDICO_POR_NIVEL) {
