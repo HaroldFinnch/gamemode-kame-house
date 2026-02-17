@@ -18,6 +18,7 @@
 #define DISTANCIA_PAGO_PIZZA 2.2
 #define HORAS_POR_NIVEL_PJ   4
 #define COBRO_DIARIO_POR_VEHICULO 750
+#define MAX_DINERO_JUGADOR   2000000000
 
 #define PAGO_MAX_PIZZERO     2600
 #define PAGO_MAX_CAMIONERO   6800
@@ -2466,7 +2467,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
         if(monto <= 0) return SendClientMessage(playerid, -1, "Monto invalido.");
 
-        KH_GivePlayerMoney(id, monto);
+        if(!KH_GivePlayerMoney(id, monto)) return SendClientMessage(playerid, -1, "No se pudo entregar el dinero (limite alcanzado).");
         new str[128], n1[MAX_PLAYER_NAME], n2[MAX_PLAYER_NAME];
         GetPlayerName(playerid, n1, sizeof(n1));
         GetPlayerName(id, n2, sizeof(n2));
@@ -3001,7 +3002,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 274.0, 417.0, "GAS");
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 268.0, 418.2, "GAS");
     PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.18, 0.72);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
@@ -3009,25 +3010,25 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoBarraGas[playerid], 0);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 306.0, 418.2, "_");
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 294.0, 418.2, "_");
     PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.58);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 396.0, 0.0);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 384.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 306.0, 418.2, "_");
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 294.0, 418.2, "_");
     PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.58);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 396.0, 0.0);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 384.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 270.0, 407.6, "0");
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 292.0, 407.8, "0");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.29, 1.18);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
@@ -3035,7 +3036,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 318.0, 411.6, "K/H");
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 320.0, 411.8, "K/H");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.13, 0.76);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
@@ -3043,12 +3044,12 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
 
-    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 336.0, 408.8, "DL: 1000");
+    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 352.0, 408.8, "DL: 1000");
     PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.12, 0.74);
     PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
     PlayerTextDrawFont(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoVehiculoDL[playerid], 1);
+    PlayerTextDrawSetOutline(playerid, TextoVehiculoDL[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVehiculoDL[playerid], 0);
 
     AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 635.0, 218.0, "~w~");
@@ -3062,8 +3063,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
     PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 635.0, 0.0);
 
-    DineroCambioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 631.0, 244.0, " ");
-    PlayerTextDrawLetterSize(playerid, DineroCambioTextDraw[playerid], 0.15, 0.64);
+    DineroCambioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 631.0, 240.0, " ");
+    PlayerTextDrawLetterSize(playerid, DineroCambioTextDraw[playerid], 0.22, 0.95);
     PlayerTextDrawAlignment(playerid, DineroCambioTextDraw[playerid], TEXT_DRAW_ALIGN_RIGHT);
     PlayerTextDrawColour(playerid, DineroCambioTextDraw[playerid], 0xFFFFFFFF);
     PlayerTextDrawBackgroundColour(playerid, DineroCambioTextDraw[playerid], 0x00000000);
@@ -5588,8 +5589,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new target = BankTransferTarget[playerid];
         if(target == -1 || !IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "El jugador destino ya no esta conectado.");
         new monto = strval(inputtext);
-        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(monto <= 0 || monto > MAX_DINERO_JUGADOR) return SendClientMessage(playerid, -1, "Cantidad invalida.");
         if(PlayerBankMoney[playerid] < monto) return SendClientMessage(playerid, -1, "No tienes saldo suficiente en el banco.");
+        if(PlayerBankMoney[target] > (MAX_DINERO_JUGADOR - monto)) return SendClientMessage(playerid, -1, "El destinatario ya no puede recibir mas dinero en banco.");
         PlayerBankMoney[playerid] -= monto;
         PlayerBankMoney[target] += monto;
         new n[MAX_PLAYER_NAME], msg[128];
@@ -5606,9 +5608,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_BANK_DEPOSIT) {
         if(!response) return ShowBankMenu(playerid);
         new monto = strval(inputtext);
-        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(monto <= 0 || monto > MAX_DINERO_JUGADOR) return SendClientMessage(playerid, -1, "Cantidad invalida.");
         if(GetPlayerMoney(playerid) < monto) return SendClientMessage(playerid, -1, "No tienes ese dinero en mano.");
-        KH_GivePlayerMoney(playerid, -monto);
+        if(PlayerBankMoney[playerid] > (MAX_DINERO_JUGADOR - monto)) return SendClientMessage(playerid, -1, "Tu cuenta bancaria alcanzo el limite maximo.");
+        if(!KH_GivePlayerMoney(playerid, -monto)) return SendClientMessage(playerid, -1, "No se pudo procesar el deposito.");
         PlayerBankMoney[playerid] += monto;
         SendClientMessage(playerid, 0x00FF00FF, "Deposito realizado correctamente.");
         return ShowBankMenu(playerid);
@@ -5617,10 +5620,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_BANK_WITHDRAW) {
         if(!response) return ShowBankMenu(playerid);
         new monto = strval(inputtext);
-        if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
+        if(monto <= 0 || monto > MAX_DINERO_JUGADOR) return SendClientMessage(playerid, -1, "Cantidad invalida.");
         if(PlayerBankMoney[playerid] < monto) return SendClientMessage(playerid, -1, "No tienes saldo suficiente en el banco.");
         PlayerBankMoney[playerid] -= monto;
-        KH_GivePlayerMoney(playerid, monto);
+        if(!KH_GivePlayerMoney(playerid, monto)) {
+            PlayerBankMoney[playerid] += monto;
+            return SendClientMessage(playerid, -1, "No puedes retirar mas dinero en este momento.");
+        }
         SendClientMessage(playerid, 0x00FF00FF, "Retiro realizado correctamente.");
         return ShowBankMenu(playerid);
     }
@@ -7342,6 +7348,12 @@ stock MostrarSonidoDinero(playerid, monto) {
 }
 
 stock KH_GivePlayerMoney(playerid, monto, bool:mostrarAviso = true) {
+    if(!IsPlayerConnected(playerid) || monto == 0) return 0;
+
+    new dineroActual = GetPlayerMoney(playerid);
+    if(monto > 0 && dineroActual > (MAX_DINERO_JUGADOR - monto)) return 0;
+    if(monto < 0 && dineroActual < -monto) return 0;
+
     GivePlayerMoney(playerid, monto);
     if(!mostrarAviso) return 1;
     MostrarTextoDinero(playerid, monto);
@@ -7399,7 +7411,7 @@ stock ActualizarBarrasEstado(playerid) {
 
     new Float:anchoMax = 100.0;
     new Float:inicioHambre = 525.0;
-    new Float:inicioGas = 306.0;
+    new Float:inicioGas = 294.0;
     new Float:anchoGasMax = 90.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicioHambre + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoGasMax * float(gas) / 100.0), 0.0);
