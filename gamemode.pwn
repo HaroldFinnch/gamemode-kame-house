@@ -1072,7 +1072,6 @@ stock GetEditMapSlotLibre();
 stock GetConceptoSancionNombre(concepto, dest[], len);
 stock AplicarSancionJugador(adminid, targetid, concepto, minutos);
 stock RemoverSancionJugador(targetid);
-stock GetSancionVirtualWorld(playerid);
 stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
 forward EnviarEntornoAccion(playerid, const accion[]);
@@ -3157,7 +3156,8 @@ public OnPlayerSpawn(playerid) {
         SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
         TogglePlayerControllable(playerid, false);
         DisableRemoteVehicleCollisions(playerid, true);
-        SetPlayerVirtualWorld(playerid, GetSancionVirtualWorld(playerid));
+        SetPlayerVirtualWorld(playerid, SancionPrevVW[playerid]);
+        SetPlayerInterior(playerid, SancionPrevInterior[playerid]);
     } else {
         DisableRemoteVehicleCollisions(playerid, false);
     }
@@ -3421,13 +3421,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion premium {FFFFFF}(motor+carroceria, precio definido por mecanico)");
         } else if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
             format(nivelTxt, sizeof(nivelTxt), "Nivel %d", MecanicoNivel[playerid]);
-            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparar motor {FFFFFF}(DL 1000 - $1000)");
+            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion intermedia {FFFFFF}(tope DL 1000 - $1000)");
         } else {
             format(nivelTxt, sizeof(nivelTxt), "Nivel %d", MecanicoNivel[playerid]);
-            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparar motor {FFFFFF}(DL 800 - $800)");
+            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion basica {FFFFFF}(tope DL 800 - $800)");
         }
         format(cuerpo, sizeof(cuerpo), "{33CCFF}El mecanico {FFFFFF}%s {33CCFF}(%s) te ofrece servicio.\n{FFCC66}La solicitud se cancelara en 30 segundos.\n\n%s", nombreMecanico, nivelTxt, servicioTxt);
-        ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_LIST, "{33CCFF}Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
+        ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_MSGBOX, "{33CCFF}Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
         format(msg, sizeof(msg), "Solicitud enviada al jugador %d (caduca en 30 segundos).", target);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         SendClientMessage(target, 0x33CCFFFF, "[Mecanico] Tienes una solicitud nueva de reparacion.");
@@ -3448,17 +3448,19 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return 1;
         }
 
-        if(listitem != 0) return SendClientMessage(playerid, -1, "Opcion invalida.");
         if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo el vehiculo a reparar.");
         if(MecanicoNivel[mecanico] <= 0 || MecanicoReparando[mecanico]) return SendClientMessage(playerid, -1, "El mecanico ya no esta disponible en este momento.");
 
-        new tipo = (MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_PREMIUM) ? 3 : 1;
+        new tipo = 1;
         new costo = 800;
         if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_PREMIUM) {
-            MecanicoSolicitudTipoPendiente[playerid] = tipo;
+            MecanicoSolicitudTipoPendiente[playerid] = 3;
             return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_PRECIO, DIALOG_STYLE_INPUT, "Solicitud mecanico premium", "Ingresa el precio acordado con el mecanico (min 1):", "Confirmar", "Cancelar");
         }
-        if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_COMPLETA) costo = 1000;
+        if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
+            tipo = 2;
+            costo = 1000;
+        }
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esa reparacion.");
 
         LimpiarSolicitudMecanico(playerid);
@@ -6150,7 +6152,8 @@ public OnPlayerUpdate(playerid) {
             SetPlayerHealth(playerid, 100.0);
             SetPlayerArmour(playerid, 100.0);
             DisableRemoteVehicleCollisions(playerid, true);
-            SetPlayerVirtualWorld(playerid, GetSancionVirtualWorld(playerid));
+            SetPlayerVirtualWorld(playerid, SancionPrevVW[playerid]);
+            SetPlayerInterior(playerid, SancionPrevInterior[playerid]);
             SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
             new mins = restante / 60000;
             new secs = (restante / 1000) % 60;
@@ -8107,6 +8110,7 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
     if(!IsPlayerConnected(playerid) || !IsPlayerConnected(targetid)) return 0;
     if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
     if(tipoReparacion < 1 || tipoReparacion > 3) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
+    if(tipoReparacion == 2 && (MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_COMPLETA || MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_PREMIUM)) return SendClientMessage(playerid, -1, "La reparacion intermedia es solo para niveles 5-9.");
     if(tipoReparacion == 3 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_PREMIUM) return SendClientMessage(playerid, -1, "Necesitas nivel 10 para reparacion premium.");
     if(!IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El cliente debe estar conduciendo su vehiculo.");
     if(GetPlayerVirtualWorld(playerid) != GetPlayerVirtualWorld(targetid) || GetPlayerInterior(playerid) != GetPlayerInterior(targetid)) return SendClientMessage(playerid, -1, "Debes estar en el mismo interior/mundo que el cliente.");
@@ -8125,9 +8129,9 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
     MecanicoRepairTimer[playerid] = SetTimerEx("FinalizarReparacionMecanico", 10000, false, "d", playerid);
 
     new msg[160], tipoTxt[48];
-    if(tipoReparacion == 1) format(tipoTxt, sizeof(tipoTxt), "motor");
-    else if(tipoReparacion == 2) format(tipoTxt, sizeof(tipoTxt), "motor (intermedio)");
-    else format(tipoTxt, sizeof(tipoTxt), "premium (carroceria + motor)");
+    if(tipoReparacion == 1) format(tipoTxt, sizeof(tipoTxt), "basica (tope DL 800)");
+    else if(tipoReparacion == 2) format(tipoTxt, sizeof(tipoTxt), "intermedia (tope DL 1000)");
+    else format(tipoTxt, sizeof(tipoTxt), "premium (motor + carroceria)");
     format(msg, sizeof(msg), "Iniciaste reparacion de %s al jugador %d. Espera 10 segundos...", tipoTxt, targetid);
     SendClientMessage(playerid, 0xFFFF66FF, msg);
     format(msg, sizeof(msg), "El mecanico %d comenzo a reparar tu vehiculo. Espera 10 segundos.", playerid);
@@ -8793,10 +8797,6 @@ stock CargarEditMap() {
     return 1;
 }
 
-stock GetSancionVirtualWorld(playerid) {
-    return 2000 + playerid;
-}
-
 stock GetConceptoSancionNombre(concepto, dest[], len) {
     if(concepto == 0) return format(dest, len, "PG");
     if(concepto == 1) return format(dest, len, "DM");
@@ -8823,7 +8823,6 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     SetPlayerHealth(targetid, 100.0);
     SetPlayerArmour(targetid, 100.0);
     DisableRemoteVehicleCollisions(targetid, true);
-    SetPlayerVirtualWorld(targetid, GetSancionVirtualWorld(targetid));
 
     new conceptoNombre[16], labelText[128];
     GetConceptoSancionNombre(concepto, conceptoNombre, sizeof(conceptoNombre));
