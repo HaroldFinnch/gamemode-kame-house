@@ -43,6 +43,8 @@
 #define DL_REPARACION_BASICA 800.0
 #define DL_REPARACION_INTERMEDIA 1000.0
 #define PROGRESO_MECANICO_POR_NIVEL 5
+#define MECANICO_DIST_SOLICITUD 4.0
+#define BIDON_ATTACH_SLOT 6
 
 #define SEMILLA_HIERBA_PRECIO 45
 #define SEMILLA_FLOR_PRECIO   65
@@ -334,6 +336,8 @@ new PlayerText:BarraGas[MAX_PLAYERS];
 new PlayerText:BarraGasFondo[MAX_PLAYERS];
 new PlayerText:TextoBarraGas[MAX_PLAYERS];
 new PlayerText:TextoVelocimetro[MAX_PLAYERS] = {PlayerText:-1, ...};
+new PlayerText:TextoVelocimetroUnidad[MAX_PLAYERS] = {PlayerText:-1, ...};
+new PlayerText:TextoVehiculoDL[MAX_PLAYERS] = {PlayerText:-1, ...};
 new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
 new PlayerBankMoney[MAX_PLAYERS];
@@ -383,7 +387,11 @@ new MecanicoRepairType[MAX_PLAYERS];
 new MecanicoRepairPrecio[MAX_PLAYERS];
 new MecanicoSolicitudPendiente[MAX_PLAYERS] = {-1, ...};
 new MecanicoSolicitudTipoPendiente[MAX_PLAYERS];
+new MecanicoSolicitudPrecioPendiente[MAX_PLAYERS];
 new MecanicoSolicitudTimer[MAX_PLAYERS] = {-1, ...};
+new MecanicoModoSolicitud[MAX_PLAYERS];
+new MecanicoPrecioTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new MecanicoPrecioTipoPendiente[MAX_PLAYERS];
 new bool:PlayerTieneKitReparacion[MAX_PLAYERS];
 
 // Variables Inventario/Cultivo
@@ -952,6 +960,10 @@ stock ActualizarBarrasEstado(playerid);
 stock CuentaArmasMaletero(vehid);
 stock FormatearBarraEstado(const etiqueta[], valor, dest[], len);
 stock InitGasSystem();
+stock MostrarTextoDinero(playerid, monto);
+stock MostrarSonidoDinero(playerid, monto);
+stock KH_GivePlayerMoney(playerid, monto, bool:mostrarAviso = true);
+stock LimpiarBidonVisual(playerid);
 stock ActualizarGasTextoVehiculo(playerid);
 stock SetMotorVehiculoJugador(playerid, vehid, bool:encender);
 stock EncontrarGasCercano(playerid);
@@ -1222,6 +1234,8 @@ public OnGameModeInit() {
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
     VentaAutosPos[2] = PuntoPos[puntoVentaAutos][2];
 
+    InitGasSystem();
+
     CargarPuntosMovibles();
     MigrarArchivoLegacy(PATH_PRENDAS_LEGACY, PATH_PRENDAS);
     MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
@@ -1304,7 +1318,6 @@ public OnGameModeInit() {
     SetTimer("CheckInactiveVehicles", 10000, true);
     SetTimer("ActualizarTextosHornos", 1000, true);
 
-    InitGasSystem();
     InicializarSistemaFacciones();
     return 1;
 }
@@ -1494,7 +1507,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "SHOP", "SHP_Rob_React", 4.1, false, false, false, false, 1200, t_FORCE_SYNC:SYNC_ALL);
         SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
-        GivePlayerMoney(playerid, -100);
+        KH_GivePlayerMoney(playerid, -100);
         InvPrepieza[playerid] += 2;
         PrepiezaCooldownTick[playerid][pp] = GetTickCount() + 300000;
         SendClientMessage(playerid, 0x66FF66FF, "Compraste 2 prepiezas por $100.");
@@ -1718,7 +1731,7 @@ stock FinalizarTrabajo(playerid) {
     if(pago > PAGO_MAX_CAMIONERO) pago = PAGO_MAX_CAMIONERO;
     new bonusMembresia = GetBonusTrabajoMembresia(playerid);
     if(bonusMembresia > 0) pago += bonusMembresia;
-    GivePlayerMoney(playerid, pago);
+    KH_GivePlayerMoney(playerid, pago);
 
     CamioneroViajes[playerid]++;
     if(CamioneroViajes[playerid] >= PROGRESO_CAMIONERO_POR_NIVEL) {
@@ -1727,6 +1740,7 @@ stock FinalizarTrabajo(playerid) {
         new levelmsg[96];
         format(levelmsg, sizeof(levelmsg), "{FFFF00}NIVEL SUBIDO!{FFFFFF} Ahora eres nivel %d.", CamioneroNivel[playerid]);
         SendClientMessage(playerid, 0xFFFF00FF, levelmsg);
+        PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
     }
 
     if(random(100) < 6) {
@@ -1799,13 +1813,14 @@ public FinalizarEntregaPizza(playerid) {
     if(pago > 1000) pago = 1000;
     new bonusMembresia = GetBonusTrabajoMembresia(playerid);
     if(bonusMembresia > 0) pago += bonusMembresia;
-    GivePlayerMoney(playerid, pago);
+    KH_GivePlayerMoney(playerid, pago);
 
     PizzeroEntregas[playerid]++;
     if(PizzeroEntregas[playerid] >= PROGRESO_PIZZERO_POR_NIVEL) {
         PizzeroEntregas[playerid] = 0;
         if(PizzeroNivel[playerid] < NIVEL_MAX_TRABAJO) PizzeroNivel[playerid]++;
         SendClientMessage(playerid, 0xFFFF00FF, "Subiste de nivel en el trabajo Pizzero.");
+        PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
     }
 
     new info[160];
@@ -1946,7 +1961,15 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/reparar", true)) {
         if(MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de mecanico primero.");
         if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
-        return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_ID, DIALOG_STYLE_INPUT, "{66CCFF}Trabajo De Mecanico", "{FFFFFF}Ingresa el ID del jugador al que deseas ofrecer reparacion:\n{33CCFF}El cliente elegira el servicio en la solicitud.", "Enviar", "Cancelar");
+        MecanicoModoSolicitud[playerid] = 0;
+        return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_ID, DIALOG_STYLE_INPUT, "{66CCFF}Trabajo De Mecanico", "{FFFFFF}Ingresa el ID del jugador al que deseas ofrecer reparacion:\n{33CCFF}El cliente solo acepta o rechaza el precio que define el mecanico.", "Enviar", "Cancelar");
+    }
+
+    if(!strcmp(cmd, "/reparardl", true)) {
+        if(MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_PREMIUM) return SendClientMessage(playerid, -1, "Necesitas nivel 10 de mecanico para usar /reparardl.");
+        if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
+        MecanicoModoSolicitud[playerid] = 1;
+        return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_ID, DIALOG_STYLE_INPUT, "{66CCFF}Trabajo De Mecanico", "{FFFFFF}Ingresa el ID del jugador para ofrecer {66FF99}Reparacion DL 1000{FFFFFF}:\n{33CCFF}Precio fijo del servicio: $1000.", "Enviar", "Cancelar");
     }
 
     if(!strcmp(cmd, "/usarkit", true)) {
@@ -2008,7 +2031,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "FOOD", "EAT_Burger", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         SetTimerEx("ClearPlayerAnimLock", 1600, false, "d", playerid);
-        GivePlayerMoney(playerid, -PRECIO_COMIDA);
+        KH_GivePlayerMoney(playerid, -PRECIO_COMIDA);
         PlayerHambre[playerid] += HAMBRE_POR_COMIDA;
         if(PlayerHambre[playerid] > 100) PlayerHambre[playerid] = 100;
 
@@ -2059,13 +2082,21 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/compra", true)) {
+        new itemCompra[24];
+        format(itemCompra, sizeof(itemCompra), "%s", strtok(cmdtext, idx));
+        if(strcmp(itemCompra, "bidon", true)) return SendClientMessage(playerid, -1, "Uso: /compra bidon");
+        format(cmd, sizeof(cmd), "/bidon");
+    }
+
     if(!strcmp(cmd, "/bidon", true)) {
         if(IsPlayerInAnyVehicle(playerid)) return SendClientMessage(playerid, -1, "Debes estar a pie para comprar un bidon.");
         if(EncontrarGasCercano(playerid) == -1) return SendClientMessage(playerid, -1, "Debes estar en una gasolinera.");
         if(BidonGasolina[playerid] > 0) return SendClientMessage(playerid, -1, "Ya tienes un bidon.");
         if(GetPlayerMoney(playerid) < 7500) return SendClientMessage(playerid, -1, "Necesitas $7500 para comprar el bidon.");
-        GivePlayerMoney(playerid, -7500);
+        KH_GivePlayerMoney(playerid, -7500);
         BidonGasolina[playerid] = 1;
+        SetPlayerAttachedObject(playerid, BIDON_ATTACH_SLOT, 1650, 6, 0.11, 0.02, 0.00, 0.0, 80.0, 0.0, 0.85, 0.85, 0.85);
         SendClientMessage(playerid, 0x00FF00FF, "Compraste un bidon de gasolina. Usa /usarbidon dentro del vehiculo.");
         return 1;
     }
@@ -2080,6 +2111,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GasVehiculo[veh] += 15;
         if(GasVehiculo[veh] > 100) GasVehiculo[veh] = 100;
         BidonGasolina[playerid] = 0;
+        LimpiarBidonVisual(playerid);
         ActualizarGasTextoVehiculo(playerid);
         SendClientMessage(playerid, 0x00FF00FF, "Usaste el bidon. Gasolina +15.");
         return 1;
@@ -2144,7 +2176,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
                 ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
                 TogglePlayerControllable(playerid, true);
                 new t = MecanicoRepairTarget[playerid];
-                if(IsPlayerConnected(t)) SendClientMessage(t, 0xFFAA00FF, "Tu reparacion fue cancelada porque el mecanico abandono el trabajo.");
+                if(IsPlayerConnected(t)) { TogglePlayerControllable(t, true); ClearAnimations(t, t_FORCE_SYNC:SYNC_ALL); SendClientMessage(t, 0xFFAA00FF, "Tu reparacion fue cancelada porque el mecanico abandono el trabajo."); }
             }
             MecanicoReparando[playerid] = false;
             MecanicoRepairTarget[playerid] = -1;
@@ -2305,7 +2337,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             return SendClientMessage(playerid, -1, aviso);
         }
         if(GetPlayerMoney(playerid) < CasaData[casa][cPrecio]) return SendClientMessage(playerid, -1, "No tienes suficiente dinero.");
-        GivePlayerMoney(playerid, -CasaData[casa][cPrecio]);
+        KH_GivePlayerMoney(playerid, -CasaData[casa][cPrecio]);
         new name[MAX_PLAYER_NAME];
         GetPlayerName(playerid, name, sizeof(name));
         strmid(CasaData[casa][cOwner], name, 0, strlen(name)+1, MAX_PLAYER_NAME);
@@ -2419,7 +2451,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Jugador desconectado.");
         if(monto <= 0) return SendClientMessage(playerid, -1, "Monto invalido.");
 
-        GivePlayerMoney(id, monto);
+        KH_GivePlayerMoney(id, monto);
         new str[128], n1[MAX_PLAYER_NAME], n2[MAX_PLAYER_NAME];
         GetPlayerName(playerid, n1, sizeof(n1));
         GetPlayerName(id, n2, sizeof(n2));
@@ -2976,13 +3008,29 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.4, "0 K/H");
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.4, "0");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.16, 0.62);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetro[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
+
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 304.0, 409.4, "K/H");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.16, 0.62);
+    PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0x99FFFFFF);
+    PlayerTextDrawFont(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_FONT_1);
+    PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 0);
+    PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
+
+    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 340.0, 409.4, "DL: 1000");
+    PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.16, 0.62);
+    PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x66FF66FF);
+    PlayerTextDrawFont(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_FONT_1);
+    PlayerTextDrawSetOutline(playerid, TextoVehiculoDL[playerid], 0);
+    PlayerTextDrawSetShadow(playerid, TextoVehiculoDL[playerid], 0);
 
     AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 635.0, 218.0, "~w~");
     PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.95);
@@ -3008,9 +3056,14 @@ public OnPlayerConnect(playerid) {
     BasureroTieneBolsa[playerid] = false;
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
+    LimpiarBidonVisual(playerid);
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
+    if(MecanicoReparando[playerid]) {
+        new t = MecanicoRepairTarget[playerid];
+        if(IsPlayerConnected(t)) { TogglePlayerControllable(t, true); ClearAnimations(t, t_FORCE_SYNC:SYNC_ALL); SendClientMessage(t, 0xFFAA00FF, "Tu reparacion fue cancelada porque el mecanico se desconecto."); }
+    }
     MecanicoReparando[playerid] = false;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
@@ -3286,7 +3339,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(fid == -1) return SendClientMessage(playerid, -1, "No hay espacio para mas facciones.");
         new nombre[17]; GetPVarString(playerid, "FaccionNombreTmp", nombre, sizeof(nombre));
         if(!nombre[0]) return SendClientMessage(playerid, -1, "Nombre invalido.");
-        GivePlayerMoney(playerid, -costo);
+        KH_GivePlayerMoney(playerid, -costo);
         FaccionData[fid][facActiva] = true;
         format(FaccionData[fid][facNombre], 17, "%s", nombre);
         FaccionData[fid][facOwner] = playerid;
@@ -3307,7 +3360,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(fid == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER) return 1;
         if(listitem < 0 || listitem >= MAX_COLORES_FACCION) return 1;
         if(GetPlayerMoney(playerid) < COSTO_COMPRAR_COLOR_FACCION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        GivePlayerMoney(playerid, -COSTO_COMPRAR_COLOR_FACCION);
+        KH_GivePlayerMoney(playerid, -COSTO_COMPRAR_COLOR_FACCION);
         FaccionData[fid][facColor] = FaccionColoresValor[listitem];
         ActualizarMiembrosFaccion(fid);
         GuardarFacciones();
@@ -3409,17 +3462,30 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(MecanicoSolicitudPendiente[target] != -1) return SendClientMessage(playerid, -1, "Ese jugador ya tiene una solicitud pendiente.");
         if(!IsPlayerInAnyVehicle(target) || GetPlayerState(target) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El jugador debe estar conduciendo para solicitar reparacion.");
 
+        new vehTarget = GetPlayerVehicleID(target);
+        if(vehTarget == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo detectar el vehiculo del cliente.");
+        new Float:mx, Float:my, Float:mz, Float:vx, Float:vy, Float:vz;
+        GetPlayerPos(playerid, mx, my, mz);
+        GetVehiclePos(vehTarget, vx, vy, vz);
+        if(GetDistanceBetweenPoints(mx, my, mz, vx, vy, vz) > MECANICO_DIST_SOLICITUD) return SendClientMessage(playerid, -1, "Debes estar al lado del vehiculo para enviar la solicitud.");
+
         MecanicoSolicitudPendiente[target] = playerid;
-        MecanicoSolicitudTipoPendiente[target] = 0;
+        MecanicoSolicitudTipoPendiente[target] = (MecanicoModoSolicitud[playerid] == 1) ? 4 : (MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_PREMIUM ? 3 : (MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_COMPLETA ? 2 : 1));
+        MecanicoSolicitudPrecioPendiente[target] = (MecanicoSolicitudTipoPendiente[target] == 1) ? 800 : ((MecanicoSolicitudTipoPendiente[target] == 2 || MecanicoSolicitudTipoPendiente[target] == 4) ? 1000 : 0);
         if(MecanicoSolicitudTimer[target] != -1) KillTimer(MecanicoSolicitudTimer[target]);
         MecanicoSolicitudTimer[target] = SetTimerEx("ExpirarSolicitudMecanico", 30000, false, "d", target);
 
         new cuerpo[512], nombreMecanico[MAX_PLAYER_NAME], msg[160], nivelTxt[64], servicioTxt[256];
         GetPlayerName(playerid, nombreMecanico, sizeof(nombreMecanico));
-        if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_PREMIUM) {
+        if(MecanicoSolicitudTipoPendiente[target] == 4) {
+            format(nivelTxt, sizeof(nivelTxt), "Nivel %d", MecanicoNivel[playerid]);
+            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion DL 1000 {FFFFFF}(solo DL, precio fijo $1000)");
+        } else if(MecanicoSolicitudTipoPendiente[target] == 3) {
             format(nivelTxt, sizeof(nivelTxt), "Nivel %d (Premium)", MecanicoNivel[playerid]);
-            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion premium {FFFFFF}(motor+carroceria, precio definido por mecanico)");
-        } else if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
+            MecanicoPrecioTargetPendiente[playerid] = target;
+            MecanicoPrecioTipoPendiente[playerid] = 3;
+            return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_PRECIO, DIALOG_STYLE_INPUT, "Precio reparacion premium", "Define el precio premium para este cliente (min 1):", "Enviar", "Cancelar");
+        } else if(MecanicoSolicitudTipoPendiente[target] == 2) {
             format(nivelTxt, sizeof(nivelTxt), "Nivel %d", MecanicoNivel[playerid]);
             format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion intermedia {FFFFFF}(tope DL 1000 - $1000)");
         } else {
@@ -3451,16 +3517,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo el vehiculo a reparar.");
         if(MecanicoNivel[mecanico] <= 0 || MecanicoReparando[mecanico]) return SendClientMessage(playerid, -1, "El mecanico ya no esta disponible en este momento.");
 
-        new tipo = 1;
-        new costo = 800;
-        if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_PREMIUM) {
-            MecanicoSolicitudTipoPendiente[playerid] = 3;
-            return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_PRECIO, DIALOG_STYLE_INPUT, "Solicitud mecanico premium", "Ingresa el precio acordado con el mecanico (min 1):", "Confirmar", "Cancelar");
-        }
-        if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
-            tipo = 2;
-            costo = 1000;
-        }
+        new tipo = MecanicoSolicitudTipoPendiente[playerid];
+        if(tipo < 1 || tipo > 4) tipo = 1;
+        new costo = MecanicoSolicitudPrecioPendiente[playerid];
+        if(costo <= 0) costo = (tipo == 1) ? 800 : 1000;
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esa reparacion.");
 
         LimpiarSolicitudMecanico(playerid);
@@ -3468,21 +3528,33 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
     if(dialogid == DIALOG_MECANICO_REPARAR_PRECIO) {
-        new mecanico = MecanicoSolicitudPendiente[playerid];
+        new target = MecanicoPrecioTargetPendiente[playerid];
+        new tipo = MecanicoPrecioTipoPendiente[playerid];
         if(!response) {
-            LimpiarSolicitudMecanico(playerid);
-            if(IsPlayerConnected(mecanico)) SendClientMessage(mecanico, 0xFFAA00FF, "El jugador cancelo la solicitud premium.");
+            if(IsPlayerConnected(target)) LimpiarSolicitudMecanico(target);
+            MecanicoPrecioTargetPendiente[playerid] = -1;
+            MecanicoPrecioTipoPendiente[playerid] = 0;
             return 1;
         }
-        if(mecanico == -1 || !IsPlayerConnected(mecanico)) {
-            LimpiarSolicitudMecanico(playerid);
-            return SendClientMessage(playerid, -1, "La solicitud ya no esta disponible.");
+        if(target == -1 || !IsPlayerConnected(target) || MecanicoSolicitudPendiente[target] != playerid || tipo != 3) {
+            MecanicoPrecioTargetPendiente[playerid] = -1;
+            MecanicoPrecioTipoPendiente[playerid] = 0;
+            return SendClientMessage(playerid, -1, "La solicitud premium ya no esta disponible.");
         }
         new costo = strval(inputtext);
         if(costo <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
-        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para pagar ese servicio.");
-        LimpiarSolicitudMecanico(playerid);
-        return IniciarReparacionMecanico(mecanico, playerid, 3, costo);
+        MecanicoSolicitudPrecioPendiente[target] = costo;
+
+        new cuerpo[512], nombreMecanico[MAX_PLAYER_NAME], msg[160];
+        GetPlayerName(playerid, nombreMecanico, sizeof(nombreMecanico));
+        format(cuerpo, sizeof(cuerpo), "{33CCFF}El mecanico {FFFFFF}%s {33CCFF}(Nivel %d Premium) te ofrece servicio.\n{FFCC66}La solicitud se cancelara en 30 segundos.\n\n{66FF99}Reparacion premium {FFFFFF}(motor+carroceria)\n{FFD166}Precio definido por mecanico: {FFFFFF}$%d\n\n{AAAAAA}Solo puedes aceptar o rechazar.", nombreMecanico, MecanicoNivel[playerid], costo);
+        ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_MSGBOX, "{33CCFF}Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
+        format(msg, sizeof(msg), "Solicitud premium enviada al jugador %d por $%d (caduca en 30 segundos).", target, costo);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+        SendClientMessage(target, 0x33CCFFFF, "[Mecanico] Tienes una solicitud premium con precio definido por el mecanico.");
+        MecanicoPrecioTargetPendiente[playerid] = -1;
+        MecanicoPrecioTipoPendiente[playerid] = 0;
+        return 1;
     }
 
     if(dialogid == DIALOG_ADMIN_NIVELES_MENU) {
@@ -3678,7 +3750,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         KameTiendaTipoPendiente[playerid] = listitem;
         if(listitem == 2) {
             if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
-            GivePlayerMoney(playerid, -PRECIO_MAZO);
+            KH_GivePlayerMoney(playerid, -PRECIO_MAZO);
             PlayerTieneMazo[playerid] = true;
             MazoDurabilidad[playerid] = 120 + random(61);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
@@ -3686,14 +3758,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 3) {
             if(PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "Ya tienes telefono.");
             if(GetPlayerMoney(playerid) < PRECIO_TELEFONO) return SendClientMessage(playerid, -1, "No tienes dinero para el telefono.");
-            GivePlayerMoney(playerid, -PRECIO_TELEFONO);
+            KH_GivePlayerMoney(playerid, -PRECIO_TELEFONO);
             PlayerTieneTelefono[playerid] = true;
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un telefono. Usa /telefono para abrirlo.");
         }
         if(listitem == 4) {
             if(PlayerTieneKitReparacion[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un Kit De Reparacion.");
             if(GetPlayerMoney(playerid) < COSTO_KIT_REPARACION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para el kit.");
-            GivePlayerMoney(playerid, -COSTO_KIT_REPARACION);
+            KH_GivePlayerMoney(playerid, -COSTO_KIT_REPARACION);
             PlayerTieneKitReparacion[playerid] = true;
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un Kit De Reparacion.");
         }
@@ -3726,7 +3798,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new total = precio * cantidad;
         if(GetPlayerMoney(playerid) < total) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esta compra.");
 
-        GivePlayerMoney(playerid, -total);
+        KH_GivePlayerMoney(playerid, -total);
         if(KameTiendaTipoPendiente[playerid] == 0) InvSemillaHierba[playerid] += cantidad;
         else InvSemillaFlor[playerid] += cantidad;
 
@@ -3744,7 +3816,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return SendClientMessage(playerid, -1, "Ya tienes membresia Diamante.");
             if(PlayerDiamantes[playerid] < PrecioMembresiaVIPDiamantes) return SendClientMessage(playerid, -1, "No tienes suficientes diamantes para comprar VIP.");
             if(GetPlayerMoney(playerid) < PrecioMembresiaVIPDinero) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para VIP.");
-            GivePlayerMoney(playerid, -PrecioMembresiaVIPDinero);
+            KH_GivePlayerMoney(playerid, -PrecioMembresiaVIPDinero);
             PlayerDiamantes[playerid] -= PrecioMembresiaVIPDiamantes;
             PlayerMembresiaTipo[playerid] = MEMBRESIA_VIP;
             PlayerMembresiaExpiraTick[playerid] = GetTickCount() + (DURACION_MEMBRESIA_VIP_DIAS * 86400000);
@@ -3768,7 +3840,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(cantidad <= 0 || cantidad > 1000) return SendClientMessage(playerid, -1, "Cantidad invalida (1-1000).");
         new costoTotal = cantidad * PrecioDiamanteTienda;
         if(GetPlayerMoney(playerid) < costoTotal) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        GivePlayerMoney(playerid, -costoTotal);
+        KH_GivePlayerMoney(playerid, -costoTotal);
         PlayerDiamantes[playerid] += cantidad;
         GuardarCuenta(playerid);
         new msgd2[144];
@@ -3791,7 +3863,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         }
         limpio[j] = EOS;
 
-        GivePlayerMoney(playerid, -COSTO_ANUNCIO);
+        KH_GivePlayerMoney(playerid, -COSTO_ANUNCIO);
         new nombre[MAX_PLAYER_NAME];
         GetPlayerName(playerid, nombre, sizeof(nombre));
         MostrarAnuncioGlobal(nombre, limpio);
@@ -3848,7 +3920,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(strlen(inputtext) < 1) return SendClientMessage(playerid, -1, "Mensaje vacio.");
         if(GetPlayerMoney(playerid) < COSTO_SMS) return SendClientMessage(playerid, -1, "No tienes $100 para enviar el mensaje.");
 
-        GivePlayerMoney(playerid, -COSTO_SMS);
+        KH_GivePlayerMoney(playerid, -COSTO_SMS);
         new msgTo[180], msgFrom[120], sender[MAX_PLAYER_NAME];
         GetPlayerName(playerid, sender, sizeof(sender));
         format(msgTo, sizeof(msgTo), "[SMS] %s(%d): %s", sender, playerid, inputtext);
@@ -3896,7 +3968,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         if(VehOculto[veh] || !IsValidVehicle(veh)) return SendClientMessage(playerid, -1, "No puedes llamar ese vehiculo si no esta restaurado/activo.");
         if(GetPlayerMoney(playerid) < COSTO_LLAMAR_VEHICULO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para llamar tu vehiculo.");
-        GivePlayerMoney(playerid, -COSTO_LLAMAR_VEHICULO);
+        KH_GivePlayerMoney(playerid, -COSTO_LLAMAR_VEHICULO);
         TelefonoVehiculoSeleccionado[playerid] = veh;
         SendClientMessage(playerid, 0x66CCFFFF, "Llamada procesada. Tu vehiculo llegara en 5 segundos.");
         SetTimerEx("TeleportVehiculoLlamado", 5000, false, "d", playerid);
@@ -3952,7 +4024,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 return SendClientMessage(playerid, -1, msgPrendas);
             }
             if(GetPlayerMoney(playerid) < PrendasData[idxPrenda][prendaPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-            GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
+            KH_GivePlayerMoney(playerid, -PrendasData[idxPrenda][prendaPrecio]);
             PrendasData[idxPrenda][prendaStock]--;
             GuardarPrendasConfig();
             PlayerPrendaComprada[playerid][idxPrenda] = 1;
@@ -4546,7 +4618,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new amount = strval(inputtext);
         new id = AdminTargetIdPendiente[playerid];
         if(amount <= 0 || !IsPlayerConnected(id)) return SendClientMessage(playerid, -1, "Datos invalidos.");
-        GivePlayerMoney(id, amount);
+        KH_GivePlayerMoney(id, amount);
         SendClientMessage(playerid, 0x00FF00FF, "Dinero entregado correctamente.");
         return 1;
     }
@@ -5119,7 +5191,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         if(ArmeriaItems[item][aiStockArma] <= 0) return SendClientMessage(playerid, -1, "No hay stock de arma.");
         if(GetPlayerMoney(playerid) < ArmeriaItems[item][aiPrecioArma]) return SendClientMessage(playerid, -1, "No tienes dinero para comprar esta arma.");
-        GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioArma]);
+        KH_GivePlayerMoney(playerid, -ArmeriaItems[item][aiPrecioArma]);
         PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]] = 9999;
         GivePlayerWeapon(playerid, WEAPON:ArmeriaItems[item][aiArma], 9999);
         PlayerArmaComprada[playerid][ArmeriaItems[item][aiArma]] = true;
@@ -5145,7 +5217,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(balas > ArmeriaItems[item][aiStockMunicion]) return SendClientMessage(playerid, -1, "No hay tanta municion disponible.");
         new costo = balas * ArmeriaItems[item][aiPrecioMunicion];
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        GivePlayerMoney(playerid, -costo);
+        KH_GivePlayerMoney(playerid, -costo);
         PlayerAmmoInventario[playerid][ArmeriaItems[item][aiArma]] += balas;
         ArmeriaItems[item][aiStockMunicion] -= balas;
         new WEAPON:armaActual = GetPlayerWeapon(playerid);
@@ -5223,7 +5295,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new item = GetVentaSkinByListIndex(listitem);
         if(item == -1) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         if(GetPlayerMoney(playerid) < VentaSkinsData[item][vsPrecio]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
-        GivePlayerMoney(playerid, -VentaSkinsData[item][vsPrecio]);
+        KH_GivePlayerMoney(playerid, -VentaSkinsData[item][vsPrecio]);
         SetPlayerSkin(playerid, VentaSkinsData[item][vsSkin]);
         PlayerSkinGuardada[playerid] = VentaSkinsData[item][vsSkin];
         GuardarCuenta(playerid);
@@ -5338,7 +5410,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             DestroyVehicle(veh);
             return SendClientMessage(playerid, -1, "No se pudo entregar el auto sin riesgo de perder tus vehiculos. Intenta nuevamente.");
         }
-        GivePlayerMoney(playerid, -VentaAutosData[item][vaPrecio]);
+        KH_GivePlayerMoney(playerid, -VentaAutosData[item][vaPrecio]);
         PutPlayerInVehicle(playerid, veh, 0);
         VehOwner[veh] = playerid;
         VehLocked[veh] = false;
@@ -5433,7 +5505,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         ChangeVehicleColours(veh, color, color);
         VehColor1Data[veh] = color;
         VehColor2Data[veh] = color;
-        GivePlayerMoney(playerid, -10000);
+        KH_GivePlayerMoney(playerid, -10000);
         SendClientMessage(playerid, 0x00FF00FF, "Pintura aplicada correctamente. Costo: $10000.");
         return 1;
     }
@@ -5446,7 +5518,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new precioOriginal = GetPrecioOriginalVehiculo(VehModelData[veh]);
         if(precioOriginal <= 0) precioOriginal = 100000;
         new pago = (precioOriginal * 70) / 100;
-        GivePlayerMoney(playerid, pago);
+        KH_GivePlayerMoney(playerid, pago);
         EliminarVehiculoJugador(veh);
         GuardarCuenta(playerid);
         new msg[144];
@@ -5501,7 +5573,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new monto = strval(inputtext);
         if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
         if(GetPlayerMoney(playerid) < monto) return SendClientMessage(playerid, -1, "No tienes ese dinero en mano.");
-        GivePlayerMoney(playerid, -monto);
+        KH_GivePlayerMoney(playerid, -monto);
         PlayerBankMoney[playerid] += monto;
         SendClientMessage(playerid, 0x00FF00FF, "Deposito realizado correctamente.");
         return ShowBankMenu(playerid);
@@ -5513,7 +5585,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(monto <= 0) return SendClientMessage(playerid, -1, "Cantidad invalida.");
         if(PlayerBankMoney[playerid] < monto) return SendClientMessage(playerid, -1, "No tienes saldo suficiente en el banco.");
         PlayerBankMoney[playerid] -= monto;
-        GivePlayerMoney(playerid, monto);
+        KH_GivePlayerMoney(playerid, monto);
         SendClientMessage(playerid, 0x00FF00FF, "Retiro realizado correctamente.");
         return ShowBankMenu(playerid);
     }
@@ -5529,7 +5601,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", PlayerPassword[playerid], DINERO_INICIAL);
             fwrite(h, line); fclose(h);
             IsPlayerLoggedIn[playerid] = true;
-            GivePlayerMoney(playerid, DINERO_INICIAL);
+            KH_GivePlayerMoney(playerid, DINERO_INICIAL, false);
             ActualizarNivelPJ(playerid);
             GuardarCuenta(playerid);
             SendClientMessage(playerid, 0x66CCFFFF, "{66FF99}Bienvenido a Kame House.");
@@ -5548,7 +5620,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(strlen(PlayerPassword[playerid]) < 3) { fclose(h); ShowPlayerDialog(playerid, DIALOG_LOGIN, DIALOG_STYLE_PASSWORD, "Error de cuenta", "Tu cuenta tiene una clave invalida o vacia. Contacta a un admin para repararla.", "Cerrar", ""); return 1; }
             if(!strcmp(inputtext, PlayerPassword[playerid])) {
                 IsPlayerLoggedIn[playerid] = true;
-                fread(h, line); GivePlayerMoney(playerid, strval(line));
+                fread(h, line); KH_GivePlayerMoney(playerid, strval(line), false);
                 fread(h, line); PlayerAdmin[playerid] = strval(line);
                 fread(h, line); CamioneroNivel[playerid] = strval(line);
                 fread(h, line); CamioneroViajes[playerid] = strval(line);
@@ -5884,7 +5956,7 @@ public SubirTiempoJugado() {
             PlayerTiempoJugadoMin[i]++;
             if(PlayerTiempoJugadoMin[i] % 60 == 0) {
                 new pago = GetNivelPJ(i) * 500;
-                GivePlayerMoney(i, pago);
+                KH_GivePlayerMoney(i, pago);
                 new paymsg[128];
                 format(paymsg, sizeof(paymsg), "Pago horario recibido por nivel PJ: $%d", pago);
                 SendClientMessage(i, 0x00FF00FF, paymsg);
@@ -5893,7 +5965,7 @@ public SubirTiempoJugado() {
                 new totalVehiculos = ContarVehiculosTotalesJugador(i);
                 if(totalVehiculos > 0) {
                     new cobro = totalVehiculos * COBRO_DIARIO_POR_VEHICULO;
-                    GivePlayerMoney(i, -cobro);
+                    KH_GivePlayerMoney(i, -cobro);
                     new msgCobro[144];
                     format(msgCobro, sizeof(msgCobro), "Cobro diario por tenencia vehicular: -$%d (%d vehiculos).", cobro, totalVehiculos);
                     SendClientMessage(i, 0xFFAA00FF, msgCobro);
@@ -5931,7 +6003,10 @@ stock GetNivelPJ(playerid) {
 }
 
 stock ActualizarNivelPJ(playerid) {
-    SetPlayerScore(playerid, GetNivelPJ(playerid));
+    new nivelAnterior = GetPlayerScore(playerid);
+    new nivelActual = GetNivelPJ(playerid);
+    if(nivelActual > nivelAnterior) PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
+    SetPlayerScore(playerid, nivelActual);
     return 1;
 }
 
@@ -5996,6 +6071,8 @@ public OnPlayerDisconnect(playerid, reason) {
     if(AnuncioTimerOcultar[playerid] != -1) { KillTimer(AnuncioTimerOcultar[playerid]); AnuncioTimerOcultar[playerid] = -1; }
     PlayerTextDrawDestroy(playerid, AnuncioTextDraw[playerid]);
     if(TextoVelocimetro[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVelocimetro[playerid]); TextoVelocimetro[playerid] = PlayerText:-1; }
+    if(TextoVelocimetroUnidad[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVelocimetroUnidad[playerid]); TextoVelocimetroUnidad[playerid] = PlayerText:-1; }
+    if(TextoVehiculoDL[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVehiculoDL[playerid]); TextoVehiculoDL[playerid] = PlayerText:-1; }
     GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
@@ -6011,6 +6088,7 @@ public OnPlayerDisconnect(playerid, reason) {
     BasureroTieneBolsa[playerid] = false;
     BasureroDepositandoBolsa[playerid] = false;
     if(BasureroBolsaVisible[playerid]) { RemovePlayerAttachedObject(playerid, 9); BasureroBolsaVisible[playerid] = false; }
+    LimpiarBidonVisual(playerid);
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
@@ -6022,6 +6100,8 @@ public OnPlayerDisconnect(playerid, reason) {
         if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
     }
     LimpiarSolicitudMecanico(playerid);
+    MecanicoPrecioTargetPendiente[playerid] = -1;
+    MecanicoPrecioTipoPendiente[playerid] = 0;
     ArmeriaAdminArmaPendiente[playerid] = 0;
     VentaAutosAdminModeloPendiente[playerid] = 0;
     VentaAutosAdminPrecioPendiente[playerid] = 0;
@@ -6119,6 +6199,8 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
         PlayerTextDrawHide(playerid, BarraGasFondo[playerid]);
         PlayerTextDrawHide(playerid, BarraGas[playerid]);
         PlayerTextDrawHide(playerid, TextoVelocimetro[playerid]);
+        PlayerTextDrawHide(playerid, TextoVelocimetroUnidad[playerid]);
+        PlayerTextDrawHide(playerid, TextoVehiculoDL[playerid]);
     }
     return 1;
 }
@@ -6190,12 +6272,23 @@ public OnPlayerUpdate(playerid) {
         if(vehid != INVALID_VEHICLE_ID) {
             if(!GasInitVehiculo[vehid]) { GasInitVehiculo[vehid] = true; GasVehiculo[vehid] = 70 + random(31); }
             if(UltimoVehiculoGasMostrado[playerid] != vehid) ActualizarGasTextoVehiculo(playerid);
-            new Float:vx, Float:vy, Float:vz, spdText[24];
+            new Float:vx, Float:vy, Float:vz, spdText[16], dlText[24];
             GetVehicleVelocity(vehid, vx, vy, vz);
             new kmh = floatround(floatsqroot(vx*vx + vy*vy + vz*vz) * 180.0);
             if(kmh < 0) kmh = 0;
-            format(spdText, sizeof(spdText), "%d K/H", kmh);
+            format(spdText, sizeof(spdText), "%d", kmh);
             PlayerTextDrawSetString(playerid, TextoVelocimetro[playerid], spdText);
+
+            new Float:vehHealth;
+            GetVehicleHealth(vehid, vehHealth);
+            format(dlText, sizeof(dlText), "DL: %.0f", vehHealth);
+            PlayerTextDrawSetString(playerid, TextoVehiculoDL[playerid], dlText);
+            if(vehHealth >= 900.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x66FF66FF);
+            else if(vehHealth >= 600.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFFCC33FF);
+            else PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFF4444FF);
+            if(kmh >= 120) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF5555FF);
+            else if(kmh >= 60) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFCC33FF);
+            else PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0x66FFFFFF);
             if(GasVehiculo[vehid] <= 0) {
                 new engine, lights, alarm, doors, bonnet, boot, objective;
                 GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
@@ -6673,12 +6766,15 @@ stock FinalizarTrabajoBasurero(playerid) {
         if(pago > PAGO_MAX_BASURERO) pago = PAGO_MAX_BASURERO;
         new bonusMembresia = GetBonusTrabajoMembresia(playerid);
         if(bonusMembresia > 0) pago += bonusMembresia;
-        GivePlayerMoney(playerid, pago);
+        KH_GivePlayerMoney(playerid, pago);
 
         BasureroRecorridos[playerid]++;
         if(BasureroRecorridos[playerid] >= PROGRESO_BASURERO_POR_NIVEL) {
             BasureroRecorridos[playerid] = 0;
-            if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) BasureroNivel[playerid]++;
+            if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) {
+                BasureroNivel[playerid]++;
+                PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
+            }
         }
 
 
@@ -7168,6 +7264,37 @@ stock InitGasSystem() {
     return 1;
 }
 
+stock MostrarTextoDinero(playerid, monto) {
+    if(!IsPlayerConnected(playerid) || monto == 0) return 0;
+
+    new montoAbs = (monto < 0) ? -monto : monto;
+    new texto[64];
+    if(monto > 0) format(texto, sizeof(texto), "~g~+~w~$%d", montoAbs);
+    else format(texto, sizeof(texto), "~r~-~w~$%d", montoAbs);
+    GameTextForPlayer(playerid, texto, 2200, 3);
+    return 1;
+}
+
+stock MostrarSonidoDinero(playerid, monto) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    if(monto > 0) PlayerPlaySound(playerid, 1057, 0.0, 0.0, 0.0);
+    else if(monto < 0) PlayerPlaySound(playerid, 1085, 0.0, 0.0, 0.0);
+    return 1;
+}
+
+stock KH_GivePlayerMoney(playerid, monto, bool:mostrarAviso = true) {
+    GivePlayerMoney(playerid, monto);
+    if(!mostrarAviso) return 1;
+    MostrarTextoDinero(playerid, monto);
+    MostrarSonidoDinero(playerid, monto);
+    return 1;
+}
+
+stock LimpiarBidonVisual(playerid) {
+    if(IsPlayerAttachedObjectSlotUsed(playerid, BIDON_ATTACH_SLOT)) RemovePlayerAttachedObject(playerid, BIDON_ATTACH_SLOT);
+    return 1;
+}
+
 stock ShowMaleteroMaletero(playerid, vehid) {
     if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes acceso a este vehiculo.");
     new info[128], body[768], line[72], usados;
@@ -7231,6 +7358,8 @@ stock ActualizarGasTextoVehiculo(playerid) {
     PlayerTextDrawShow(playerid, BarraGasFondo[playerid]);
     PlayerTextDrawShow(playerid, BarraGas[playerid]);
     PlayerTextDrawShow(playerid, TextoVelocimetro[playerid]);
+    PlayerTextDrawShow(playerid, TextoVelocimetroUnidad[playerid]);
+    PlayerTextDrawShow(playerid, TextoVehiculoDL[playerid]);
     return 1;
 }
 
@@ -7284,7 +7413,7 @@ public FinalizarRepostaje(playerid) {
     new faltante = 100 - GasVehiculo[veh];
     if(faltante < 0) faltante = 0;
     new costo = faltante * GAS_PRECIO_POR_PUNTO;
-    if(faltante > 0 && costo > 0) GivePlayerMoney(playerid, -costo);
+    if(faltante > 0 && costo > 0) KH_GivePlayerMoney(playerid, -costo);
     GasVehiculo[veh] = 100;
     GasRefuelCost[playerid] = 0;
     ActualizarGasTextoVehiculo(playerid);
@@ -7877,7 +8006,7 @@ public FinalizarCajaBusqueda(playerid, cajaidx) {
     if(random(100) < 20) cobre = 1 + random(2);
     if(random(100) < 14) hierro = 1 + random(2);
     InvMadera[playerid] += madera; InvPrepieza[playerid] += prep; InvPolvora[playerid] += pol; InvPiedra[playerid] += piedra; InvCobre[playerid] += cobre; InvHierroMineral[playerid] += hierro;
-    GivePlayerMoney(playerid, dinero);
+    KH_GivePlayerMoney(playerid, dinero);
     new out[200];
     format(out, sizeof(out), "[Caja] Dinero:$%d | Madera:%d | Prepiezas:%d | Polvora:%d | Piedra:%d | Cobre:%d | Hierro:%d", dinero, madera, prep, pol, piedra, cobre, hierro);
     SendClientMessage(playerid, 0xFFFFFFFF, out);
@@ -8082,6 +8211,7 @@ stock LimpiarSolicitudMecanico(playerid) {
     }
     MecanicoSolicitudPendiente[playerid] = -1;
     MecanicoSolicitudTipoPendiente[playerid] = 0;
+    MecanicoSolicitudPrecioPendiente[playerid] = 0;
     return 1;
 }
 
@@ -8109,9 +8239,10 @@ public ExpirarSolicitudMecanico(playerid) {
 stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordado = 0) {
     if(!IsPlayerConnected(playerid) || !IsPlayerConnected(targetid)) return 0;
     if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
-    if(tipoReparacion < 1 || tipoReparacion > 3) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
+    if(tipoReparacion < 1 || tipoReparacion > 4) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
     if(tipoReparacion == 2 && (MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_COMPLETA || MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_PREMIUM)) return SendClientMessage(playerid, -1, "La reparacion intermedia es solo para niveles 5-9.");
     if(tipoReparacion == 3 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_PREMIUM) return SendClientMessage(playerid, -1, "Necesitas nivel 10 para reparacion premium.");
+    if(tipoReparacion == 4 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_PREMIUM) return SendClientMessage(playerid, -1, "Necesitas nivel 10 para reparacion DL 1000.");
     if(!IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El cliente debe estar conduciendo su vehiculo.");
     if(GetPlayerVirtualWorld(playerid) != GetPlayerVirtualWorld(targetid) || GetPlayerInterior(playerid) != GetPlayerInterior(targetid)) return SendClientMessage(playerid, -1, "Debes estar en el mismo interior/mundo que el cliente.");
 
@@ -8125,13 +8256,18 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
     MecanicoRepairType[playerid] = tipoReparacion;
     MecanicoRepairPrecio[playerid] = costoAcordado;
     TogglePlayerControllable(playerid, false);
+    TogglePlayerControllable(targetid, false);
     ApplyAnimation(playerid, "COP_AMBIENT", "Copbrowse_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
+    ApplyAnimation(targetid, "COP_AMBIENT", "Coplook_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
+    new vehCongelado = GetPlayerVehicleID(targetid);
+    if(vehCongelado != INVALID_VEHICLE_ID) SetVehicleVelocity(vehCongelado, 0.0, 0.0, 0.0);
     MecanicoRepairTimer[playerid] = SetTimerEx("FinalizarReparacionMecanico", 10000, false, "d", playerid);
 
     new msg[160], tipoTxt[48];
     if(tipoReparacion == 1) format(tipoTxt, sizeof(tipoTxt), "basica (tope DL 800)");
     else if(tipoReparacion == 2) format(tipoTxt, sizeof(tipoTxt), "intermedia (tope DL 1000)");
-    else format(tipoTxt, sizeof(tipoTxt), "premium (motor + carroceria)");
+    else if(tipoReparacion == 3) format(tipoTxt, sizeof(tipoTxt), "premium (motor + carroceria)");
+    else format(tipoTxt, sizeof(tipoTxt), "DL 1000 (solo damage level)");
     format(msg, sizeof(msg), "Iniciaste reparacion de %s al jugador %d. Espera 10 segundos...", tipoTxt, targetid);
     SendClientMessage(playerid, 0xFFFF66FF, msg);
     format(msg, sizeof(msg), "El mecanico %d comenzo a reparar tu vehiculo. Espera 10 segundos.", playerid);
@@ -8151,6 +8287,7 @@ public FinalizarReparacionMecanico(playerid) {
     MecanicoRepairType[playerid] = 0;
     MecanicoRepairPrecio[playerid] = 0;
     TogglePlayerControllable(playerid, true);
+    if(IsPlayerConnected(targetid)) { TogglePlayerControllable(targetid, true); ClearAnimations(targetid, t_FORCE_SYNC:SYNC_ALL); }
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
 
     if(!IsPlayerConnected(targetid) || !IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) {
@@ -8164,15 +8301,16 @@ public FinalizarReparacionMecanico(playerid) {
     new costo = 800;
     if(tipo == 2) costo = 1000;
     if(tipo == 3) costo = MecanicoRepairPrecio[playerid] > 0 ? MecanicoRepairPrecio[playerid] : 1500;
+    if(tipo == 4) costo = 1000;
     if(GetPlayerMoney(targetid) < costo) {
         SendClientMessage(targetid, 0xFF0000FF, "No tienes dinero suficiente al finalizar la reparacion.");
         SendClientMessage(playerid, 0xFF0000FF, "El cliente no tiene dinero suficiente. Reparacion cancelada.");
         return 1;
     }
 
-    GivePlayerMoney(targetid, -costo);
+    KH_GivePlayerMoney(targetid, -costo);
     new pagoMecanico = floatround(float(costo) * 0.9, floatround_floor);
-    GivePlayerMoney(playerid, pagoMecanico);
+    KH_GivePlayerMoney(playerid, pagoMecanico);
 
     new Float:actualHealth;
     GetVehicleHealth(veh, actualHealth);
@@ -8184,12 +8322,16 @@ public FinalizarReparacionMecanico(playerid) {
         if(actualHealth < DL_REPARACION_INTERMEDIA) SetVehicleHealth(veh, DL_REPARACION_INTERMEDIA);
         SendClientMessage(targetid, 0x66FF66FF, "Reparacion mecanica completada (tope DL 1000).");
         SendClientMessage(playerid, 0x66FF66FF, "Reparacion nivel intermedio completada. Recibiste tu pago.");
-    } else {
+    } else if(tipo == 3) {
         RepairVehicle(veh);
         SetVehicleHealth(veh, 1000.0);
         VehHealthData[veh] = 1000.0;
         SendClientMessage(targetid, 0x66FF66FF, "Reparacion premium finalizada (motor + carroceria).");
         SendClientMessage(playerid, 0x66FF66FF, "Reparacion premium realizada. Recibiste tu pago.");
+    } else {
+        if(actualHealth < DL_REPARACION_INTERMEDIA) SetVehicleHealth(veh, DL_REPARACION_INTERMEDIA);
+        SendClientMessage(targetid, 0x66FF66FF, "Reparacion DL 1000 completada (solo damage level).");
+        SendClientMessage(playerid, 0x66FF66FF, "Reparacion DL 1000 completada. Recibiste tu pago.");
     }
 
     MecanicoReparaciones[playerid]++;
@@ -8200,6 +8342,7 @@ public FinalizarReparacionMecanico(playerid) {
             new lvlMsg[96];
             format(lvlMsg, sizeof(lvlMsg), "Subiste al nivel %d de mecanico.", MecanicoNivel[playerid]);
             SendClientMessage(playerid, 0xFFFF00FF, lvlMsg);
+            PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
         }
     }
 
