@@ -3010,25 +3010,25 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoBarraGas[playerid], 0);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 288.0, 420.4, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.85);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 360.0, 0.0);
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 288.0, 420.8, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.70);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 346.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 288.0, 420.4, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.85);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 360.0, 0.0);
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 288.0, 420.8, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.70);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 346.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 344.0, 391.6, "0");
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 344.0, 397.0, "0");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.45, 1.9);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_CENTER);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
@@ -3036,7 +3036,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 354.0, 402.0, "K/H");
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 354.0, 407.2, "K/H");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.20, 1.0);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
@@ -7412,7 +7412,7 @@ stock ActualizarBarrasEstado(playerid) {
     new Float:anchoMax = 100.0;
     new Float:inicioHambre = 525.0;
     new Float:inicioGas = 288.0;
-    new Float:anchoGasMax = 72.0;
+    new Float:anchoGasMax = 58.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicioHambre + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoGasMax * float(gas) / 100.0), 0.0);
     return 1;
