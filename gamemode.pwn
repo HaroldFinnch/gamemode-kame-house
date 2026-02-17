@@ -566,6 +566,7 @@ new PuntoPickup[totalPuntosMovibles] = {0, ...};
 new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
 new TopDineroNombre[10][MAX_PLAYER_NAME];
 new TopDineroTotal[10];
+new TopDineroPlayerId[10];
 new TopDineroCantidad;
 new TopDineroTextoLabel[512];
 new TopDineroTextoDialogo[1024];
@@ -7067,6 +7068,7 @@ stock ActualizarTopDinero() {
     for(new i = 0; i < 10; i++) {
         TopDineroNombre[i][0] = EOS;
         TopDineroTotal[i] = -1;
+        TopDineroPlayerId[i] = INVALID_PLAYER_ID;
     }
 
     for(new p = 0; p < MAX_PLAYERS; p++) {
@@ -7082,10 +7084,12 @@ stock ActualizarTopDinero() {
             for(new move = 9; move > pos; move--) {
                 TopDineroTotal[move] = TopDineroTotal[move - 1];
                 format(TopDineroNombre[move], MAX_PLAYER_NAME, "%s", TopDineroNombre[move - 1]);
+                TopDineroPlayerId[move] = TopDineroPlayerId[move - 1];
             }
 
             TopDineroTotal[pos] = total;
             format(TopDineroNombre[pos], MAX_PLAYER_NAME, "%s", nombre);
+            TopDineroPlayerId[pos] = p;
             break;
         }
     }
@@ -7094,8 +7098,16 @@ stock ActualizarTopDinero() {
         if(TopDineroTotal[i] < 0 || !TopDineroNombre[i][0]) continue;
         TopDineroCantidad++;
 
-        new linea[96];
-        format(linea, sizeof(linea), "%d. %s - $%d\n", i + 1, TopDineroNombre[i], TopDineroTotal[i]);
+        new linea[176], membresiaNombre[24], faccionNombre[24];
+        GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[i]], membresiaNombre, sizeof(membresiaNombre));
+
+        if(PlayerFaccionId[TopDineroPlayerId[i]] != -1 && FaccionData[PlayerFaccionId[TopDineroPlayerId[i]]][facActiva]) {
+            format(faccionNombre, sizeof(faccionNombre), "%s", FaccionData[PlayerFaccionId[TopDineroPlayerId[i]]][facNombre]);
+        } else {
+            format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
+        }
+
+        format(linea, sizeof(linea), "Top%d: (%s) (%s) %s - %d\n", i + 1, membresiaNombre, faccionNombre, TopDineroNombre[i], TopDineroTotal[i]);
         if(strlen(TopDineroTextoDialogo) + strlen(linea) < sizeof(TopDineroTextoDialogo)) {
             strcat(TopDineroTextoDialogo, linea, sizeof(TopDineroTextoDialogo));
         }
@@ -7105,10 +7117,56 @@ stock ActualizarTopDinero() {
         format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nSin jugadores conectados");
         format(TopDineroTextoDialogo, sizeof(TopDineroTextoDialogo), "Sin jugadores conectados.");
     } else {
-        format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\n1) %s - $%d\n2) %s - $%d\n3) %s - $%d\nUsa /topdinero",
-            TopDineroNombre[0], TopDineroTotal[0],
-            TopDineroCantidad > 1 ? TopDineroNombre[1] : "---", TopDineroCantidad > 1 ? TopDineroTotal[1] : 0,
-            TopDineroCantidad > 2 ? TopDineroNombre[2] : "---", TopDineroCantidad > 2 ? TopDineroTotal[2] : 0
+        new membresiaNombre1[24], faccionNombre1[24], colorMembresia1[8], colorFaccion1[8], nombre1[MAX_PLAYER_NAME], dinero1;
+        new membresiaNombre2[24], faccionNombre2[24], colorMembresia2[8], colorFaccion2[8], nombre2[MAX_PLAYER_NAME], dinero2;
+        new membresiaNombre3[24], faccionNombre3[24], colorMembresia3[8], colorFaccion3[8], nombre3[MAX_PLAYER_NAME], dinero3;
+
+        if(TopDineroCantidad > 0) {
+            GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[0]], membresiaNombre1, sizeof(membresiaNombre1));
+            ConvertirColorAHexRGB(GetMembresiaColor(PlayerMembresiaTipo[TopDineroPlayerId[0]]), colorMembresia1, sizeof(colorMembresia1));
+            if(PlayerFaccionId[TopDineroPlayerId[0]] != -1 && FaccionData[PlayerFaccionId[TopDineroPlayerId[0]]][facActiva]) {
+                format(faccionNombre1, sizeof(faccionNombre1), "%s", FaccionData[PlayerFaccionId[TopDineroPlayerId[0]]][facNombre]);
+                ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[TopDineroPlayerId[0]]][facColor], colorFaccion1, sizeof(colorFaccion1));
+            } else {
+                format(faccionNombre1, sizeof(faccionNombre1), "Sin faccion");
+                format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF");
+            }
+            format(nombre1, sizeof(nombre1), "%s", TopDineroNombre[0]);
+            dinero1 = TopDineroTotal[0];
+        } else { format(membresiaNombre1, sizeof(membresiaNombre1), "Ninguna"); format(colorMembresia1, sizeof(colorMembresia1), "FFFFFF"); format(faccionNombre1, sizeof(faccionNombre1), "Sin faccion"); format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF"); format(nombre1, sizeof(nombre1), "---"); dinero1 = 0; }
+
+        if(TopDineroCantidad > 1) {
+            GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[1]], membresiaNombre2, sizeof(membresiaNombre2));
+            ConvertirColorAHexRGB(GetMembresiaColor(PlayerMembresiaTipo[TopDineroPlayerId[1]]), colorMembresia2, sizeof(colorMembresia2));
+            if(PlayerFaccionId[TopDineroPlayerId[1]] != -1 && FaccionData[PlayerFaccionId[TopDineroPlayerId[1]]][facActiva]) {
+                format(faccionNombre2, sizeof(faccionNombre2), "%s", FaccionData[PlayerFaccionId[TopDineroPlayerId[1]]][facNombre]);
+                ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[TopDineroPlayerId[1]]][facColor], colorFaccion2, sizeof(colorFaccion2));
+            } else {
+                format(faccionNombre2, sizeof(faccionNombre2), "Sin faccion");
+                format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF");
+            }
+            format(nombre2, sizeof(nombre2), "%s", TopDineroNombre[1]);
+            dinero2 = TopDineroTotal[1];
+        } else { format(membresiaNombre2, sizeof(membresiaNombre2), "Ninguna"); format(colorMembresia2, sizeof(colorMembresia2), "FFFFFF"); format(faccionNombre2, sizeof(faccionNombre2), "Sin faccion"); format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF"); format(nombre2, sizeof(nombre2), "---"); dinero2 = 0; }
+
+        if(TopDineroCantidad > 2) {
+            GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[2]], membresiaNombre3, sizeof(membresiaNombre3));
+            ConvertirColorAHexRGB(GetMembresiaColor(PlayerMembresiaTipo[TopDineroPlayerId[2]]), colorMembresia3, sizeof(colorMembresia3));
+            if(PlayerFaccionId[TopDineroPlayerId[2]] != -1 && FaccionData[PlayerFaccionId[TopDineroPlayerId[2]]][facActiva]) {
+                format(faccionNombre3, sizeof(faccionNombre3), "%s", FaccionData[PlayerFaccionId[TopDineroPlayerId[2]]][facNombre]);
+                ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[TopDineroPlayerId[2]]][facColor], colorFaccion3, sizeof(colorFaccion3));
+            } else {
+                format(faccionNombre3, sizeof(faccionNombre3), "Sin faccion");
+                format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF");
+            }
+            format(nombre3, sizeof(nombre3), "%s", TopDineroNombre[2]);
+            dinero3 = TopDineroTotal[2];
+        } else { format(membresiaNombre3, sizeof(membresiaNombre3), "Ninguna"); format(colorMembresia3, sizeof(colorMembresia3), "FFFFFF"); format(faccionNombre3, sizeof(faccionNombre3), "Sin faccion"); format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF"); format(nombre3, sizeof(nombre3), "---"); dinero3 = 0; }
+
+        format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nTop1: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}%d\nTop2: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}%d\nTop3: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}%d\nUsa /topdinero",
+            colorMembresia1, membresiaNombre1, colorFaccion1, faccionNombre1, nombre1, dinero1,
+            colorMembresia2, membresiaNombre2, colorFaccion2, faccionNombre2, nombre2, dinero2,
+            colorMembresia3, membresiaNombre3, colorFaccion3, faccionNombre3, nombre3, dinero3
         );
     }
 
@@ -7221,7 +7279,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoLabel[punto] = Create3DTextLabel("{66FFFF}Tienda Virtual Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
         }
         case puntoTopDinero: {
-            PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoPickup[punto] = 0;
             if(TopDineroTextoLabel[0] == EOS) format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nUsa /topdinero");
             PuntoLabel[punto] = Create3DTextLabel(TopDineroTextoLabel, 0xFFD700FF, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 25.0, 0);
         }
