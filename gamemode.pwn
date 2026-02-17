@@ -387,6 +387,7 @@ new bool:BasureroRecolectando[MAX_PLAYERS];
 new BasureroRecolectado[MAX_PLAYERS];
 new bool:BasureroTieneBolsa[MAX_PLAYERS];
 new bool:BasureroDepositandoBolsa[MAX_PLAYERS];
+new bool:BasureroBolsaVisible[MAX_PLAYERS];
 new bool:LenadorTrabajando[MAX_PLAYERS];
 new LenadorVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new LenadorArbolIndex[MAX_PLAYERS] = {-1, ...};
@@ -7319,7 +7320,7 @@ stock ActualizarTopDinero() {
         if(TopDineroTotal[i] < 0 || !TopDineroNombre[i][0]) continue;
         TopDineroCantidad++;
 
-        new linea[176], membresiaNombre[24], faccionNombre[24];
+        new linea[176], membresiaNombre[24], faccionNombre[24], dineroCortoTop[16];
         GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[i]], membresiaNombre, sizeof(membresiaNombre));
 
         if(PlayerFaccionId[TopDineroPlayerId[i]] != -1 && FaccionData[PlayerFaccionId[TopDineroPlayerId[i]]][facActiva]) {
@@ -7328,7 +7329,8 @@ stock ActualizarTopDinero() {
             format(faccionNombre, sizeof(faccionNombre), "Sin faccion");
         }
 
-        format(linea, sizeof(linea), "Top%d: (%s) (%s) %s - %d\n", i + 1, membresiaNombre, faccionNombre, TopDineroNombre[i], TopDineroTotal[i]);
+        FormatearDineroCorto(TopDineroTotal[i], dineroCortoTop, sizeof(dineroCortoTop));
+        format(linea, sizeof(linea), "Top%d: (%s) (%s) %s - $%s\n", i + 1, membresiaNombre, faccionNombre, TopDineroNombre[i], dineroCortoTop);
         if(strlen(TopDineroTextoDialogo) + strlen(linea) < sizeof(TopDineroTextoDialogo)) {
             strcat(TopDineroTextoDialogo, linea, sizeof(TopDineroTextoDialogo));
         }
@@ -7341,6 +7343,7 @@ stock ActualizarTopDinero() {
         new membresiaNombre1[24], faccionNombre1[24], colorMembresia1[8], colorFaccion1[8], nombre1[MAX_PLAYER_NAME], dinero1;
         new membresiaNombre2[24], faccionNombre2[24], colorMembresia2[8], colorFaccion2[8], nombre2[MAX_PLAYER_NAME], dinero2;
         new membresiaNombre3[24], faccionNombre3[24], colorMembresia3[8], colorFaccion3[8], nombre3[MAX_PLAYER_NAME], dinero3;
+        new dineroCorto1[16], dineroCorto2[16], dineroCorto3[16];
 
         if(TopDineroCantidad > 0) {
             GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[0]], membresiaNombre1, sizeof(membresiaNombre1));
@@ -7354,7 +7357,8 @@ stock ActualizarTopDinero() {
             }
             format(nombre1, sizeof(nombre1), "%s", TopDineroNombre[0]);
             dinero1 = TopDineroTotal[0];
-        } else { format(membresiaNombre1, sizeof(membresiaNombre1), "Ninguna"); format(colorMembresia1, sizeof(colorMembresia1), "FFFFFF"); format(faccionNombre1, sizeof(faccionNombre1), "Sin faccion"); format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF"); format(nombre1, sizeof(nombre1), "---"); dinero1 = 0; }
+            FormatearDineroCorto(dinero1, dineroCorto1, sizeof(dineroCorto1));
+        } else { format(membresiaNombre1, sizeof(membresiaNombre1), "Ninguna"); format(colorMembresia1, sizeof(colorMembresia1), "FFFFFF"); format(faccionNombre1, sizeof(faccionNombre1), "Sin faccion"); format(colorFaccion1, sizeof(colorFaccion1), "FFFFFF"); format(nombre1, sizeof(nombre1), "---"); dinero1 = 0; format(dineroCorto1, sizeof(dineroCorto1), "0"); }
 
         if(TopDineroCantidad > 1) {
             GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[1]], membresiaNombre2, sizeof(membresiaNombre2));
@@ -7368,7 +7372,8 @@ stock ActualizarTopDinero() {
             }
             format(nombre2, sizeof(nombre2), "%s", TopDineroNombre[1]);
             dinero2 = TopDineroTotal[1];
-        } else { format(membresiaNombre2, sizeof(membresiaNombre2), "Ninguna"); format(colorMembresia2, sizeof(colorMembresia2), "FFFFFF"); format(faccionNombre2, sizeof(faccionNombre2), "Sin faccion"); format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF"); format(nombre2, sizeof(nombre2), "---"); dinero2 = 0; }
+            FormatearDineroCorto(dinero2, dineroCorto2, sizeof(dineroCorto2));
+        } else { format(membresiaNombre2, sizeof(membresiaNombre2), "Ninguna"); format(colorMembresia2, sizeof(colorMembresia2), "FFFFFF"); format(faccionNombre2, sizeof(faccionNombre2), "Sin faccion"); format(colorFaccion2, sizeof(colorFaccion2), "FFFFFF"); format(nombre2, sizeof(nombre2), "---"); dinero2 = 0; format(dineroCorto2, sizeof(dineroCorto2), "0"); }
 
         if(TopDineroCantidad > 2) {
             GetMembresiaNombre(PlayerMembresiaTipo[TopDineroPlayerId[2]], membresiaNombre3, sizeof(membresiaNombre3));
@@ -7382,17 +7387,19 @@ stock ActualizarTopDinero() {
             }
             format(nombre3, sizeof(nombre3), "%s", TopDineroNombre[2]);
             dinero3 = TopDineroTotal[2];
-        } else { format(membresiaNombre3, sizeof(membresiaNombre3), "Ninguna"); format(colorMembresia3, sizeof(colorMembresia3), "FFFFFF"); format(faccionNombre3, sizeof(faccionNombre3), "Sin faccion"); format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF"); format(nombre3, sizeof(nombre3), "---"); dinero3 = 0; }
+            FormatearDineroCorto(dinero3, dineroCorto3, sizeof(dineroCorto3));
+        } else { format(membresiaNombre3, sizeof(membresiaNombre3), "Ninguna"); format(colorMembresia3, sizeof(colorMembresia3), "FFFFFF"); format(faccionNombre3, sizeof(faccionNombre3), "Sin faccion"); format(colorFaccion3, sizeof(colorFaccion3), "FFFFFF"); format(nombre3, sizeof(nombre3), "---"); dinero3 = 0; format(dineroCorto3, sizeof(dineroCorto3), "0"); }
 
-        format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nTop1: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}%d\nTop2: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}%d\nTop3: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}%d\nUsa /topdinero",
-            colorMembresia1, membresiaNombre1, colorFaccion1, faccionNombre1, nombre1, dinero1,
-            colorMembresia2, membresiaNombre2, colorFaccion2, faccionNombre2, nombre2, dinero2,
-            colorMembresia3, membresiaNombre3, colorFaccion3, faccionNombre3, nombre3, dinero3
+        format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nTop1: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}$%s\nTop2: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}$%s\nTop3: {%s}(%s) {%s}(%s) {FFD700}%s - {00FF00}$%s\nUsa /topdinero",
+            colorMembresia1, membresiaNombre1, colorFaccion1, faccionNombre1, nombre1, dineroCorto1,
+            colorMembresia2, membresiaNombre2, colorFaccion2, faccionNombre2, nombre2, dineroCorto2,
+            colorMembresia3, membresiaNombre3, colorFaccion3, faccionNombre3, nombre3, dineroCorto3
         );
     }
 
-    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    new Text3D:topLabel = PuntoLabel[puntoTopDinero];
+    if(topLabel != Text3D:-1) {
+        Update3DTextLabelText(topLabel, 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
@@ -10205,8 +10212,8 @@ stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
     } else {
         new colorHex[8];
         ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], colorHex, sizeof(colorHex));
-        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", colorHex, faccionNombreLimpio, membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
-        else format(texto, sizeof(texto), "{FFFFFF}- {%s}Faccion %s {FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", colorHex, faccionNombreLimpio, membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
+        if(EsDueno(playerid)) format(texto, sizeof(texto), "{FFFFFF}- {FFFFFF}Faccion {%s}%s {FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}- Owner -", colorHex, faccionNombreLimpio, membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
+        else format(texto, sizeof(texto), "{FFFFFF}- {FFFFFF}Faccion {%s}%s {FFFFFF}- {%s}%s {FFFFFF}- {FFFFFF}Nivel %d {FFFFFF}- {00FF00}Dinero $%s {FFFFFF}-", colorHex, faccionNombreLimpio, membresiaHex, membresiaNombre, GetNivelPJ(playerid), dineroCorto);
     }
 
     PlayerPrefixLabel[playerid] = Create3DTextLabel(texto, 0xFFFFFFFF, 0.0, 0.0, 0.0, 30.0, 0);
