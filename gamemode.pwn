@@ -1071,6 +1071,7 @@ stock GetEditMapSlotLibre();
 stock GetConceptoSancionNombre(concepto, dest[], len);
 stock AplicarSancionJugador(adminid, targetid, concepto, minutos);
 stock RemoverSancionJugador(targetid);
+stock GetSancionVirtualWorld(playerid);
 stock ShowReglasDialog(playerid);
 stock CosecharCultivoCercano(playerid);
 forward EnviarEntornoAccion(playerid, const accion[]);
@@ -3134,9 +3135,10 @@ public OnPlayerSpawn(playerid) {
     if(PlayerSancionado[playerid]) {
         SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
         TogglePlayerControllable(playerid, false);
-        SetPlayerCollision(playerid, false);
+        DisableRemoteVehicleCollisions(playerid, true);
+        SetPlayerVirtualWorld(playerid, GetSancionVirtualWorld(playerid));
     } else {
-        SetPlayerCollision(playerid, true);
+        DisableRemoteVehicleCollisions(playerid, false);
     }
     SetCameraBehindPlayer(playerid);
     for(new pi = 0; pi < MAX_PRENDAS; pi++) {
@@ -6127,6 +6129,7 @@ public OnPlayerUpdate(playerid) {
             SetPlayerHealth(playerid, 100.0);
             SetPlayerArmour(playerid, 100.0);
             DisableRemoteVehicleCollisions(playerid, true);
+            SetPlayerVirtualWorld(playerid, GetSancionVirtualWorld(playerid));
             SetPlayerPos(playerid, SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
             new mins = restante / 60000;
             new secs = (restante / 1000) % 60;
@@ -8742,6 +8745,10 @@ stock CargarEditMap() {
     return 1;
 }
 
+stock GetSancionVirtualWorld(playerid) {
+    return 2000 + playerid;
+}
+
 stock GetConceptoSancionNombre(concepto, dest[], len) {
     if(concepto == 0) return format(dest, len, "PG");
     if(concepto == 1) return format(dest, len, "DM");
@@ -8768,7 +8775,7 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     SetPlayerHealth(targetid, 100.0);
     SetPlayerArmour(targetid, 100.0);
     DisableRemoteVehicleCollisions(targetid, true);
-    SetPlayerCollision(targetid, false);
+    SetPlayerVirtualWorld(targetid, GetSancionVirtualWorld(targetid));
 
     new conceptoNombre[16], labelText[128];
     GetConceptoSancionNombre(concepto, conceptoNombre, sizeof(conceptoNombre));
@@ -8792,7 +8799,6 @@ stock RemoverSancionJugador(targetid) {
     SancionFinTick[targetid] = 0;
     TogglePlayerControllable(targetid, true);
     DisableRemoteVehicleCollisions(targetid, false);
-    SetPlayerCollision(targetid, true);
     SetPlayerVirtualWorld(targetid, SancionPrevVW[targetid]);
     SetPlayerInterior(targetid, SancionPrevInterior[targetid]);
     SetPlayerPos(targetid, SancionPos[targetid][0], SancionPos[targetid][1], SancionPos[targetid][2]);
