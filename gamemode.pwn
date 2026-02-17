@@ -953,6 +953,7 @@ stock CuentaArmasMaletero(vehid);
 stock FormatearBarraEstado(const etiqueta[], valor, dest[], len);
 stock InitGasSystem();
 stock ActualizarGasTextoVehiculo(playerid);
+stock SetMotorVehiculoJugador(playerid, vehid, bool:encender);
 stock EncontrarGasCercano(playerid);
 stock RecrearPuntoFijo(ePuntoMovible:punto);
 stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len);
@@ -2258,6 +2259,22 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/encender", true)) {
+        new vehid = IsPlayerInAnyVehicle(playerid) ? GetPlayerVehicleID(playerid) : GetNearbyOwnedVehicle(playerid);
+        if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No hay vehiculo valido cerca.");
+        if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes llaves de este vehiculo.");
+        if(IsPlayerInAnyVehicle(playerid) && GetPlayerVehicleID(playerid) == vehid && GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo para encender el motor.");
+        return SetMotorVehiculoJugador(playerid, vehid, true);
+    }
+
+    if(!strcmp(cmd, "/apagar", true)) {
+        new vehid = IsPlayerInAnyVehicle(playerid) ? GetPlayerVehicleID(playerid) : GetNearbyOwnedVehicle(playerid);
+        if(vehid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No hay vehiculo valido cerca.");
+        if(!PlayerTieneAccesoVehiculo(playerid, vehid)) return SendClientMessage(playerid, -1, "No tienes llaves de este vehiculo.");
+        if(IsPlayerInAnyVehicle(playerid) && GetPlayerVehicleID(playerid) == vehid && GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo para apagar el motor.");
+        return SetMotorVehiculoJugador(playerid, vehid, false);
+    }
+
     if(!strcmp(cmd, "/compartirllave", true)) {
         new tmp[16], id, mins;
         format(tmp, sizeof(tmp), "%s", strtok(cmdtext, idx));
@@ -2939,6 +2956,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
+    PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 0);
+    PlayerTextDrawSetShadow(playerid, TextoBarraGas[playerid], 0);
 
     BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 418.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.55);
@@ -2963,6 +2982,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetro[playerid], TEXT_DRAW_FONT_1);
+    PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
+    PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
     AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 635.0, 218.0, "~w~");
     PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.95);
@@ -3338,7 +3359,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
@@ -6981,7 +7002,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar /reparar /usarkit.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar /reparar /usarkit.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -7027,6 +7048,33 @@ stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Flo
     return floatsqroot( floatpower(x2 - x1, 2) + floatpower(y2 - y1, 2) + floatpower(z2 - z1, 2) );
 }
 
+
+stock SetMotorVehiculoJugador(playerid, vehid, bool:encender) {
+    if(vehid == INVALID_VEHICLE_ID || !IsValidVehicle(vehid)) return SendClientMessage(playerid, -1, "No hay vehiculo valido.");
+
+    new engine, lights, alarm, doors, bonnet, boot, objective;
+    GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
+
+    if(encender && (!GasInitVehiculo[vehid] || GasVehiculo[vehid] <= 0)) {
+        if(engine != 0) SetVehicleParamsEx(vehid, 0, lights, alarm, doors, bonnet, boot, objective);
+        SetVehicleVelocity(vehid, 0.0, 0.0, 0.0);
+        return SendClientMessage(playerid, 0xFF0000FF, "Sin gasolina. Ve a una gasolinera y usa /llenar para llenar el tanque.");
+    }
+
+    if(encender) {
+        if(engine != 0) return SendClientMessage(playerid, -1, "El motor ya estaba encendido.");
+        SetVehicleParamsEx(vehid, 1, lights, alarm, doors, bonnet, boot, objective);
+        SendClientMessage(playerid, 0x66FF66FF, "Motor encendido.");
+        EnviarEntornoAccion(playerid, "gira la llave y enciende el motor del vehiculo.");
+    } else {
+        if(engine == 0) return SendClientMessage(playerid, -1, "El motor ya estaba apagado.");
+        SetVehicleParamsEx(vehid, 0, lights, alarm, doors, bonnet, boot, objective);
+        SetVehicleVelocity(vehid, 0.0, 0.0, 0.0);
+        SendClientMessage(playerid, 0xFFAA00FF, "Motor apagado.");
+        EnviarEntornoAccion(playerid, "gira la llave y apaga el motor del vehiculo.");
+    }
+    return 1;
+}
 
 stock PlayerTieneAccesoVehiculo(playerid, vehid) {
     if(vehid == INVALID_VEHICLE_ID) return 0;
