@@ -451,6 +451,8 @@ new Text3D:PlayerPrefixLabel[MAX_PLAYERS] = {Text3D:-1, ...};
 new UltimaActualizacionLabelFaccionTick[MAX_PLAYERS];
 new PlayerText:AnuncioTextDraw[MAX_PLAYERS];
 new AnuncioTimerOcultar[MAX_PLAYERS] = {-1, ...};
+new PlayerText:DineroCambioTextDraw[MAX_PLAYERS] = {PlayerText:-1, ...};
+new DineroCambioTimer[MAX_PLAYERS] = {-1, ...};
 
 new Float:CamioneroDestino[MAX_PLAYERS][3];
 
@@ -837,6 +839,7 @@ forward FinalizarReparacionMecanico(playerid);
 forward ExpirarSolicitudMecanico(playerid);
 forward TeleportVehiculoLlamado(playerid);
 forward OcultarAnuncioJugador(playerid);
+forward OcultarDineroCambioJugador(playerid);
 stock CargarMinas();
 stock GuardarMinas();
 stock CargarHornos();
@@ -1335,6 +1338,7 @@ public OnGameModeInit() {
 
 public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 {
+    if(PlayerSancionado[playerid]) return 1;
     new bool:presionoY = ((newkeys & KEY_YES) && !(oldkeys & KEY_YES));
     new bool:presionoH = ((newkeys & KEY_CTRL_BACK) && !(oldkeys & KEY_CTRL_BACK));
 
@@ -1881,6 +1885,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
 {
     new cmd[32], idx;
     format(cmd, 32, "%s", strtok(cmdtext, idx));
+
+    if(PlayerSancionado[playerid]) return SendClientMessage(playerid, 0xFF4444FF, "Estas sancionado: no puedes usar comandos hasta que termine tu sancion.");
 
     if(!strcmp(cmd, "/g", true)) {
         if(!cmdtext[idx]) return SendClientMessage(playerid, -1, "Uso: /g [mensaje]");
@@ -2939,6 +2945,10 @@ public OnPlayerClickMap(playerid, Float:fX, Float:fY, Float:fZ) {
 
 public OnPlayerText(playerid, text[]) {
     if(!IsPlayerLoggedIn[playerid]) return 0;
+    if(PlayerSancionado[playerid]) {
+        SendClientMessage(playerid, 0xFF4444FF, "Estas sancionado: no puedes usar el chat hasta que termine tu sancion.");
+        return 0;
+    }
     new string[144], name[MAX_PLAYER_NAME], Float:p[3];
     GetPlayerName(playerid, name, sizeof(name));
     GetPlayerPos(playerid, p[0], p[1], p[2]);
@@ -2967,70 +2977,70 @@ public OnPlayerConnect(playerid) {
     PlayerHambre[playerid] = 100;
     UltimoControlArmaProhibidaTick[playerid] = 0;
 
-    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 541.0, 30.0, "_");
+    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 525.0, 8.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.55);
-    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 581.0, 0.0);
+    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 625.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambreFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraHambreFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawFont(playerid, BarraHambreFondo[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 527.0, 29.4, "H");
+    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 511.0, 7.4, "H");
     PlayerTextDrawLetterSize(playerid, TextoBarraHambre[playerid], 0.16, 0.62);
     PlayerTextDrawAlignment(playerid, TextoBarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraHambre[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 541.0, 30.0, "_");
+    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 525.0, 8.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.55);
-    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 581.0, 0.0);
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 625.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawUseBox(playerid, BarraHambre[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 268.0, 416.0, "Gas");
-    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.20, 0.80);
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 274.0, 417.0, "GAS");
+    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.18, 0.72);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xE8F8FFFF);
+    PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 1);
+    PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoBarraGas[playerid], 0);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 417.6, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.80);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 358.0, 0.0);
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 306.0, 418.2, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.58);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 396.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x0E1622CC);
+    PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
-    PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x0E1622CC);
+    PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x2A0B42FF);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 286.0, 417.6, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.80);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 358.0, 0.0);
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 306.0, 418.2, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.58);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 396.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, BarraGas[playerid], 0x2BE2E2FF);
+    PlayerTextDrawColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
-    PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x2BE2E2FF);
+    PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 288.0, 408.8, "0");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.18, 0.74);
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 270.0, 407.6, "0");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.29, 1.18);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetro[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 1);
+    PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 309.0, 408.8, "KM/H");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.12, 0.74);
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 318.0, 411.6, "K/H");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.13, 0.76);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0x9FC7D9FF);
+    PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 1);
+    PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
 
     TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 336.0, 408.8, "DL: 1000");
@@ -3051,6 +3061,20 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawUseBox(playerid, AnuncioTextDraw[playerid], false);
     PlayerTextDrawBoxColour(playerid, AnuncioTextDraw[playerid], 0x00000000);
     PlayerTextDrawTextSize(playerid, AnuncioTextDraw[playerid], 635.0, 0.0);
+
+    DineroCambioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 631.0, 244.0, " ");
+    PlayerTextDrawLetterSize(playerid, DineroCambioTextDraw[playerid], 0.15, 0.64);
+    PlayerTextDrawAlignment(playerid, DineroCambioTextDraw[playerid], TEXT_DRAW_ALIGN_RIGHT);
+    PlayerTextDrawColour(playerid, DineroCambioTextDraw[playerid], 0xFFFFFFFF);
+    PlayerTextDrawBackgroundColour(playerid, DineroCambioTextDraw[playerid], 0x00000000);
+    PlayerTextDrawFont(playerid, DineroCambioTextDraw[playerid], TEXT_DRAW_FONT_1);
+    PlayerTextDrawSetOutline(playerid, DineroCambioTextDraw[playerid], 0);
+    PlayerTextDrawSetShadow(playerid, DineroCambioTextDraw[playerid], 0);
+    PlayerTextDrawSetProportional(playerid, DineroCambioTextDraw[playerid], true);
+    PlayerTextDrawUseBox(playerid, DineroCambioTextDraw[playerid], false);
+    PlayerTextDrawBoxColour(playerid, DineroCambioTextDraw[playerid], 0x00000000);
+    PlayerTextDrawTextSize(playerid, DineroCambioTextDraw[playerid], 631.0, 0.0);
+    DineroCambioTimer[playerid] = -1;
     AnuncioTimerOcultar[playerid] = -1;
     PlayerInCasa[playerid] = -1;
     CasaInteriorPendiente[playerid] = -1;
@@ -3263,6 +3287,8 @@ stock SpawnPlayerAfterAuth(playerid)
 }
 
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
+
+    if(PlayerSancionado[playerid]) return SendClientMessage(playerid, 0xFF4444FF, "Estas sancionado: no puedes usar dialogos durante la sancion.");
 
     if(dialogid == DIALOG_DUDA_TEXTO) {
         if(!response) return 1;
@@ -6063,6 +6089,13 @@ public OcultarAnuncioJugador(playerid) {
     return 1;
 }
 
+public OcultarDineroCambioJugador(playerid) {
+    if(!IsPlayerConnected(playerid)) return 1;
+    if(DineroCambioTextDraw[playerid] != PlayerText:-1) PlayerTextDrawHide(playerid, DineroCambioTextDraw[playerid]);
+    DineroCambioTimer[playerid] = -1;
+    return 1;
+}
+
 public OnPlayerDisconnect(playerid, reason) {
     #pragma unused reason
     if(PlayerInCasa[playerid] != -1) {
@@ -6079,7 +6112,9 @@ public OnPlayerDisconnect(playerid, reason) {
     }
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
     if(AnuncioTimerOcultar[playerid] != -1) { KillTimer(AnuncioTimerOcultar[playerid]); AnuncioTimerOcultar[playerid] = -1; }
+    if(DineroCambioTimer[playerid] != -1) { KillTimer(DineroCambioTimer[playerid]); DineroCambioTimer[playerid] = -1; }
     PlayerTextDrawDestroy(playerid, AnuncioTextDraw[playerid]);
+    if(DineroCambioTextDraw[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, DineroCambioTextDraw[playerid]); DineroCambioTextDraw[playerid] = PlayerText:-1; }
     if(TextoVelocimetro[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVelocimetro[playerid]); TextoVelocimetro[playerid] = PlayerText:-1; }
     if(TextoVelocimetroUnidad[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVelocimetroUnidad[playerid]); TextoVelocimetroUnidad[playerid] = PlayerText:-1; }
     if(TextoVehiculoDL[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVehiculoDL[playerid]); TextoVehiculoDL[playerid] = PlayerText:-1; }
@@ -7277,11 +7312,25 @@ stock InitGasSystem() {
 stock MostrarTextoDinero(playerid, monto) {
     if(!IsPlayerConnected(playerid) || monto == 0) return 0;
 
+    if(DineroCambioTextDraw[playerid] == PlayerText:-1) return 0;
+    if(DineroCambioTimer[playerid] != -1) {
+        KillTimer(DineroCambioTimer[playerid]);
+        DineroCambioTimer[playerid] = -1;
+    }
+
     new montoAbs = (monto < 0) ? -monto : monto;
-    new texto[64];
-    if(monto > 0) format(texto, sizeof(texto), "~n~~n~~n~~n~~w~+~g~$%d", montoAbs);
-    else format(texto, sizeof(texto), "~n~~n~~n~~n~~r~-~g~$%d", montoAbs);
-    GameTextForPlayer(playerid, texto, 2200, 3);
+    new texto[48];
+    if(monto > 0) {
+        format(texto, sizeof(texto), "+$%d", montoAbs);
+        PlayerTextDrawColour(playerid, DineroCambioTextDraw[playerid], 0x66FF66FF);
+    } else {
+        format(texto, sizeof(texto), "-$%d", montoAbs);
+        PlayerTextDrawColour(playerid, DineroCambioTextDraw[playerid], 0xFF6666FF);
+    }
+
+    PlayerTextDrawSetString(playerid, DineroCambioTextDraw[playerid], texto);
+    PlayerTextDrawShow(playerid, DineroCambioTextDraw[playerid]);
+    DineroCambioTimer[playerid] = SetTimerEx("OcultarDineroCambioJugador", 1600, false, "d", playerid);
     return 1;
 }
 
@@ -7348,10 +7397,10 @@ stock ActualizarBarrasEstado(playerid) {
     if(gas < 0) gas = 0;
     if(gas > 100) gas = 100;
 
-    new Float:anchoMax = 40.0;
-    new Float:inicioHambre = 541.0;
-    new Float:inicioGas = 286.0;
-    new Float:anchoGasMax = 72.0;
+    new Float:anchoMax = 100.0;
+    new Float:inicioHambre = 525.0;
+    new Float:inicioGas = 306.0;
+    new Float:anchoGasMax = 90.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicioHambre + (anchoMax * float(hambre) / 100.0), 0.0);
     PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoGasMax * float(gas) / 100.0), 0.0);
     return 1;
@@ -8269,7 +8318,6 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
     TogglePlayerControllable(playerid, false);
     TogglePlayerControllable(targetid, false);
     ApplyAnimation(playerid, "COP_AMBIENT", "Copbrowse_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
-    ApplyAnimation(targetid, "PED", "IDLE_taxi", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
     new vehCongelado = GetPlayerVehicleID(targetid);
     if(vehCongelado != INVALID_VEHICLE_ID) SetVehicleVelocity(vehCongelado, 0.0, 0.0, 0.0);
     MecanicoRepairTimer[playerid] = SetTimerEx("FinalizarReparacionMecanico", 10000, false, "d", playerid);
@@ -8293,6 +8341,7 @@ public FinalizarReparacionMecanico(playerid) {
 
     new targetid = MecanicoRepairTarget[playerid];
     new tipo = MecanicoRepairType[playerid];
+    new precioAcordado = MecanicoRepairPrecio[playerid];
     MecanicoReparando[playerid] = false;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
@@ -8311,7 +8360,7 @@ public FinalizarReparacionMecanico(playerid) {
 
     new costo = 800;
     if(tipo == 2) costo = 1000;
-    if(tipo == 3) costo = MecanicoRepairPrecio[playerid] > 0 ? MecanicoRepairPrecio[playerid] : 1500;
+    if(tipo == 3) costo = precioAcordado > 0 ? precioAcordado : 1500;
     if(tipo == 4) costo = 1000;
     if(GetPlayerMoney(targetid) < costo) {
         SendClientMessage(targetid, 0xFF0000FF, "No tienes dinero suficiente al finalizar la reparacion.");
