@@ -377,6 +377,7 @@ new MecanicoRepairTarget[MAX_PLAYERS] = {-1, ...};
 new MecanicoRepairType[MAX_PLAYERS];
 new MecanicoSolicitudPendiente[MAX_PLAYERS] = {-1, ...};
 new MecanicoSolicitudTipoPendiente[MAX_PLAYERS];
+new MecanicoSolicitudTimer[MAX_PLAYERS] = {-1, ...};
 new bool:PlayerTieneKitReparacion[MAX_PLAYERS];
 
 // Variables Inventario/Cultivo
@@ -812,6 +813,7 @@ forward FinalizarCajaBusqueda(playerid, cajaidx);
 forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
 forward FinalizarReparacionMecanico(playerid);
+forward ExpirarSolicitudMecanico(playerid);
 forward TeleportVehiculoLlamado(playerid);
 forward OcultarAnuncioJugador(playerid);
 stock CargarMinas();
@@ -852,6 +854,7 @@ stock MostrarMenuAdminNivelesTrabajo(playerid);
 stock ActivarSpecStaff(staffid, targetid, bool:bloquearRetorno = false);
 stock SalirSpecStaff(staffid);
 stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion);
+stock LimpiarSolicitudMecanico(playerid);
 stock EnviarReporteAStaff(reporta, reportado, const concepto[]);
 stock AgregarReporte(reporta, reportado, const concepto[]);
 public FinalizarRecolectaBasura(playerid) {
@@ -1933,7 +1936,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/reparar", true)) {
         if(MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de mecanico primero.");
         if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
-        return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_ID, DIALOG_STYLE_INPUT, "Trabajo De Mecanico", "Ingresa el ID del jugador al que deseas ofrecer reparacion:", "Enviar", "Cancelar");
+        return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_ID, DIALOG_STYLE_INPUT, "{66CCFF}Trabajo De Mecanico", "{FFFFFF}Ingresa el ID del jugador al que deseas ofrecer reparacion:\n{33CCFF}El cliente elegira el servicio en la solicitud.", "Enviar", "Cancelar");
     }
 
     if(!strcmp(cmd, "/usarkit", true)) {
@@ -2137,11 +2140,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
             MecanicoRepairTarget[playerid] = -1;
             MecanicoRepairType[playerid] = 0;
             for(new i = 0; i < MAX_PLAYERS; i++) {
-                if(MecanicoSolicitudPendiente[i] == playerid) {
-                    MecanicoSolicitudPendiente[i] = -1;
-                    MecanicoSolicitudTipoPendiente[i] = 0;
-                }
+                if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
             }
+            LimpiarSolicitudMecanico(playerid);
             MecanicoNivel[playerid] = 0;
             MecanicoReparaciones[playerid] = 0;
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de mecanico.");
@@ -2975,10 +2976,7 @@ public OnPlayerConnect(playerid) {
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
     for(new i = 0; i < MAX_PLAYERS; i++) {
-        if(MecanicoSolicitudPendiente[i] == playerid) {
-            MecanicoSolicitudPendiente[i] = -1;
-            MecanicoSolicitudTipoPendiente[i] = 0;
-        }
+        if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
     }
     MecanicoNivel[playerid] = 0;
     MecanicoReparaciones[playerid] = 0;
@@ -2986,8 +2984,7 @@ public OnPlayerConnect(playerid) {
     MecanicoRepairTimer[playerid] = -1;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
-    MecanicoSolicitudPendiente[playerid] = -1;
-    MecanicoSolicitudTipoPendiente[playerid] = 0;
+    LimpiarSolicitudMecanico(playerid);
     PlayerTieneKitReparacion[playerid] = false;
     ArmeriaAdminArmaPendiente[playerid] = 0;
     VentaAutosAdminModeloPendiente[playerid] = 0;
@@ -3364,30 +3361,37 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new target = strval(inputtext);
         if(!IsPlayerConnected(target) || target == playerid) return SendClientMessage(playerid, -1, "ID invalido.");
         if(MecanicoSolicitudPendiente[target] != -1) return SendClientMessage(playerid, -1, "Ese jugador ya tiene una solicitud pendiente.");
-        if(!IsPlayerInAnyVehicle(target)) return SendClientMessage(playerid, -1, "El jugador debe estar en un vehiculo para solicitar reparacion.");
+        if(!IsPlayerInAnyVehicle(target) || GetPlayerState(target) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El jugador debe estar conduciendo para solicitar reparacion.");
 
         MecanicoSolicitudPendiente[target] = playerid;
         MecanicoSolicitudTipoPendiente[target] = 0;
-        new cuerpo[384], nombreMecanico[MAX_PLAYER_NAME], msg[160];
+        if(MecanicoSolicitudTimer[target] != -1) KillTimer(MecanicoSolicitudTimer[target]);
+        MecanicoSolicitudTimer[target] = SetTimerEx("ExpirarSolicitudMecanico", 30000, false, "d", target);
+
+        new cuerpo[512], nombreMecanico[MAX_PLAYER_NAME], msg[160], opcionCompleta[128];
         GetPlayerName(playerid, nombreMecanico, sizeof(nombreMecanico));
-        format(cuerpo, sizeof(cuerpo), "El mecanico %s te ofrece reparacion.\n\nReparar Motor ($%d)\n- Sube solo el DL del vehiculo a 1500\n\nReparar Carroceria y Motor ($%d)\n- Requiere mecanico nivel %d\n- Repara visual + DL a 2000", nombreMecanico, PAGO_REPARAR_MOTOR, PAGO_REPARAR_COMPLETO, NIVEL_MECANICO_REPARACION_COMPLETA);
-        ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_LIST, "Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
-        format(msg, sizeof(msg), "Solicitud enviada al jugador %d.", target);
+        if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
+            format(opcionCompleta, sizeof(opcionCompleta), "{66FFCC}Reparar Motor y Carroceria {FFFFFF}($%d)", PAGO_REPARAR_COMPLETO);
+        } else {
+            format(opcionCompleta, sizeof(opcionCompleta), "{777777}Reparar Motor y Carroceria {AAAAAA}(Aun estoy aprendiendo)");
+        }
+        format(cuerpo, sizeof(cuerpo), "{33CCFF}El mecanico {FFFFFF}%s {33CCFF}te ofrece servicio.\n{FFCC66}La solicitud se cancelara en 30 segundos.\n\n{66FF99}Reparar Motor {FFFFFF}($%d)\n%s", nombreMecanico, PAGO_REPARAR_MOTOR, opcionCompleta);
+        ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_LIST, "{33CCFF}Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
+        format(msg, sizeof(msg), "Solicitud enviada al jugador %d (caduca en 30 segundos).", target);
         SendClientMessage(playerid, 0x66FF66FF, msg);
+        SendClientMessage(target, 0x33CCFFFF, "[Mecanico] Tienes una solicitud nueva de reparacion.");
         return 1;
     }
 
     if(dialogid == DIALOG_MECANICO_SOLICITUD) {
         new mecanico = MecanicoSolicitudPendiente[playerid];
         if(mecanico == -1 || !IsPlayerConnected(mecanico)) {
-            MecanicoSolicitudPendiente[playerid] = -1;
-            MecanicoSolicitudTipoPendiente[playerid] = 0;
+            LimpiarSolicitudMecanico(playerid);
             return SendClientMessage(playerid, -1, "La solicitud ya no esta disponible.");
         }
 
         if(!response) {
-            MecanicoSolicitudPendiente[playerid] = -1;
-            MecanicoSolicitudTipoPendiente[playerid] = 0;
+            LimpiarSolicitudMecanico(playerid);
             SendClientMessage(playerid, 0xFFAA00FF, "Rechazaste la solicitud de reparacion.");
             SendClientMessage(mecanico, 0xFFAA00FF, "El jugador rechazo tu solicitud de reparacion.");
             return 1;
@@ -3395,15 +3399,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
         if(listitem < 0 || listitem > 1) return SendClientMessage(playerid, -1, "Opcion invalida.");
         if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo el vehiculo a reparar.");
-        if(!IsPlayerInAnyVehicle(mecanico)) return SendClientMessage(playerid, -1, "El mecanico ya no esta en un vehiculo cercano para trabajar.");
+        if(MecanicoNivel[mecanico] <= 0 || MecanicoReparando[mecanico]) return SendClientMessage(playerid, -1, "El mecanico ya no esta disponible en este momento.");
 
         new tipo = listitem + 1;
+        if(tipo == 2 && MecanicoNivel[mecanico] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Este mecanico: Aun estoy aprendiendo. Solo puede reparar motor.");
+
         new costo = (tipo == 1) ? PAGO_REPARAR_MOTOR : PAGO_REPARAR_COMPLETO;
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esa reparacion.");
-        if(tipo == 2 && MecanicoNivel[mecanico] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Ese mecanico no tiene nivel suficiente para reparacion completa.");
 
-        MecanicoSolicitudPendiente[playerid] = -1;
-        MecanicoSolicitudTipoPendiente[playerid] = 0;
+        LimpiarSolicitudMecanico(playerid);
         return IniciarReparacionMecanico(mecanico, playerid, tipo);
     }
 
@@ -5924,11 +5928,9 @@ public OnPlayerDisconnect(playerid, reason) {
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
     for(new i = 0; i < MAX_PLAYERS; i++) {
-        if(MecanicoSolicitudPendiente[i] == playerid) {
-            MecanicoSolicitudPendiente[i] = -1;
-            MecanicoSolicitudTipoPendiente[i] = 0;
-        }
+        if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
     }
+    LimpiarSolicitudMecanico(playerid);
     ArmeriaAdminArmaPendiente[playerid] = 0;
     VentaAutosAdminModeloPendiente[playerid] = 0;
     VentaAutosAdminPrecioPendiente[playerid] = 0;
@@ -7931,12 +7933,50 @@ stock SalirSpecStaff(staffid) {
     return SendClientMessage(staffid, 0x66FF66FF, "Saliste del modo espectador.");
 }
 
+stock LimpiarSolicitudMecanico(playerid) {
+    if(playerid < 0 || playerid >= MAX_PLAYERS) return 0;
+    if(MecanicoSolicitudTimer[playerid] != -1) {
+        KillTimer(MecanicoSolicitudTimer[playerid]);
+        MecanicoSolicitudTimer[playerid] = -1;
+    }
+    MecanicoSolicitudPendiente[playerid] = -1;
+    MecanicoSolicitudTipoPendiente[playerid] = 0;
+    return 1;
+}
+
+public ExpirarSolicitudMecanico(playerid) {
+    if(playerid < 0 || playerid >= MAX_PLAYERS) return 0;
+    MecanicoSolicitudTimer[playerid] = -1;
+
+    new mecanico = MecanicoSolicitudPendiente[playerid];
+    if(mecanico == -1) return 1;
+
+    MecanicoSolicitudPendiente[playerid] = -1;
+    MecanicoSolicitudTipoPendiente[playerid] = 0;
+
+    if(IsPlayerConnected(playerid)) {
+        SendClientMessage(playerid, 0xFFAA00FF, "[Mecanico] La solicitud expiro despues de 30 segundos.");
+    }
+    if(IsPlayerConnected(mecanico)) {
+        new msg[144];
+        format(msg, sizeof(msg), "[Mecanico] El jugador %d no respondio tu solicitud (30s).", playerid);
+        SendClientMessage(mecanico, 0xFFAA00FF, msg);
+    }
+    return 1;
+}
+
 stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion) {
     if(!IsPlayerConnected(playerid) || !IsPlayerConnected(targetid)) return 0;
     if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
     if(tipoReparacion < 1 || tipoReparacion > 2) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
     if(tipoReparacion == 2 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Necesitas nivel 5 de mecanico para reparacion completa.");
     if(!IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El cliente debe estar conduciendo su vehiculo.");
+    if(GetPlayerVirtualWorld(playerid) != GetPlayerVirtualWorld(targetid) || GetPlayerInterior(playerid) != GetPlayerInterior(targetid)) return SendClientMessage(playerid, -1, "Debes estar en el mismo interior/mundo que el cliente.");
+
+    new Float:mx, Float:my, Float:mz, Float:tx, Float:ty, Float:tz;
+    GetPlayerPos(playerid, mx, my, mz);
+    GetPlayerPos(targetid, tx, ty, tz);
+    if(GetDistanceBetweenPoints(mx, my, mz, tx, ty, tz) > 7.0) return SendClientMessage(playerid, -1, "Debes estar cerca del cliente para comenzar la reparacion.");
 
     MecanicoReparando[playerid] = true;
     MecanicoRepairTarget[playerid] = targetid;
