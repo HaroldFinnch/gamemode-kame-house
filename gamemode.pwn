@@ -3002,7 +3002,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 276.0, 420.0, "GAS:");
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 276.0, 417.2, "GAS:");
     PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.20, 0.9);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
@@ -3028,7 +3028,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x8B2CFFFF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 317.0, 406.0, "0");
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 317.0, 397.0, "0");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.45, 1.9);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_CENTER);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
@@ -3036,7 +3036,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 327.0, 406.0, "K/H");
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 327.0, 401.0, "K/H");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.20, 1.0);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
@@ -3044,7 +3044,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
 
-    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 350.0, 420.0, "DL:1000");
+    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 350.0, 417.2, "DL:1000");
     PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.20, 1.0);
     PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
