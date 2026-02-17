@@ -7591,8 +7591,8 @@ stock ActualizarTopDinero() {
         );
     }
 
-    if(PuntoLabel[_:puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[_:puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
