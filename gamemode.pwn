@@ -309,6 +309,8 @@
 #define BASURERO_FLORES_CHANCE 30
 #define GAS_PRECIO_POR_PUNTO 10
 #define GAS_CONSUMO_POR_MINUTO 5
+#define BIDON_PRECIO 400
+#define BIDON_GAS_LITROS 25
 
 #define MAX_FACCIONES 30
 #define MAX_MIEMBROS_FACCION 10
@@ -2100,11 +2102,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(IsPlayerInAnyVehicle(playerid)) return SendClientMessage(playerid, -1, "Debes estar a pie para comprar un bidon.");
         if(EncontrarGasCercano(playerid) == -1) return SendClientMessage(playerid, -1, "Debes estar en una gasolinera.");
         if(BidonGasolina[playerid] > 0) return SendClientMessage(playerid, -1, "Ya tienes un bidon.");
-        if(GetPlayerMoney(playerid) < 7500) return SendClientMessage(playerid, -1, "Necesitas $7500 para comprar el bidon.");
-        KH_GivePlayerMoney(playerid, -7500);
+        if(GetPlayerMoney(playerid) < BIDON_PRECIO) return SendClientMessage(playerid, -1, "Necesitas $400 para comprar el bidon.");
+        KH_GivePlayerMoney(playerid, -BIDON_PRECIO);
         BidonGasolina[playerid] = 1;
-        SetPlayerAttachedObject(playerid, BIDON_ATTACH_SLOT, 1650, 6, 0.11, 0.02, 0.00, 0.0, 80.0, 0.0, 0.85, 0.85, 0.85);
-        SendClientMessage(playerid, 0x00FF00FF, "Compraste un bidon de gasolina. Usa /usarbidon dentro del vehiculo.");
+        SetPlayerAttachedObject(playerid, BIDON_ATTACH_SLOT, 1650, 6, 0.14, 0.03, 0.00, 0.0, 0.0, -90.0, 0.85, 0.85, 0.85);
+        SendClientMessage(playerid, 0x00FF00FF, "Compraste un bidon de gasolina ($400). Usa /usarbidon dentro del vehiculo.");
         return 1;
     }
 
@@ -2115,12 +2117,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(veh == INVALID_VEHICLE_ID) return 1;
         if(!GasInitVehiculo[veh]) { GasInitVehiculo[veh] = true; GasVehiculo[veh] = 0; }
         if(GasVehiculo[veh] >= 100) return SendClientMessage(playerid, -1, "El tanque ya esta lleno.");
-        GasVehiculo[veh] += 15;
+        GasVehiculo[veh] += BIDON_GAS_LITROS;
         if(GasVehiculo[veh] > 100) GasVehiculo[veh] = 100;
         BidonGasolina[playerid] = 0;
         LimpiarBidonVisual(playerid);
         ActualizarGasTextoVehiculo(playerid);
-        SendClientMessage(playerid, 0x00FF00FF, "Usaste el bidon. Gasolina +15.");
+        SendClientMessage(playerid, 0x00FF00FF, "Usaste el bidon. Gasolina +25.");
         return 1;
     }
 
@@ -2410,8 +2412,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         GetPlayerPos(playerid, gx, gy, gz);
         GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
         GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
-        new gastxt[96];
-        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nUsa /llenar (vehiculo)\nUsa /bidon para comprar bidon", GAS_PRECIO_POR_PUNTO);
+        new gastxt[128];
+        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nBidon: $%d (+%d gasolina)\nUsa /llenar (vehiculo)\nUsa /bidon para comprar bidon", GAS_PRECIO_POR_PUNTO, BIDON_PRECIO, BIDON_GAS_LITROS);
         GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
         GuardarVentagas();
@@ -3015,24 +3017,24 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x2BE2E2FF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 288.0, 417.6, "0");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.20, 0.80);
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 288.0, 408.8, "0");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.18, 0.74);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetro[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 1);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 311.0, 417.6, "KM/H");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.14, 0.80);
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 309.0, 408.8, "KM/H");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.12, 0.74);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0x9FC7D9FF);
     PlayerTextDrawFont(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_FONT_1);
     PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 1);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
 
-    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 339.0, 417.6, "DL: 1000");
-    PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.14, 0.80);
+    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 336.0, 408.8, "DL: 1000");
+    PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.12, 0.74);
     PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
     PlayerTextDrawFont(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_FONT_1);
@@ -7109,7 +7111,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar /reparar /usarkit.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar /reparar /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -7277,8 +7279,8 @@ stock MostrarTextoDinero(playerid, monto) {
 
     new montoAbs = (monto < 0) ? -monto : monto;
     new texto[64];
-    if(monto > 0) format(texto, sizeof(texto), "~n~~n~~n~~n~~g~$%d", montoAbs);
-    else format(texto, sizeof(texto), "~n~~n~~n~~n~~w~-$%d", montoAbs);
+    if(monto > 0) format(texto, sizeof(texto), "~n~~n~~n~~n~~w~+~g~$%d", montoAbs);
+    else format(texto, sizeof(texto), "~n~~n~~n~~n~~r~-~g~$%d", montoAbs);
     GameTextForPlayer(playerid, texto, 2200, 3);
     return 1;
 }
@@ -8973,7 +8975,9 @@ stock CargarVentagas() {
         new Float:gz = floatstr(strtok(line, idx));
         GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
         GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
-        GasLabel[GasTotalPuntos] = Create3DTextLabel("Gasolinera\nUsa /llenar o /bidon", 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
+        new gastxt[128];
+        format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nBidon: $%d (+%d gasolina)\nUsa /llenar o /bidon", GAS_PRECIO_POR_PUNTO, BIDON_PRECIO, BIDON_GAS_LITROS);
+        GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
     }
     fclose(h);
