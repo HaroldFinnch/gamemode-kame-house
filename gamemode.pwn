@@ -198,6 +198,7 @@
 #define DIALOG_ADMIN_TRABAJO_LISTA 156
 #define DIALOG_ADMIN_SET_TRABAJO_ID 157
 #define DIALOG_ADMIN_SET_TRABAJO_VALOR 158
+#define DIALOG_TOP_DINERO 171
 #define DIALOG_GPS_VEHICULOS 46
 #define DIALOG_KAMETIENDA_TIPO 47
 #define DIALOG_KAMETIENDA_CANTIDAD 48
@@ -549,6 +550,7 @@ enum ePuntoMovible {
     puntoFacciones,
     puntoTiendaVirtual,
     puntoMecanico,
+    puntoTopDinero,
     totalPuntosMovibles
 }
 
@@ -562,6 +564,11 @@ new PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
 new Float:PuntoPos[totalPuntosMovibles][3];
 new PuntoPickup[totalPuntosMovibles] = {0, ...};
 new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
+new TopDineroNombre[10][MAX_PLAYER_NAME];
+new TopDineroTotal[10];
+new TopDineroCantidad;
+new TopDineroTextoLabel[512];
+new TopDineroTextoDialogo[1024];
 new BasureroNPC = INVALID_ACTOR_ID;
 
 enum ePrendaData {
@@ -828,6 +835,7 @@ forward ChequearLimitesMapa();
 forward AutoGuardadoGlobal();
 forward FinalizarRecolectaBasura(playerid);
 forward SubirTiempoJugado();
+forward ActualizarTopDineroTimer();
 forward ClearPlayerAnimLock(playerid);
 forward FinalizarRepostaje(playerid);
 forward CheckInactiveVehicles();
@@ -1028,6 +1036,7 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh);
 stock ContarCasasJugador(playerid);
 stock GuardarPuntosMovibles();
 stock CargarPuntosMovibles();
+stock ActualizarTopDinero();
 stock ShowTelefonoMenu(playerid);
 stock ShowTelefonoVehiculosMenu(playerid);
 stock GetTelefonoVehiculoByListIndex(playerid, listindex);
@@ -1240,6 +1249,7 @@ public OnGameModeInit() {
     PuntoPos[puntoPrendas][0] = PuntoPos[puntoSemilleria][0] + 6.0; PuntoPos[puntoPrendas][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoPrendas][2] = PuntoPos[puntoSemilleria][2];
     PuntoPos[puntoFacciones][0] = POS_FACCION_X; PuntoPos[puntoFacciones][1] = POS_FACCION_Y; PuntoPos[puntoFacciones][2] = POS_FACCION_Z;
     PuntoPos[puntoTiendaVirtual][0] = PuntoPos[puntoSemilleria][0] + 12.0; PuntoPos[puntoTiendaVirtual][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoTiendaVirtual][2] = PuntoPos[puntoSemilleria][2];
+    PuntoPos[puntoTopDinero][0] = PuntoPos[puntoBanco][0] + 6.0; PuntoPos[puntoTopDinero][1] = PuntoPos[puntoBanco][1]; PuntoPos[puntoTopDinero][2] = PuntoPos[puntoBanco][2];
     VentaAutosActiva = true;
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
     VentaAutosPos[1] = PuntoPos[puntoVentaAutos][1];
@@ -1280,6 +1290,7 @@ public OnGameModeInit() {
     CargarPrepiezaPoints();
     CargarEditMap();
     CargarVentagas();
+    ActualizarTopDinero();
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -1328,6 +1339,7 @@ public OnGameModeInit() {
     SetTimer("BajarHambre", 45000, true);
     SetTimer("ChequearLimitesMapa", 1000, true);
     SetTimer("SubirTiempoJugado", 60000, true);
+    SetTimer("ActualizarTopDineroTimer", 60000, true);
     SetTimer("CheckInactiveVehicles", 10000, true);
     SetTimer("ActualizarTextosHornos", 1000, true);
 
@@ -2233,6 +2245,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
+    if(!strcmp(cmd, "/topdinero", true)) {
+        if(TopDineroCantidad <= 0) ActualizarTopDinero();
+        if(TopDineroCantidad <= 0) return SendClientMessage(playerid, -1, "No hay jugadores conectados para mostrar el top.");
+        ShowPlayerDialog(playerid, DIALOG_TOP_DINERO, DIALOG_STYLE_MSGBOX, "Top 10 Jugadores mas Ricos - Kame House", TopDineroTextoDialogo, "Cerrar", "");
+        return 1;
+    }
+
     if(!strcmp(cmd, "/pagar", true)) {
         return SendClientMessage(playerid, -1, "Pagos directos deshabilitados. Usa el banco para transferir dinero.");
     }
@@ -2609,7 +2628,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House\nTop Dinero Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -3743,6 +3762,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 12: puntoMover = puntoPrendas;
             case 13: puntoMover = puntoFacciones;
             case 14: puntoMover = puntoTiendaVirtual;
+            case 15: puntoMover = puntoTopDinero;
             default: return SendClientMessage(playerid, -1, "Punto invalido.");
         }
 
@@ -6051,6 +6071,12 @@ stock ActualizarNivelPJ(playerid) {
     return 1;
 }
 
+public ActualizarTopDineroTimer() {
+    ActualizarTopDinero();
+    return 1;
+}
+
+
 public ChequearLimitesMapa() {
     new Float:p[3], Float:h;
     for(new i=0; i<MAX_PLAYERS; i++) if(IsPlayerConnected(i) && IsPlayerLoggedIn[i]) {
@@ -7033,6 +7059,65 @@ stock GetEditMapSlotLibre() {
     return -1;
 }
 
+stock ActualizarTopDinero() {
+    TopDineroCantidad = 0;
+    TopDineroTextoLabel[0] = EOS;
+    TopDineroTextoDialogo[0] = EOS;
+
+    for(new i = 0; i < 10; i++) {
+        TopDineroNombre[i][0] = EOS;
+        TopDineroTotal[i] = -1;
+    }
+
+    for(new p = 0; p < MAX_PLAYERS; p++) {
+        if(!IsPlayerConnected(p)) continue;
+
+        new total = GetPlayerMoney(p) + PlayerBankMoney[p];
+        new nombre[MAX_PLAYER_NAME];
+        GetPlayerName(p, nombre, sizeof(nombre));
+
+        for(new pos = 0; pos < 10; pos++) {
+            if(total <= TopDineroTotal[pos]) continue;
+
+            for(new move = 9; move > pos; move--) {
+                TopDineroTotal[move] = TopDineroTotal[move - 1];
+                format(TopDineroNombre[move], MAX_PLAYER_NAME, "%s", TopDineroNombre[move - 1]);
+            }
+
+            TopDineroTotal[pos] = total;
+            format(TopDineroNombre[pos], MAX_PLAYER_NAME, "%s", nombre);
+            break;
+        }
+    }
+
+    for(new i = 0; i < 10; i++) {
+        if(TopDineroTotal[i] < 0 || !TopDineroNombre[i][0]) continue;
+        TopDineroCantidad++;
+
+        new linea[96];
+        format(linea, sizeof(linea), "%d. %s - $%d\n", i + 1, TopDineroNombre[i], TopDineroTotal[i]);
+        if(strlen(TopDineroTextoDialogo) + strlen(linea) < sizeof(TopDineroTextoDialogo)) {
+            strcat(TopDineroTextoDialogo, linea, sizeof(TopDineroTextoDialogo));
+        }
+    }
+
+    if(TopDineroCantidad <= 0) {
+        format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nSin jugadores conectados");
+        format(TopDineroTextoDialogo, sizeof(TopDineroTextoDialogo), "Sin jugadores conectados.");
+    } else {
+        format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\n1) %s - $%d\n2) %s - $%d\n3) %s - $%d\nUsa /topdinero",
+            TopDineroNombre[0], TopDineroTotal[0],
+            TopDineroCantidad > 1 ? TopDineroNombre[1] : "---", TopDineroCantidad > 1 ? TopDineroTotal[1] : 0,
+            TopDineroCantidad > 2 ? TopDineroNombre[2] : "---", TopDineroCantidad > 2 ? TopDineroTotal[2] : 0
+        );
+    }
+
+    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    }
+    return 1;
+}
+
 stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
     switch(punto) {
         case puntoCamionero: format(dest, len, "Trabajo camionero");
@@ -7051,6 +7136,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoPrendas: format(dest, len, "Prendas Kame House");
         case puntoFacciones: format(dest, len, "Facciones Kame House");
         case puntoTiendaVirtual: format(dest, len, "Tienda Virtual Kame House");
+        case puntoTopDinero: format(dest, len, "Top Dinero Kame House");
         default: format(dest, len, "Punto");
     }
     return 1;
@@ -7133,6 +7219,11 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoTiendaVirtual: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{66FFFF}Tienda Virtual Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+        }
+        case puntoTopDinero: {
+            PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            if(TopDineroTextoLabel[0] == EOS) format(TopDineroTextoLabel, sizeof(TopDineroTextoLabel), "Top 10 ricos Kame House\nUsa /topdinero");
+            PuntoLabel[punto] = Create3DTextLabel(TopDineroTextoLabel, 0xFFD700FF, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 25.0, 0);
         }
         case totalPuntosMovibles: {
             return 1;
@@ -9059,6 +9150,7 @@ stock GetConceptoSancionNombre(concepto, dest[], len) {
 }
 
 stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
+    #pragma unused adminid
     if(!IsPlayerConnected(targetid) || minutos <= 0) return 0;
 
     PlayerSancionado[targetid] = true;
@@ -9079,10 +9171,9 @@ stock AplicarSancionJugador(adminid, targetid, concepto, minutos) {
     SancionLabel[targetid] = Create3DTextLabel(labelText, 0xFF3333FF, SancionPos[targetid][0], SancionPos[targetid][1], SancionPos[targetid][2] + 1.2, 60.0, 0);
     Attach3DTextLabelToPlayer(SancionLabel[targetid], targetid, 0.0, 0.0, 1.0);
 
-    new msg[160], admName[MAX_PLAYER_NAME], tarName[MAX_PLAYER_NAME];
-    GetPlayerName(adminid, admName, sizeof(admName));
+    new msg[160], tarName[MAX_PLAYER_NAME];
     GetPlayerName(targetid, tarName, sizeof(tarName));
-    format(msg, sizeof(msg), "SERVER: %s sanciono a %s por %s durante %d minutos.", admName, tarName, conceptoNombre, minutos);
+    format(msg, sizeof(msg), "SERVER: %s Fue sancionado por %s (%d minutos).", tarName, conceptoNombre, minutos);
     SendClientMessageToAll(0xFF4444FF, msg);
     SendClientMessage(targetid, 0xFF4444FF, "Has sido sancionado. Permaneceras congelado hasta terminar tu tiempo.");
     return 1;
