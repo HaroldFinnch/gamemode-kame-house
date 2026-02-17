@@ -2148,7 +2148,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             MecanicoReparando[playerid] = false;
             MecanicoRepairTarget[playerid] = -1;
             MecanicoRepairType[playerid] = 0;
-    MecanicoRepairPrecio[playerid] = 0;
+            MecanicoRepairPrecio[playerid] = 0;
             for(new i = 0; i < MAX_PLAYERS; i++) {
                 if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
             }
