@@ -37,6 +37,7 @@
 #define COOLDOWN_MINA_MS     600000
 #define COSTO_KIT_REPARACION 1000
 #define PAGO_REPARAR_MOTOR 1500
+#define PORCENTAJE_PAGO_MECANICO 0.90
 #define PAGO_REPARAR_COMPLETO 2000
 #define NIVEL_MECANICO_REPARACION_COMPLETA 5
 #define NIVEL_MECANICO_REPARACION_PREMIUM 10
@@ -112,6 +113,8 @@
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
 #define PATH_EDITMAP "kame_house/editmap.txt"
 #define PATH_EDITMAP_LEGACY "editmap.txt"
+#define PATH_VENTAGAS "kame_house/ventagas.txt"
+#define PATH_VENTAGAS_LEGACY "ventagas.txt"
 #define PATH_VENTA_AUTOS "kame_house/venta_autos_config.txt"
 #define PATH_VENTA_AUTOS_LEGACY "venta_autos_config.txt"
 #define PATH_VENTA_SKINS "kame_house/venta_skins_config.txt"
@@ -1075,6 +1078,8 @@ stock ActualizarMiembrosFaccion(fid);
 stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1);
 stock GuardarEditMap();
 stock CargarEditMap();
+stock GuardarVentagas();
+stock CargarVentagas();
 stock ShowEditMapMenu(playerid);
 stock ShowEditMapEditList(playerid);
 stock ShowEditMapDeleteList(playerid);
@@ -1239,6 +1244,7 @@ public OnGameModeInit() {
     CargarPuntosMovibles();
     MigrarArchivoLegacy(PATH_PRENDAS_LEGACY, PATH_PRENDAS);
     MigrarArchivoLegacy(PATH_EDITMAP_LEGACY, PATH_EDITMAP);
+    MigrarArchivoLegacy(PATH_VENTAGAS_LEGACY, PATH_VENTAGAS);
     MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
     MigrarArchivoLegacy(PATH_VENTA_SKINS_LEGACY, PATH_VENTA_SKINS);
     MigrarArchivoLegacy(PATH_ARMERIA_LEGACY, PATH_ARMERIA);
@@ -1267,6 +1273,7 @@ public OnGameModeInit() {
     CargarCajasLoot();
     CargarPrepiezaPoints();
     CargarEditMap();
+    CargarVentagas();
 
     // Cargar casas
     new File:h = fopen(PATH_CASAS, io_read);
@@ -2407,7 +2414,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nUsa /llenar (vehiculo)\nUsa /bidon para comprar bidon", GAS_PRECIO_POR_PUNTO);
         GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
-        GuardarEditMap();
+        GuardarVentagas();
         SendClientMessage(playerid, 0x00FF00FF, "Punto de venta de gasolina creado y guardado.");
         return 1;
     }
@@ -2982,54 +2989,54 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 269.0, 417.2, "Gas");
-    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.16, 0.62);
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 268.0, 416.0, "Gas");
+    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.20, 0.80);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
+    PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xE8F8FFFF);
     PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 0);
+    PlayerTextDrawSetOutline(playerid, TextoBarraGas[playerid], 1);
     PlayerTextDrawSetShadow(playerid, TextoBarraGas[playerid], 0);
 
-    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 418.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.55);
-    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 326.0, 0.0);
+    BarraGasFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 417.6, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGasFondo[playerid], 0.0, 0.80);
+    PlayerTextDrawTextSize(playerid, BarraGasFondo[playerid], 358.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGasFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x00000099);
+    PlayerTextDrawColour(playerid, BarraGasFondo[playerid], 0x0E1622CC);
     PlayerTextDrawUseBox(playerid, BarraGasFondo[playerid], true);
-    PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x00000099);
+    PlayerTextDrawBoxColour(playerid, BarraGasFondo[playerid], 0x0E1622CC);
     PlayerTextDrawFont(playerid, BarraGasFondo[playerid], TEXT_DRAW_FONT_1);
 
-    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 286.0, 418.0, "_");
-    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.55);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 326.0, 0.0);
+    BarraGas[playerid] = CreatePlayerTextDraw(playerid, 286.0, 417.6, "_");
+    PlayerTextDrawLetterSize(playerid, BarraGas[playerid], 0.0, 0.80);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], 358.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, BarraGas[playerid], COLOR_GAS);
+    PlayerTextDrawColour(playerid, BarraGas[playerid], 0x2BE2E2FF);
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
-    PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
+    PlayerTextDrawBoxColour(playerid, BarraGas[playerid], 0x2BE2E2FF);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
 
-    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.4, "0");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.16, 0.62);
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 288.0, 417.6, "0");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.20, 0.80);
     PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFFFFFFF);
+    PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetro[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
+    PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 1);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 304.0, 409.4, "K/H");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.16, 0.62);
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 311.0, 417.6, "KM/H");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.14, 0.80);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0x99FFFFFF);
+    PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0x9FC7D9FF);
     PlayerTextDrawFont(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 0);
+    PlayerTextDrawSetOutline(playerid, TextoVelocimetroUnidad[playerid], 1);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetroUnidad[playerid], 0);
 
-    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 340.0, 409.4, "DL: 1000");
-    PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.16, 0.62);
+    TextoVehiculoDL[playerid] = CreatePlayerTextDraw(playerid, 339.0, 417.6, "DL: 1000");
+    PlayerTextDrawLetterSize(playerid, TextoVehiculoDL[playerid], 0.14, 0.80);
     PlayerTextDrawAlignment(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_ALIGN_LEFT);
-    PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x66FF66FF);
+    PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
     PlayerTextDrawFont(playerid, TextoVehiculoDL[playerid], TEXT_DRAW_FONT_1);
-    PlayerTextDrawSetOutline(playerid, TextoVehiculoDL[playerid], 0);
+    PlayerTextDrawSetOutline(playerid, TextoVehiculoDL[playerid], 1);
     PlayerTextDrawSetShadow(playerid, TextoVehiculoDL[playerid], 0);
 
     AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 635.0, 218.0, "~w~");
@@ -6033,6 +6040,7 @@ public AutoGuardadoGlobal() {
     GuardarCajasLoot();
     GuardarPrepiezaPoints();
     GuardarEditMap();
+    GuardarVentagas();
     GuardarVentaAutosConfig();
     GuardarVentaSkinsConfig();
     GuardarArmeriaConfig();
@@ -6283,12 +6291,12 @@ public OnPlayerUpdate(playerid) {
             GetVehicleHealth(vehid, vehHealth);
             format(dlText, sizeof(dlText), "DL: %.0f", vehHealth);
             PlayerTextDrawSetString(playerid, TextoVehiculoDL[playerid], dlText);
-            if(vehHealth >= 900.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x66FF66FF);
-            else if(vehHealth >= 600.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFFCC33FF);
-            else PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFF4444FF);
-            if(kmh >= 120) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF5555FF);
-            else if(kmh >= 60) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFCC33FF);
-            else PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0x66FFFFFF);
+            if(vehHealth >= 900.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
+            else if(vehHealth >= 600.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFFD166FF);
+            else PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFF6B6BFF);
+            if(kmh >= 120) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF6B6BFF);
+            else if(kmh >= 60) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFD166FF);
+            else PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
             if(GasVehiculo[vehid] <= 0) {
                 new engine, lights, alarm, doors, bonnet, boot, objective;
                 GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
@@ -7269,8 +7277,8 @@ stock MostrarTextoDinero(playerid, monto) {
 
     new montoAbs = (monto < 0) ? -monto : monto;
     new texto[64];
-    if(monto > 0) format(texto, sizeof(texto), "~g~+~w~$%d", montoAbs);
-    else format(texto, sizeof(texto), "~r~-~w~$%d", montoAbs);
+    if(monto > 0) format(texto, sizeof(texto), "~n~~n~~n~~n~~g~$%d", montoAbs);
+    else format(texto, sizeof(texto), "~n~~n~~n~~n~~w~-$%d", montoAbs);
     GameTextForPlayer(playerid, texto, 2200, 3);
     return 1;
 }
@@ -7341,8 +7349,9 @@ stock ActualizarBarrasEstado(playerid) {
     new Float:anchoMax = 40.0;
     new Float:inicioHambre = 541.0;
     new Float:inicioGas = 286.0;
+    new Float:anchoGasMax = 72.0;
     PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicioHambre + (anchoMax * float(hambre) / 100.0), 0.0);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoMax * float(gas) / 100.0), 0.0);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoGasMax * float(gas) / 100.0), 0.0);
     return 1;
 }
 
@@ -8258,7 +8267,7 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
     TogglePlayerControllable(playerid, false);
     TogglePlayerControllable(targetid, false);
     ApplyAnimation(playerid, "COP_AMBIENT", "Copbrowse_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
-    ApplyAnimation(targetid, "COP_AMBIENT", "Coplook_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
+    ApplyAnimation(targetid, "PED", "IDLE_taxi", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
     new vehCongelado = GetPlayerVehicleID(targetid);
     if(vehCongelado != INVALID_VEHICLE_ID) SetVehicleVelocity(vehCongelado, 0.0, 0.0, 0.0);
     MecanicoRepairTimer[playerid] = SetTimerEx("FinalizarReparacionMecanico", 10000, false, "d", playerid);
@@ -8287,7 +8296,7 @@ public FinalizarReparacionMecanico(playerid) {
     MecanicoRepairType[playerid] = 0;
     MecanicoRepairPrecio[playerid] = 0;
     TogglePlayerControllable(playerid, true);
-    if(IsPlayerConnected(targetid)) { TogglePlayerControllable(targetid, true); ClearAnimations(targetid, t_FORCE_SYNC:SYNC_ALL); }
+    if(IsPlayerConnected(targetid)) TogglePlayerControllable(targetid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
 
     if(!IsPlayerConnected(targetid) || !IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) {
@@ -8309,7 +8318,7 @@ public FinalizarReparacionMecanico(playerid) {
     }
 
     KH_GivePlayerMoney(targetid, -costo);
-    new pagoMecanico = floatround(float(costo) * 0.9, floatround_floor);
+    new pagoMecanico = floatround(float(costo) * PORCENTAJE_PAGO_MECANICO, floatround_floor);
     KH_GivePlayerMoney(playerid, pagoMecanico);
 
     new Float:actualHealth;
@@ -8852,10 +8861,6 @@ stock GuardarEditMapEnRuta(const ruta[]) {
     if(!h) return 0;
 
     new line[220];
-    for(new g = 0; g < GasTotalPuntos; g++) {
-        format(line, sizeof(line), "GAS %f %f %f\n", GasPos[g][0], GasPos[g][1], GasPos[g][2]);
-        fwrite(h, line);
-    }
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
         if(EditMapData[i][emObj] != INVALID_OBJECT_ID) {
@@ -8896,18 +8901,6 @@ stock CargarEditMap() {
         new idx = 0;
         new tok[16];
         format(tok, sizeof(tok), "%s", strtok(line, idx));
-        if(!strcmp(tok, "GAS", true)) {
-            if(GasTotalPuntos >= MAX_GAS_POINTS) continue;
-            new Float:gx = floatstr(strtok(line, idx));
-            new Float:gy = floatstr(strtok(line, idx));
-            new Float:gz = floatstr(strtok(line, idx));
-            GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
-            GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
-            GasLabel[GasTotalPuntos] = Create3DTextLabel("Gasolinera\nUsa /llenar o /bidon", 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
-            GasTotalPuntos++;
-            continue;
-        }
-
         new modelid = strval(tok);
         if(modelid < 300 || modelid > 20000) continue;
         new Float:x = floatstr(strtok(line, idx));
@@ -8935,6 +8928,53 @@ stock CargarEditMap() {
         EditMapData[TotalEditMap][emRZ] = rz;
         EditMapData[TotalEditMap][emObj] = CreateObject(modelid, x, y, z, rx, ry, rz);
         TotalEditMap++;
+    }
+    fclose(h);
+    return 1;
+}
+
+stock GuardarVentagasEnRuta(const ruta[]) {
+    new tmpPath[96];
+    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
+
+    new File:h = fopen(tmpPath, io_write);
+    if(!h) return 0;
+
+    new line[96];
+    for(new g = 0; g < GasTotalPuntos; g++) {
+        format(line, sizeof(line), "%f %f %f\n", GasPos[g][0], GasPos[g][1], GasPos[g][2]);
+        fwrite(h, line);
+    }
+    fclose(h);
+
+    fremove(ruta);
+    if(frename(tmpPath, ruta)) return 1;
+    return 0;
+}
+
+stock GuardarVentagas() {
+    fcreatedir(DIR_DATA);
+    new okMain = GuardarVentagasEnRuta(PATH_VENTAGAS);
+    new okLegacy = GuardarVentagasEnRuta(PATH_VENTAGAS_LEGACY);
+    return (okMain || okLegacy);
+}
+
+stock CargarVentagas() {
+    new File:h = fopen(PATH_VENTAGAS, io_read);
+    if(!h) h = fopen(PATH_VENTAGAS_LEGACY, io_read);
+    if(!h) return 0;
+
+    new line[96];
+    GasTotalPuntos = 0;
+    while(fread(h, line) && GasTotalPuntos < MAX_GAS_POINTS) {
+        new idx = 0;
+        new Float:gx = floatstr(strtok(line, idx));
+        new Float:gy = floatstr(strtok(line, idx));
+        new Float:gz = floatstr(strtok(line, idx));
+        GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
+        GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
+        GasLabel[GasTotalPuntos] = Create3DTextLabel("Gasolinera\nUsa /llenar o /bidon", 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
+        GasTotalPuntos++;
     }
     fclose(h);
     return 1;
