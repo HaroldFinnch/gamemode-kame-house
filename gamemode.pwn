@@ -39,6 +39,9 @@
 #define PAGO_REPARAR_MOTOR 1500
 #define PAGO_REPARAR_COMPLETO 2000
 #define NIVEL_MECANICO_REPARACION_COMPLETA 5
+#define NIVEL_MECANICO_REPARACION_PREMIUM 10
+#define DL_REPARACION_BASICA 800.0
+#define DL_REPARACION_INTERMEDIA 1000.0
 #define PROGRESO_MECANICO_POR_NIVEL 5
 
 #define SEMILLA_HIERBA_PRECIO 45
@@ -182,6 +185,7 @@
 #define DIALOG_STAFF_REPORTES_LISTA 150
 #define DIALOG_MECANICO_REPARAR_ID 151
 #define DIALOG_MECANICO_SOLICITUD 152
+#define DIALOG_MECANICO_REPARAR_PRECIO 170
 #define DIALOG_ADMIN_NIVELES_MENU 153
 #define DIALOG_ADMIN_SET_NIVEL_ID 154
 #define DIALOG_ADMIN_SET_NIVEL_VALOR 155
@@ -309,7 +313,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 9
+#define CUENTA_DATA_VERSION 10
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -329,6 +333,7 @@ new PlayerText:TextoBarraHambre[MAX_PLAYERS];
 new PlayerText:BarraGas[MAX_PLAYERS];
 new PlayerText:BarraGasFondo[MAX_PLAYERS];
 new PlayerText:TextoBarraGas[MAX_PLAYERS];
+new PlayerText:TextoVelocimetro[MAX_PLAYERS] = {PlayerText:-1, ...};
 new Float:AdminMapPos[MAX_PLAYERS][3];
 new PlayerInCasa[MAX_PLAYERS] = {-1, ...};
 new PlayerBankMoney[MAX_PLAYERS];
@@ -375,6 +380,7 @@ new bool:MecanicoReparando[MAX_PLAYERS];
 new MecanicoRepairTimer[MAX_PLAYERS] = {-1, ...};
 new MecanicoRepairTarget[MAX_PLAYERS] = {-1, ...};
 new MecanicoRepairType[MAX_PLAYERS];
+new MecanicoRepairPrecio[MAX_PLAYERS];
 new MecanicoSolicitudPendiente[MAX_PLAYERS] = {-1, ...};
 new MecanicoSolicitudTipoPendiente[MAX_PLAYERS];
 new MecanicoSolicitudTimer[MAX_PLAYERS] = {-1, ...};
@@ -691,11 +697,13 @@ new Float:TempVehPos[MAX_VEHICLES][4];
 new TempVehVW[MAX_VEHICLES];
 new TempVehInterior[MAX_VEHICLES];
 new bool:VehTempVanilla[MAX_VEHICLES];
+new Float:VehHealthData[MAX_VEHICLES];
 
 new GasTotalPuntos;
 new Float:GasPos[MAX_GAS_POINTS][3];
 new GasPickup[MAX_GAS_POINTS];
 new Text3D:GasLabel[MAX_GAS_POINTS] = {Text3D:-1, ...};
+new bool:TiendaVirtualHabilitada = true;
 
 enum eMinaData {
     bool:minaActiva,
@@ -853,7 +861,7 @@ stock MostrarMenuAdminNiveles(playerid);
 stock MostrarMenuAdminNivelesTrabajo(playerid);
 stock ActivarSpecStaff(staffid, targetid, bool:bloquearRetorno = false);
 stock SalirSpecStaff(staffid);
-stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion);
+stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordado = 0);
 stock LimpiarSolicitudMecanico(playerid);
 stock EnviarReporteAStaff(reporta, reportado, const concepto[]);
 stock AgregarReporte(reporta, reportado, const concepto[]);
@@ -1289,7 +1297,7 @@ public OnGameModeInit() {
     }
 
     SetTimer("AutoGuardadoGlobal", 60000, true);
-    SetTimer("BajarHambre", 60000, true);
+    SetTimer("BajarHambre", 45000, true);
     SetTimer("ChequearLimitesMapa", 1000, true);
     SetTimer("SubirTiempoJugado", 60000, true);
     SetTimer("CheckInactiveVehicles", 10000, true);
@@ -1307,7 +1315,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     new bool:presionoY = ((newkeys & KEY_YES) && !(oldkeys & KEY_YES));
     new bool:presionoH = ((newkeys & KEY_CTRL_BACK) && !(oldkeys & KEY_CTRL_BACK));
 
-    if(presionoY && PlayerAdmin[playerid] >= 1) { // Tecla Y (staff)
+    if(presionoY && EsDueno(playerid)) { // Tecla Y (solo owner/admin principal)
         if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
@@ -1399,6 +1407,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     if(IsNearTiendaVirtual(playerid)) {
+        if(!TiendaVirtualHabilitada && !EsDueno(playerid)) return SendClientMessage(playerid, -1, "La tienda virtual esta deshabilitada por administracion.");
         ShowTiendaVirtualMenu(playerid);
         return 1;
     }
@@ -2139,6 +2148,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             MecanicoReparando[playerid] = false;
             MecanicoRepairTarget[playerid] = -1;
             MecanicoRepairType[playerid] = 0;
+            MecanicoRepairPrecio[playerid] = 0;
             for(new i = 0; i < MAX_PLAYERS; i++) {
                 if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
             }
@@ -2348,7 +2358,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         format(gastxt, sizeof(gastxt), "Gasolinera\nPrecio: $%d por litro\nUsa /llenar (vehiculo)\nUsa /bidon para comprar bidon", GAS_PRECIO_POR_PUNTO);
         GasLabel[GasTotalPuntos] = Create3DTextLabel(gastxt, 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
         GasTotalPuntos++;
-        SendClientMessage(playerid, 0x00FF00FF, "Punto de venta de gasolina creado.");
+        GuardarEditMap();
+        SendClientMessage(playerid, 0x00FF00FF, "Punto de venta de gasolina creado y guardado.");
         return 1;
     }
     if(!strcmp(cmd, "/crearventadeautos", true)) {
@@ -2637,6 +2648,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new veh = GetPlayerVehicleID(playerid);
         RepairVehicle(veh);
         SetVehicleHealth(veh, 1000.0);
+        VehHealthData[veh] = 1000.0;
         SendClientMessage(playerid, 0x66FF66FF, "Vehiculo reparado: carroceria y motor al 1000.");
         return 1;
     }
@@ -2897,24 +2909,24 @@ public OnPlayerConnect(playerid) {
     PlayerHambre[playerid] = 100;
     UltimoControlArmaProhibidaTick[playerid] = 0;
 
-    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.0, "_");
+    BarraHambreFondo[playerid] = CreatePlayerTextDraw(playerid, 541.0, 30.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambreFondo[playerid], 0.0, 0.55);
-    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 326.0, 0.0);
+    PlayerTextDrawTextSize(playerid, BarraHambreFondo[playerid], 581.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambreFondo[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawUseBox(playerid, BarraHambreFondo[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraHambreFondo[playerid], 0x00000099);
     PlayerTextDrawFont(playerid, BarraHambreFondo[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 272.0, 408.4, "H");
+    TextoBarraHambre[playerid] = CreatePlayerTextDraw(playerid, 527.0, 29.4, "H");
     PlayerTextDrawLetterSize(playerid, TextoBarraHambre[playerid], 0.16, 0.62);
     PlayerTextDrawAlignment(playerid, TextoBarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraHambre[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.0, "_");
+    BarraHambre[playerid] = CreatePlayerTextDraw(playerid, 541.0, 30.0, "_");
     PlayerTextDrawLetterSize(playerid, BarraHambre[playerid], 0.0, 0.55);
-    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 326.0, 0.0);
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], 581.0, 0.0);
     PlayerTextDrawAlignment(playerid, BarraHambre[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawUseBox(playerid, BarraHambre[playerid], true);
@@ -2944,6 +2956,12 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawUseBox(playerid, BarraGas[playerid], true);
     PlayerTextDrawBoxColour(playerid, BarraGas[playerid], COLOR_GAS);
     PlayerTextDrawFont(playerid, BarraGas[playerid], TEXT_DRAW_FONT_1);
+
+    TextoVelocimetro[playerid] = CreatePlayerTextDraw(playerid, 286.0, 409.4, "0 K/H");
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetro[playerid], 0.16, 0.62);
+    PlayerTextDrawAlignment(playerid, TextoVelocimetro[playerid], TEXT_DRAW_ALIGN_LEFT);
+    PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFFFFFFF);
+    PlayerTextDrawFont(playerid, TextoVelocimetro[playerid], TEXT_DRAW_FONT_1);
 
     AnuncioTextDraw[playerid] = CreatePlayerTextDraw(playerid, 635.0, 218.0, "~w~");
     PlayerTextDrawLetterSize(playerid, AnuncioTextDraw[playerid], 0.19, 0.95);
@@ -2975,6 +2993,7 @@ public OnPlayerConnect(playerid) {
     MecanicoReparando[playerid] = false;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
+    MecanicoRepairPrecio[playerid] = 0;
     for(new i = 0; i < MAX_PLAYERS; i++) {
         if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
     }
@@ -2984,6 +3003,7 @@ public OnPlayerConnect(playerid) {
     MecanicoRepairTimer[playerid] = -1;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
+    MecanicoRepairPrecio[playerid] = 0;
     LimpiarSolicitudMecanico(playerid);
     PlayerTieneKitReparacion[playerid] = false;
     ArmeriaAdminArmaPendiente[playerid] = 0;
@@ -3368,14 +3388,19 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(MecanicoSolicitudTimer[target] != -1) KillTimer(MecanicoSolicitudTimer[target]);
         MecanicoSolicitudTimer[target] = SetTimerEx("ExpirarSolicitudMecanico", 30000, false, "d", target);
 
-        new cuerpo[512], nombreMecanico[MAX_PLAYER_NAME], msg[160], opcionCompleta[128];
+        new cuerpo[512], nombreMecanico[MAX_PLAYER_NAME], msg[160], nivelTxt[64], servicioTxt[256];
         GetPlayerName(playerid, nombreMecanico, sizeof(nombreMecanico));
-        if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
-            format(opcionCompleta, sizeof(opcionCompleta), "{66FFCC}Reparar Motor y Carroceria {FFFFFF}($%d)", PAGO_REPARAR_COMPLETO);
+        if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_PREMIUM) {
+            format(nivelTxt, sizeof(nivelTxt), "Nivel %d (Premium)", MecanicoNivel[playerid]);
+            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparacion premium {FFFFFF}(motor+carroceria, precio definido por mecanico)");
+        } else if(MecanicoNivel[playerid] >= NIVEL_MECANICO_REPARACION_COMPLETA) {
+            format(nivelTxt, sizeof(nivelTxt), "Nivel %d", MecanicoNivel[playerid]);
+            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparar motor {FFFFFF}(DL 1000 - $1000)");
         } else {
-            format(opcionCompleta, sizeof(opcionCompleta), "{777777}Reparar Motor y Carroceria {AAAAAA}(Aun estoy aprendiendo)");
+            format(nivelTxt, sizeof(nivelTxt), "Nivel %d", MecanicoNivel[playerid]);
+            format(servicioTxt, sizeof(servicioTxt), "{66FF99}Reparar motor {FFFFFF}(DL 800 - $800)");
         }
-        format(cuerpo, sizeof(cuerpo), "{33CCFF}El mecanico {FFFFFF}%s {33CCFF}te ofrece servicio.\n{FFCC66}La solicitud se cancelara en 30 segundos.\n\n{66FF99}Reparar Motor {FFFFFF}($%d)\n%s", nombreMecanico, PAGO_REPARAR_MOTOR, opcionCompleta);
+        format(cuerpo, sizeof(cuerpo), "{33CCFF}El mecanico {FFFFFF}%s {33CCFF}(%s) te ofrece servicio.\n{FFCC66}La solicitud se cancelara en 30 segundos.\n\n%s", nombreMecanico, nivelTxt, servicioTxt);
         ShowPlayerDialog(target, DIALOG_MECANICO_SOLICITUD, DIALOG_STYLE_LIST, "{33CCFF}Solicitud de Mecanico", cuerpo, "Aceptar", "Rechazar");
         format(msg, sizeof(msg), "Solicitud enviada al jugador %d (caduca en 30 segundos).", target);
         SendClientMessage(playerid, 0x66FF66FF, msg);
@@ -3397,18 +3422,39 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return 1;
         }
 
-        if(listitem < 0 || listitem > 1) return SendClientMessage(playerid, -1, "Opcion invalida.");
+        if(listitem != 0) return SendClientMessage(playerid, -1, "Opcion invalida.");
         if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo el vehiculo a reparar.");
         if(MecanicoNivel[mecanico] <= 0 || MecanicoReparando[mecanico]) return SendClientMessage(playerid, -1, "El mecanico ya no esta disponible en este momento.");
 
-        new tipo = listitem + 1;
-        if(tipo == 2 && MecanicoNivel[mecanico] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Este mecanico: Aun estoy aprendiendo. Solo puede reparar motor.");
-
-        new costo = (tipo == 1) ? PAGO_REPARAR_MOTOR : PAGO_REPARAR_COMPLETO;
+        new tipo = (MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_PREMIUM) ? 3 : 1;
+        new costo = 800;
+        if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_PREMIUM) {
+            MecanicoSolicitudTipoPendiente[playerid] = tipo;
+            return ShowPlayerDialog(playerid, DIALOG_MECANICO_REPARAR_PRECIO, DIALOG_STYLE_INPUT, "Solicitud mecanico premium", "Ingresa el precio acordado con el mecanico (min 1):", "Confirmar", "Cancelar");
+        }
+        if(MecanicoNivel[mecanico] >= NIVEL_MECANICO_REPARACION_COMPLETA) costo = 1000;
         if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para esa reparacion.");
 
         LimpiarSolicitudMecanico(playerid);
-        return IniciarReparacionMecanico(mecanico, playerid, tipo);
+        return IniciarReparacionMecanico(mecanico, playerid, tipo, costo);
+    }
+
+    if(dialogid == DIALOG_MECANICO_REPARAR_PRECIO) {
+        new mecanico = MecanicoSolicitudPendiente[playerid];
+        if(!response) {
+            LimpiarSolicitudMecanico(playerid);
+            if(IsPlayerConnected(mecanico)) SendClientMessage(mecanico, 0xFFAA00FF, "El jugador cancelo la solicitud premium.");
+            return 1;
+        }
+        if(mecanico == -1 || !IsPlayerConnected(mecanico)) {
+            LimpiarSolicitudMecanico(playerid);
+            return SendClientMessage(playerid, -1, "La solicitud ya no esta disponible.");
+        }
+        new costo = strval(inputtext);
+        if(costo <= 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        if(GetPlayerMoney(playerid) < costo) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para pagar ese servicio.");
+        LimpiarSolicitudMecanico(playerid);
+        return IniciarReparacionMecanico(mecanico, playerid, 3, costo);
     }
 
     if(dialogid == DIALOG_ADMIN_NIVELES_MENU) {
@@ -3820,6 +3866,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return ShowTelefonoMenu(playerid);
         new veh = GetTelefonoVehiculoByListIndex(playerid, listitem);
         if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(VehOculto[veh] || !IsValidVehicle(veh)) return SendClientMessage(playerid, -1, "No puedes llamar ese vehiculo si no esta restaurado/activo.");
         if(GetPlayerMoney(playerid) < COSTO_LLAMAR_VEHICULO) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para llamar tu vehiculo.");
         GivePlayerMoney(playerid, -COSTO_LLAMAR_VEHICULO);
         TelefonoVehiculoSeleccionado[playerid] = veh;
@@ -4690,6 +4737,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return 1;
         if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_VIP_DINERO, DIALOG_STYLE_INPUT, "Admin - Precio VIP", "Ingresa el precio en dinero para VIP:", "Siguiente", "Atras");
         if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_DIAMANTE, DIALOG_STYLE_INPUT, "Admin - Precio Diamante", "Ingresa el precio por diamante:", "Guardar", "Atras");
+        if(listitem == 2) {
+            TiendaVirtualHabilitada = !TiendaVirtualHabilitada;
+            GuardarTiendaVirtualConfig();
+            SendClientMessage(playerid, 0x66FF66FF, TiendaVirtualHabilitada ? "Tienda virtual habilitada." : "Tienda virtual deshabilitada.");
+            return MostrarMenuAdminPreciosMembresia(playerid);
+        }
         return 1;
     }
 
@@ -5589,6 +5642,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             if(fread(h, line)) MecanicoReparaciones[playerid] = strval(line);
                             if(fread(h, line)) PlayerTieneKitReparacion[playerid] = strval(line) != 0;
                         }
+                        if(dataVersion >= 10) {
+                            if(fread(h, line)) PlayerSancionado[playerid] = strval(line) != 0;
+                            if(fread(h, line)) SancionConcepto[playerid] = strval(line);
+                            if(fread(h, line)) SancionFinTick[playerid] = strval(line);
+                            if(fread(h, line)) SancionPos[playerid][0] = floatstr(line);
+                            if(fread(h, line)) SancionPos[playerid][1] = floatstr(line);
+                            if(fread(h, line)) SancionPos[playerid][2] = floatstr(line);
+                        }
                         format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
                         if(dataVersion >= 6) {
                             if(fread(h, line)) {
@@ -5691,10 +5752,11 @@ public GuardarCuenta(playerid) {
                 CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
             fwrite(h, line);
 
-            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d",
+            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
                 PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0,
-                PlayerDiamantes[playerid], PlayerMembresiaTipo[playerid], PlayerMembresiaExpiraTick[playerid], MecanicoNivel[playerid], MecanicoReparaciones[playerid], PlayerTieneKitReparacion[playerid] ? 1 : 0);
+                PlayerDiamantes[playerid], PlayerMembresiaTipo[playerid], PlayerMembresiaExpiraTick[playerid], MecanicoNivel[playerid], MecanicoReparaciones[playerid], PlayerTieneKitReparacion[playerid] ? 1 : 0,
+                PlayerSancionado[playerid] ? 1 : 0, SancionConcepto[playerid], SancionFinTick[playerid], SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
@@ -5905,7 +5967,7 @@ public OnPlayerDisconnect(playerid, reason) {
     if(PlayerPrefixLabel[playerid] != Text3D:-1) { Delete3DTextLabel(PlayerPrefixLabel[playerid]); PlayerPrefixLabel[playerid] = Text3D:-1; }
     if(AnuncioTimerOcultar[playerid] != -1) { KillTimer(AnuncioTimerOcultar[playerid]); AnuncioTimerOcultar[playerid] = -1; }
     PlayerTextDrawDestroy(playerid, AnuncioTextDraw[playerid]);
-    PlayerSancionado[playerid] = false;
+    if(TextoVelocimetro[playerid] != PlayerText:-1) { PlayerTextDrawDestroy(playerid, TextoVelocimetro[playerid]); TextoVelocimetro[playerid] = PlayerText:-1; }
     GuardarCuenta(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
@@ -5927,6 +5989,7 @@ public OnPlayerDisconnect(playerid, reason) {
     MecanicoReparando[playerid] = false;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
+    MecanicoRepairPrecio[playerid] = 0;
     for(new i = 0; i < MAX_PLAYERS; i++) {
         if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
     }
@@ -6027,6 +6090,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
         PlayerTextDrawHide(playerid, TextoBarraGas[playerid]);
         PlayerTextDrawHide(playerid, BarraGasFondo[playerid]);
         PlayerTextDrawHide(playerid, BarraGas[playerid]);
+        PlayerTextDrawHide(playerid, TextoVelocimetro[playerid]);
     }
     return 1;
 }
@@ -6037,6 +6101,7 @@ public OnVehicleDeath(vehicleid, killerid) {
     if(VehOwner[vehicleid] == -1) return 1;
 
     GetVehiclePos(vehicleid, VehPosData[vehicleid][0], VehPosData[vehicleid][1], VehPosData[vehicleid][2]);
+    GetVehicleHealth(vehicleid, VehHealthData[vehicleid]);
     GetVehicleZAngle(vehicleid, VehPosData[vehicleid][3]);
     VehOculto[vehicleid] = true;
     VehLastUseTick[vehicleid] = GetTickCount();
@@ -6095,6 +6160,12 @@ public OnPlayerUpdate(playerid) {
         if(vehid != INVALID_VEHICLE_ID) {
             if(!GasInitVehiculo[vehid]) { GasInitVehiculo[vehid] = true; GasVehiculo[vehid] = 70 + random(31); }
             if(UltimoVehiculoGasMostrado[playerid] != vehid) ActualizarGasTextoVehiculo(playerid);
+            new Float:vx, Float:vy, Float:vz, spdText[24];
+            GetVehicleVelocity(vehid, vx, vy, vz);
+            new kmh = floatround(floatsqroot(vx*vx + vy*vy + vz*vz) * 180.0);
+            if(kmh < 0) kmh = 0;
+            format(spdText, sizeof(spdText), "%d K/H", kmh);
+            PlayerTextDrawSetString(playerid, TextoVelocimetro[playerid], spdText);
             if(GasVehiculo[vehid] <= 0) {
                 new engine, lights, alarm, doors, bonnet, boot, objective;
                 GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
@@ -6263,8 +6334,8 @@ stock MostrarMenuAdminMembresias(playerid) {
 stock MostrarMenuAdminPreciosMembresia(playerid) {
     if(PlayerAdmin[playerid] < 1) return 0;
     new cuerpo[256];
-    format(cuerpo, sizeof(cuerpo), "VIP - $%d + %d diamante(s)\nDiamante - $%d c/u", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
-    return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU, DIALOG_STYLE_LIST, "Admin - Editar precios (Y)", cuerpo, "Editar", "Cerrar");
+    format(cuerpo, sizeof(cuerpo), "VIP - $%d + %d diamante(s)\nDiamante - $%d c/u\nTienda virtual: %s", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda, TiendaVirtualHabilitada ? "Habilitada" : "Deshabilitada");
+    return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU, DIALOG_STYLE_LIST, "Admin - Editar precios (Y)", "Editar precio VIP\nEditar precio diamante\nHabilitar/Deshabilitar tienda", "Editar", "Cerrar");
 }
 
 stock MostrarAnuncioJugador(playerid, const texto[]) {
@@ -7084,9 +7155,10 @@ stock ActualizarBarrasEstado(playerid) {
     if(gas > 100) gas = 100;
 
     new Float:anchoMax = 40.0;
-    new Float:inicio = 286.0;
-    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicio + (anchoMax * float(hambre) / 100.0), 0.0);
-    PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicio + (anchoMax * float(gas) / 100.0), 0.0);
+    new Float:inicioHambre = 541.0;
+    new Float:inicioGas = 286.0;
+    PlayerTextDrawTextSize(playerid, BarraHambre[playerid], inicioHambre + (anchoMax * float(hambre) / 100.0), 0.0);
+    PlayerTextDrawTextSize(playerid, BarraGas[playerid], inicioGas + (anchoMax * float(gas) / 100.0), 0.0);
     return 1;
 }
 
@@ -7101,6 +7173,7 @@ stock ActualizarGasTextoVehiculo(playerid) {
     PlayerTextDrawShow(playerid, TextoBarraGas[playerid]);
     PlayerTextDrawShow(playerid, BarraGasFondo[playerid]);
     PlayerTextDrawShow(playerid, BarraGas[playerid]);
+    PlayerTextDrawShow(playerid, TextoVelocimetro[playerid]);
     return 1;
 }
 
@@ -7115,14 +7188,15 @@ public TeleportVehiculoLlamado(playerid) {
     if(!IsPlayerConnected(playerid)) return 1;
     new veh = TelefonoVehiculoSeleccionado[playerid];
     TelefonoVehiculoSeleccionado[playerid] = INVALID_VEHICLE_ID;
-    if(veh == INVALID_VEHICLE_ID || !IsValidVehicle(veh)) return 1;
+    if(veh == INVALID_VEHICLE_ID || !IsValidVehicle(veh)) return SendClientMessage(playerid, -1, "Tu vehiculo esta oculto/no restaurado. Restauralo antes de llamarlo.");
     if(VehOwner[veh] != playerid) return 1;
+    if(VehOculto[veh]) return SendClientMessage(playerid, -1, "No puedes llamar un vehiculo oculto. Restauralo primero.");
 
     new Float:px, Float:py, Float:pz, Float:ang;
     GetPlayerPos(playerid, px, py, pz);
     GetPlayerFacingAngle(playerid, ang);
-    new Float:tx = px + (2.5 * floatsin(-ang, degrees));
-    new Float:ty = py + (2.5 * floatcos(-ang, degrees));
+    new Float:tx = px + (5.0 * floatsin(-ang, degrees));
+    new Float:ty = py + (5.0 * floatcos(-ang, degrees));
     SetVehiclePos(veh, tx, ty, pz);
     SetVehicleZAngle(veh, ang);
     SetVehicleVirtualWorld(veh, GetPlayerVirtualWorld(playerid));
@@ -7197,6 +7271,7 @@ public CheckInactiveVehicles() {
         if(VehOwner[v] == -1) continue;
         if(now - VehLastUseTick[v] < 120000) continue;
         GetVehiclePos(v, VehPosData[v][0], VehPosData[v][1], VehPosData[v][2]);
+        GetVehicleHealth(v, VehHealthData[v]);
         GetVehicleZAngle(v, VehPosData[v][3]);
         DestroyVehicle(v);
         VehOculto[v] = true;
@@ -7274,6 +7349,8 @@ stock RestaurarVehiculosJugador(playerid) {
         VehPosData[nv][3] = VehPosData[v][3];
         GasInitVehiculo[nv] = GasInitVehiculo[v];
         GasVehiculo[nv] = GasVehiculo[v];
+        VehHealthData[nv] = VehHealthData[v];
+        SetVehicleHealth(nv, VehHealthData[nv]);
 
         if(MaleteroOwner[v] == playerid) {
             MaleteroOwner[nv] = MaleteroOwner[v];
@@ -7332,6 +7409,8 @@ stock bool:RestaurarVehiculoSeleccionado(playerid, veh) {
     VehPosData[nv][3] = VehPosData[veh][3];
     GasInitVehiculo[nv] = GasInitVehiculo[veh];
     GasVehiculo[nv] = GasVehiculo[veh];
+    VehHealthData[nv] = VehHealthData[veh];
+    SetVehicleHealth(nv, VehHealthData[nv]);
 
     if(MaleteroOwner[veh] == playerid) {
         MaleteroOwner[nv] = MaleteroOwner[veh];
@@ -7382,6 +7461,8 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
         new Float:a = floatstr(strtok(line, idx));
         new locked = strval(strtok(line, idx));
         new gas = strval(strtok(line, idx));
+        new Float:vehHealth = floatstr(strtok(line, idx));
+        if(vehHealth < 250.0 || vehHealth > 1000.0) vehHealth = 1000.0;
         new isMaletero = strval(strtok(line, idx));
         new maleteroSlots = strval(strtok(line, idx));
         if(maleteroSlots < 1 || maleteroSlots > MAX_SLOTS_MALETERO) maleteroSlots = MAX_SLOTS_MALETERO;
@@ -7406,6 +7487,8 @@ stock CargarVehiculosJugadorDesdeLinea(playerid, File:h, const primeraLinea[]) {
         VehPosData[veh][3] = a;
         GasInitVehiculo[veh] = true;
         GasVehiculo[veh] = gas;
+        VehHealthData[veh] = vehHealth;
+        SetVehicleHealth(veh, vehHealth);
 
         ResetMaleteroVehiculo(veh);
 
@@ -7560,13 +7643,14 @@ stock GuardarVehiculosJugadorEnCuenta(playerid, File:h) {
             GetVehiclePos(v, x, y, z);
             GetVehicleZAngle(v, a);
             VehPosData[v][0] = x; VehPosData[v][1] = y; VehPosData[v][2] = z; VehPosData[v][3] = a;
+            GetVehicleHealth(v, VehHealthData[v]);
         }
 
         new bool:tieneMaletero = TieneDatosMaleteroVehiculo(v, playerid);
 
-        format(line, sizeof(line), "\n%d %d %d %f %f %f %f %d %d %d %d %d %d %d %d",
+        format(line, sizeof(line), "\n%d %d %d %f %f %f %f %d %d %f %d %d %d %d %d %d",
             VehModelData[v], VehColor1Data[v], VehColor2Data[v], x, y, z, a,
-            VehLocked[v] ? 1 : 0, GasVehiculo[v],
+            VehLocked[v] ? 1 : 0, GasVehiculo[v], VehHealthData[v],
             tieneMaletero ? 1 : 0, MaleteroSlotsVeh[v], MaleteroHierbaVeh[v], MaleteroFloresVeh[v], MaleteroSemillaHierbaVeh[v], MaleteroSemillaFlorVeh[v]);
 
         new limiteSlots = MaleteroSlotsVeh[v];
@@ -7965,11 +8049,11 @@ public ExpirarSolicitudMecanico(playerid) {
     return 1;
 }
 
-stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion) {
+stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordado = 0) {
     if(!IsPlayerConnected(playerid) || !IsPlayerConnected(targetid)) return 0;
     if(MecanicoReparando[playerid]) return SendClientMessage(playerid, -1, "Ya estas reparando un vehiculo.");
-    if(tipoReparacion < 1 || tipoReparacion > 2) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
-    if(tipoReparacion == 2 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_COMPLETA) return SendClientMessage(playerid, -1, "Necesitas nivel 5 de mecanico para reparacion completa.");
+    if(tipoReparacion < 1 || tipoReparacion > 3) return SendClientMessage(playerid, -1, "Tipo de reparacion invalido.");
+    if(tipoReparacion == 3 && MecanicoNivel[playerid] < NIVEL_MECANICO_REPARACION_PREMIUM) return SendClientMessage(playerid, -1, "Necesitas nivel 10 para reparacion premium.");
     if(!IsPlayerInAnyVehicle(targetid) || GetPlayerState(targetid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "El cliente debe estar conduciendo su vehiculo.");
     if(GetPlayerVirtualWorld(playerid) != GetPlayerVirtualWorld(targetid) || GetPlayerInterior(playerid) != GetPlayerInterior(targetid)) return SendClientMessage(playerid, -1, "Debes estar en el mismo interior/mundo que el cliente.");
 
@@ -7981,12 +8065,15 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion) {
     MecanicoReparando[playerid] = true;
     MecanicoRepairTarget[playerid] = targetid;
     MecanicoRepairType[playerid] = tipoReparacion;
+    MecanicoRepairPrecio[playerid] = costoAcordado;
     TogglePlayerControllable(playerid, false);
     ApplyAnimation(playerid, "COP_AMBIENT", "Copbrowse_loop", 4.0, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
     MecanicoRepairTimer[playerid] = SetTimerEx("FinalizarReparacionMecanico", 10000, false, "d", playerid);
 
     new msg[160], tipoTxt[48];
-    format(tipoTxt, sizeof(tipoTxt), (tipoReparacion == 1) ? "motor" : "carroceria y motor");
+    if(tipoReparacion == 1) format(tipoTxt, sizeof(tipoTxt), "motor");
+    else if(tipoReparacion == 2) format(tipoTxt, sizeof(tipoTxt), "motor (intermedio)");
+    else format(tipoTxt, sizeof(tipoTxt), "premium (carroceria + motor)");
     format(msg, sizeof(msg), "Iniciaste reparacion de %s al jugador %d. Espera 10 segundos...", tipoTxt, targetid);
     SendClientMessage(playerid, 0xFFFF66FF, msg);
     format(msg, sizeof(msg), "El mecanico %d comenzo a reparar tu vehiculo. Espera 10 segundos.", playerid);
@@ -8004,6 +8091,7 @@ public FinalizarReparacionMecanico(playerid) {
     MecanicoReparando[playerid] = false;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
+    MecanicoRepairPrecio[playerid] = 0;
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
 
@@ -8015,7 +8103,9 @@ public FinalizarReparacionMecanico(playerid) {
     new veh = GetPlayerVehicleID(targetid);
     if(veh == INVALID_VEHICLE_ID) return 1;
 
-    new costo = (tipo == 1) ? PAGO_REPARAR_MOTOR : PAGO_REPARAR_COMPLETO;
+    new costo = 800;
+    if(tipo == 2) costo = 1000;
+    if(tipo == 3) costo = MecanicoRepairPrecio[playerid] > 0 ? MecanicoRepairPrecio[playerid] : 1500;
     if(GetPlayerMoney(targetid) < costo) {
         SendClientMessage(targetid, 0xFF0000FF, "No tienes dinero suficiente al finalizar la reparacion.");
         SendClientMessage(playerid, 0xFF0000FF, "El cliente no tiene dinero suficiente. Reparacion cancelada.");
@@ -8026,15 +8116,22 @@ public FinalizarReparacionMecanico(playerid) {
     new pagoMecanico = floatround(float(costo) * 0.9, floatround_floor);
     GivePlayerMoney(playerid, pagoMecanico);
 
+    new Float:actualHealth;
+    GetVehicleHealth(veh, actualHealth);
     if(tipo == 1) {
-        SetVehicleHealth(veh, 1500.0);
-        SendClientMessage(targetid, 0x66FF66FF, "Reparacion de motor completada (DL 1500).");
-        SendClientMessage(playerid, 0x66FF66FF, "Reparacion de motor completada. Recibiste tu pago.");
+        if(actualHealth < DL_REPARACION_BASICA) SetVehicleHealth(veh, DL_REPARACION_BASICA);
+        SendClientMessage(targetid, 0x66FF66FF, "Reparacion mecanica completada (tope DL 800).");
+        SendClientMessage(playerid, 0x66FF66FF, "Reparacion nivel basico completada. Recibiste tu pago.");
+    } else if(tipo == 2) {
+        if(actualHealth < DL_REPARACION_INTERMEDIA) SetVehicleHealth(veh, DL_REPARACION_INTERMEDIA);
+        SendClientMessage(targetid, 0x66FF66FF, "Reparacion mecanica completada (tope DL 1000).");
+        SendClientMessage(playerid, 0x66FF66FF, "Reparacion nivel intermedio completada. Recibiste tu pago.");
     } else {
         RepairVehicle(veh);
-        SetVehicleHealth(veh, 2000.0);
-        SendClientMessage(targetid, 0x66FF66FF, "Reparacion completa finalizada (carroceria + motor DL 2000).");
-        SendClientMessage(playerid, 0x66FF66FF, "Reparacion completa realizada. Recibiste tu pago.");
+        SetVehicleHealth(veh, 1000.0);
+        VehHealthData[veh] = 1000.0;
+        SendClientMessage(targetid, 0x66FF66FF, "Reparacion premium finalizada (motor + carroceria).");
+        SendClientMessage(playerid, 0x66FF66FF, "Reparacion premium realizada. Recibiste tu pago.");
     }
 
     MecanicoReparaciones[playerid]++;
@@ -8554,6 +8651,10 @@ stock GuardarEditMapEnRuta(const ruta[]) {
     if(!h) return 0;
 
     new line[220];
+    for(new g = 0; g < GasTotalPuntos; g++) {
+        format(line, sizeof(line), "GAS %f %f %f\n", GasPos[g][0], GasPos[g][1], GasPos[g][2]);
+        fwrite(h, line);
+    }
     for(new i = 0; i < TotalEditMap; i++) {
         if(!EditMapData[i][emActivo]) continue;
         if(EditMapData[i][emObj] != INVALID_OBJECT_ID) {
@@ -8592,7 +8693,21 @@ stock CargarEditMap() {
     TotalEditMap = 0;
     while(fread(h, line) && TotalEditMap < MAX_EDITMAP_OBJECTS) {
         new idx = 0;
-        new modelid = strval(strtok(line, idx));
+        new tok[16];
+        format(tok, sizeof(tok), "%s", strtok(line, idx));
+        if(!strcmp(tok, "GAS", true)) {
+            if(GasTotalPuntos >= MAX_GAS_POINTS) continue;
+            new Float:gx = floatstr(strtok(line, idx));
+            new Float:gy = floatstr(strtok(line, idx));
+            new Float:gz = floatstr(strtok(line, idx));
+            GasPos[GasTotalPuntos][0] = gx; GasPos[GasTotalPuntos][1] = gy; GasPos[GasTotalPuntos][2] = gz;
+            GasPickup[GasTotalPuntos] = CreatePickup(1650, 1, gx, gy, gz, 0);
+            GasLabel[GasTotalPuntos] = Create3DTextLabel("Gasolinera\nUsa /llenar o /bidon", 0xFFCC00FF, gx, gy, gz + 0.6, 20.0, 0);
+            GasTotalPuntos++;
+            continue;
+        }
+
+        new modelid = strval(tok);
         if(modelid < 300 || modelid > 20000) continue;
         new Float:x = floatstr(strtok(line, idx));
         new Float:y = floatstr(strtok(line, idx));
@@ -8840,6 +8955,7 @@ stock CargarTiendaVirtualConfig() {
     PrecioMembresiaVIPDinero = PRECIO_MEMBRESIA_VIP;
     PrecioMembresiaVIPDiamantes = 1;
     PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
+    TiendaVirtualHabilitada = true;
 
     fcreatedir(DIR_DATA);
 
@@ -8862,6 +8978,13 @@ stock CargarTiendaVirtualConfig() {
             strmid(valor, line, 14, strlen(line), sizeof(valor));
             new vipDiamantes = strval(valor);
             if(vipDiamantes >= 0) PrecioMembresiaVIPDiamantes = vipDiamantes;
+            continue;
+        }
+
+        if(strfind(line, "TIENDA_HABILITADA=", true) == 0) {
+            new valor[8];
+            strmid(valor, line, 17, strlen(line), sizeof(valor));
+            TiendaVirtualHabilitada = (strval(valor) != 0);
             continue;
         }
 
@@ -8898,6 +9021,8 @@ stock GuardarTiendaVirtualConfig() {
     format(line, sizeof(line), "VIP_DIAMANTES=%d\n", PrecioMembresiaVIPDiamantes);
     fwrite(h, line);
     format(line, sizeof(line), "DIAMANTE_PRECIO=%d\n", PrecioDiamanteTienda);
+    fwrite(h, line);
+    format(line, sizeof(line), "TIENDA_HABILITADA=%d\n", TiendaVirtualHabilitada ? 1 : 0);
     fwrite(h, line);
 
     fclose(h);
