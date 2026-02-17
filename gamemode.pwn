@@ -27,12 +27,16 @@
 #define PAGO_BASE_CAMIONERO   1700
 #define PAGO_BASE_PIZZERO       50
 #define PAGO_BASE_BASURERO     100
-#define PAGO_BASE_LENADOR      120
+#define PAGO_POR_TRONCO_TALADOR 200
 
 #define NIVEL_MAX_TRABAJO    10
 #define PROGRESO_CAMIONERO_POR_NIVEL 30
 #define PROGRESO_PIZZERO_POR_NIVEL   25
 #define PROGRESO_BASURERO_POR_NIVEL  28
+#define PROGRESO_TALADOR_POR_NIVEL   100
+#define PROGRESO_MEDICO_POR_NIVEL    100
+#define PRECIO_CURA_VIDA_COMPLETA    2000
+#define PRECIO_CURA_CHALECO_COMPLETO 3000
 
 #define TIEMPO_CULTIVO_MIN   4
 #define TIEMPO_CULTIVO_MAX   5
@@ -195,6 +199,8 @@
 #define DIALOG_MECANICO_REPARAR_ID 151
 #define DIALOG_MECANICO_SOLICITUD 152
 #define DIALOG_MECANICO_REPARAR_PRECIO 170
+#define DIALOG_MEDICO_CURAR_ID 172
+#define DIALOG_MEDICO_SOLICITUD 173
 #define DIALOG_ADMIN_NIVELES_MENU 153
 #define DIALOG_ADMIN_SET_NIVEL_ID 154
 #define DIALOG_ADMIN_SET_NIVEL_VALOR 155
@@ -327,7 +333,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 11
+#define CUENTA_DATA_VERSION 12
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -395,6 +401,8 @@ new LenadorTimer[MAX_PLAYERS] = {-1, ...};
 new bool:LenadorTieneTronco[MAX_PLAYERS];
 new LenadorMaderaRuta[MAX_PLAYERS];
 new bool:LenadorEntregando[MAX_PLAYERS];
+new TaladorNivel[MAX_PLAYERS];
+new TaladorTroncosTalados[MAX_PLAYERS];
 new bool:PlayerTieneHacha[MAX_PLAYERS];
 new HachaDurabilidad[MAX_PLAYERS];
 
@@ -414,6 +422,19 @@ new MecanicoModoSolicitud[MAX_PLAYERS];
 new MecanicoPrecioTargetPendiente[MAX_PLAYERS] = {-1, ...};
 new MecanicoPrecioTipoPendiente[MAX_PLAYERS];
 new bool:PlayerTieneKitReparacion[MAX_PLAYERS];
+
+// Variables Medico
+new MedicoNivel[MAX_PLAYERS];
+new MedicoTratamientos[MAX_PLAYERS];
+new bool:MedicoTratando[MAX_PLAYERS];
+new MedicoTratamientoTimer[MAX_PLAYERS] = {-1, ...};
+new MedicoTratamientoTarget[MAX_PLAYERS] = {-1, ...};
+new MedicoTratamientoTipo[MAX_PLAYERS];
+new MedicoTratamientoPrecio[MAX_PLAYERS];
+new MedicoSolicitudPendiente[MAX_PLAYERS] = {-1, ...};
+new MedicoSolicitudTipoPendiente[MAX_PLAYERS];
+new MedicoSolicitudPrecioPendiente[MAX_PLAYERS];
+new MedicoSolicitudTimer[MAX_PLAYERS] = {-1, ...};
 
 // Variables Inventario/Cultivo
 new InvSemillaHierba[MAX_PLAYERS];
@@ -566,6 +587,7 @@ enum ePuntoMovible {
     puntoTiendaVirtual,
     puntoMecanico,
     puntoTopDinero,
+    puntoMedico,
     totalPuntosMovibles
 }
 
@@ -876,6 +898,8 @@ forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
 forward FinalizarReparacionMecanico(playerid);
 forward ExpirarSolicitudMecanico(playerid);
+forward FinalizarTratamientoMedico(playerid);
+forward ExpirarSolicitudMedico(playerid);
 forward TeleportVehiculoLlamado(playerid);
 forward OcultarAnuncioJugador(playerid);
 forward OcultarDineroCambioJugador(playerid);
@@ -910,7 +934,10 @@ stock ShowCrearCasaInteriorDialog(playerid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
 stock FormatTiempoRestante(ms, dest[], len);
+stock LimpiarSolicitudMedico(playerid);
 stock ActualizarLabelHorno(hornoidx);
+stock ActualizarTextosMinasArboles();
+stock RestaurarArbolModeloInicial(arbolidx);
 stock SetCheckpointMinaMasCercana(playerid);
 stock GetMinaDisponibleMasCercana(playerid, ignorar = -1);
 stock GetPrecioOriginalVehiculo(modelo);
@@ -1286,6 +1313,7 @@ public OnGameModeInit() {
     PuntoPos[puntoPrendas][0] = PuntoPos[puntoSemilleria][0] + 6.0; PuntoPos[puntoPrendas][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoPrendas][2] = PuntoPos[puntoSemilleria][2];
     PuntoPos[puntoFacciones][0] = POS_FACCION_X; PuntoPos[puntoFacciones][1] = POS_FACCION_Y; PuntoPos[puntoFacciones][2] = POS_FACCION_Z;
     PuntoPos[puntoTiendaVirtual][0] = PuntoPos[puntoSemilleria][0] + 12.0; PuntoPos[puntoTiendaVirtual][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoTiendaVirtual][2] = PuntoPos[puntoSemilleria][2];
+    PuntoPos[puntoMedico][0] = PuntoPos[puntoMecanico][0] + 6.0; PuntoPos[puntoMedico][1] = PuntoPos[puntoMecanico][1]; PuntoPos[puntoMedico][2] = PuntoPos[puntoMecanico][2];
     PuntoPos[puntoTopDinero][0] = PuntoPos[puntoBanco][0] + 6.0; PuntoPos[puntoTopDinero][1] = PuntoPos[puntoBanco][1]; PuntoPos[puntoTopDinero][2] = PuntoPos[puntoBanco][2];
     VentaAutosActiva = true;
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
@@ -1456,13 +1484,14 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
         if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9);
         LenadorTieneTronco[playerid] = false;
-        new madera = 5 + random(6);
-        InvMadera[playerid] += madera;
-        LenadorMaderaRuta[playerid] += madera;
-        new txtCarga[112];
-        format(txtCarga, sizeof(txtCarga), "[Leñador] Cargaste troncos y obtuviste %d madera(s).", madera);
+        LenadorMaderaRuta[playerid]++;
+        new madera = 0;
+        if(random(100) < 35) { madera = 1 + random(3); InvMadera[playerid] += madera; }
+        new txtCarga[144];
+        if(madera > 0) format(txtCarga, sizeof(txtCarga), "[Talador] Subiste 1 tronco. Probabilidad cumplida: recibiste %d madera(s). Total troncos: %d.", madera, LenadorMaderaRuta[playerid]);
+        else format(txtCarga, sizeof(txtCarga), "[Talador] Subiste 1 tronco a la camioneta. Total troncos cargados: %d.", LenadorMaderaRuta[playerid]);
         SendClientMessage(playerid, 0x66FF66FF, txtCarga);
-        if(SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Te marcamos el siguiente arbol.");
+        if(SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Te marcamos el siguiente arbol.");
         return 1;
     }
 
@@ -1528,6 +1557,18 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMedico][0], PuntoPos[puntoMedico][1], PuntoPos[puntoMedico][2])) {
+        if(MedicoNivel[playerid] <= 0) {
+            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+            MedicoNivel[playerid] = 1;
+            MedicoTratamientos[playerid] = 0;
+            SendClientMessage(playerid, 0x66FF99FF, "[Medico] Trabajo activado. Usa /curar para atender pacientes.");
+        } else {
+            SendClientMessage(playerid, 0x66FF99FF, "[Medico] Ya tienes este trabajo activo. Usa /curar y /prote segun tu nivel.");
+        }
+        return 1;
+    }
+
     // Sistema de minero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
         if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
@@ -1544,11 +1585,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         LenadorEntregando[playerid] = false;
         LenadorMaderaRuta[playerid] = 0;
         LenadorTieneTronco[playerid] = false;
+        if(TaladorNivel[playerid] <= 0) TaladorNivel[playerid] = 1;
         if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) DestroyVehicle(LenadorVehiculo[playerid]);
         CrearVehiculoTrabajoUnico(playerid, 543, PuntoPos[puntoLenador][0] + 3.0, PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2] + 1.0, 0.0, 1, 1, LenadorVehiculo[playerid]);
         PutPlayerInVehicle(playerid, LenadorVehiculo[playerid], 0);
-        if(!SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0xFFAA00FF, "[Leñador] No hay arboles disponibles por ahora.");
-        else SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Trabajo activado. Toma tu hacha y tala arboles con H.");
+        if(!SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0xFFAA00FF, "[Talador] No hay arboles disponibles por ahora.");
+        else SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Trabajo activado. Toma tu hacha y tala arboles con H.");
         return 1;
     }
 
@@ -1557,7 +1599,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
         if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de minero primero.");
         if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en Tienda Kame House.");
-        if(GetTickCount() < MinaCooldownTick[m]) { new left[24], msgcd[120]; FormatTiempoRestante(MinaCooldownTick[m] - GetTickCount(), left, sizeof(left)); format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %s", left); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
+        if(GetTickCount() < MinaCooldownTick[m]) { new restanteM = MinaCooldownTick[m] - GetTickCount(); new msgcd[120]; format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %d min %02d s", (restanteM + 59999) / 60000, (restanteM / 1000) % 60); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
         if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
         new segs = 15 + random(6);
         MineroMinaIndex[playerid] = m;
@@ -1574,33 +1616,24 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     for(new a = 0; a < TotalArboles; a++) {
         if(!ArbolData[a][arbolActivo]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ])) continue;
-        if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de leñador primero.");
+        if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de talador primero.");
         if(!PlayerTieneHacha[playerid] || HachaDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un hacha con durabilidad. Comprala en Tienda Kame House.");
-        if(LenadorTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas realizando una accion de leñador.");
+        if(LenadorTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas realizando una accion de talador.");
         if(!ArbolData[a][arbolTalado]) {
             LenadorArbolIndex[playerid] = a;
             TogglePlayerControllable(playerid, false);
             SetPlayerAttachedObject(playerid, 8, 19590, 6, 0.10, 0.03, 0.00, 0.0, 0.0, 0.0, 0.85, 0.85, 0.85);
             ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, 3000, t_FORCE_SYNC:SYNC_ALL);
             LenadorTimer[playerid] = SetTimerEx("FinalizarTalaArbol", 3000, false, "d", playerid);
-            SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Talando arbol...");
-            return 1;
-        }
-
-        if(ArbolCooldownTick[a] > 0 && GetTickCount() >= ArbolCooldownTick[a]) {
-            ArbolCooldownTick[a] = 0;
-            ArbolData[a][arbolTalado] = false;
-            if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
-            ArbolData[a][arbolObj] = CreateObject(629, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
-            if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0x8B5A2BFF, "Arbol\nUsa H para talar");
-            SendClientMessage(playerid, 0x66FF66FF, "[Leñador] Este arbol ya se regenero. Puedes talarlo otra vez.");
+            SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Talando arbol...");
             return 1;
         }
 
         if(ArbolCooldownTick[a] > 0) {
-            new leftArbol[24], msgArbol[96];
-            FormatTiempoRestante(ArbolCooldownTick[a] - GetTickCount(), leftArbol, sizeof(leftArbol));
-            format(msgArbol, sizeof(msgArbol), "[Leñador] Arbol en cooldown: %s", leftArbol);
+            new restanteAr = ArbolCooldownTick[a] - GetTickCount();
+            if(restanteAr < 0) restanteAr = 0;
+            new msgArbol[112];
+            format(msgArbol, sizeof(msgArbol), "[Talador] Arbol en cooldown: %d min %02d s", (restanteAr + 59999) / 60000, (restanteAr / 1000) % 60);
             return SendClientMessage(playerid, 0xFFAA00FF, msgArbol);
         }
 
@@ -1608,7 +1641,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         LenadorTieneTronco[playerid] = true;
         ArbolCooldownTick[a] = GetTickCount() + COOLDOWN_ARBOL_MS;
         SetPlayerAttachedObject(playerid, 9, 1463, 6, 0.11, 0.05, 0.03, 0.0, 0.0, 0.0, 0.75, 0.75, 0.75);
-        SendClientMessage(playerid, 0xB87333FF, "[Leñador] Recogiste los troncos. Cargalos en la Sadler con H.");
+        SendClientMessage(playerid, 0xB87333FF, "[Talador] Recogiste los troncos. Cargalos en la Sadler con H.");
         return 1;
     }
 
@@ -1779,13 +1812,12 @@ public OnPlayerEnterCheckpoint(playerid)
     if(LenadorTrabajando[playerid] && LenadorEntregando[playerid]) {
         if(GetPlayerVehicleID(playerid) != LenadorVehiculo[playerid]) return SendClientMessage(playerid, -1, "Debes usar la Sadler del trabajo para entregar.");
         DisablePlayerCheckpoint(playerid);
-        new pagoBase = PAGO_BASE_LENADOR * LenadorMaderaRuta[playerid];
-        if(pagoBase < 500) pagoBase = 500;
+        new pagoBase = PAGO_POR_TRONCO_TALADOR * LenadorMaderaRuta[playerid];
         new bonusMembresia = GetBonusTrabajoMembresia(playerid);
         new totalPago = pagoBase + bonusMembresia;
         KH_GivePlayerMoney(playerid, totalPago);
-        new msg[144];
-        format(msg, sizeof(msg), "[Leñador] Entregaste %d madera(s). Pago: $%d (+$%d bono).", LenadorMaderaRuta[playerid], totalPago, bonusMembresia);
+        new msg[160];
+        format(msg, sizeof(msg), "[Talador] Entregaste %d tronco(s). Pago: $%d (+$%d bono).", LenadorMaderaRuta[playerid], totalPago, bonusMembresia);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         LenadorMaderaRuta[playerid] = 0;
         LenadorEntregando[playerid] = false;
@@ -2107,12 +2139,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/skills", true)) {
         new str[640];
-        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d",
+        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
             CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL,
             PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL,
             BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL,
             ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid],
-            MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
+            MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL,
+            TaladorNivel[playerid], NIVEL_MAX_TRABAJO, TaladorTroncosTalados[playerid], PROGRESO_TALADOR_POR_NIVEL,
+            MedicoNivel[playerid], NIVEL_MAX_TRABAJO, MedicoTratamientos[playerid], PROGRESO_MEDICO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
@@ -2139,6 +2173,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "Solo puedes usar el kit en un vehiculo propio.");
         SetVehicleHealth(veh, 900.0);
         PlayerTieneKitReparacion[playerid] = false;
+    MedicoNivel[playerid] = 0;
+    MedicoTratamientos[playerid] = 0;
+    MedicoTratando[playerid] = false;
+    MedicoTratamientoTimer[playerid] = -1;
+    MedicoTratamientoTarget[playerid] = -1;
+    MedicoTratamientoTipo[playerid] = 0;
+    MedicoTratamientoPrecio[playerid] = 0;
+    LimpiarSolicitudMedico(playerid);
         SendClientMessage(playerid, 0x66FF66FF, "Usaste tu Kit De Reparacion. El DL del vehiculo quedo en 900.");
         return 1;
     }
@@ -2307,7 +2349,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid] && !LenadorTrabajando[playerid] && MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid] && !LenadorTrabajando[playerid] && MecanicoNivel[playerid] <= 0 && MedicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
         if(TrabajandoCamionero[playerid] > 0) {
             CanceladoTrabajo(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
@@ -2341,7 +2383,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9); LenadorTieneTronco[playerid] = false; }
             DisablePlayerCheckpoint(playerid);
             if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de leñador.");
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de talador.");
         }
         if(MecanicoNivel[playerid] > 0) {
             if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
@@ -2363,6 +2405,24 @@ public OnPlayerCommandText(playerid, cmdtext[])
             MecanicoReparaciones[playerid] = 0;
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de mecanico.");
         }
+        if(MedicoNivel[playerid] > 0) {
+            if(MedicoTratamientoTimer[playerid] != -1) { KillTimer(MedicoTratamientoTimer[playerid]); MedicoTratamientoTimer[playerid] = -1; }
+            if(MedicoTratando[playerid]) {
+                new t2 = MedicoTratamientoTarget[playerid];
+                TogglePlayerControllable(playerid, true);
+                ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+                if(IsPlayerConnected(t2)) { TogglePlayerControllable(t2, true); SendClientMessage(t2, 0xFFAA00FF, "Tu tratamiento fue cancelado porque el medico abandono el trabajo."); }
+            }
+            MedicoTratando[playerid] = false;
+            MedicoTratamientoTarget[playerid] = -1;
+            MedicoTratamientoTipo[playerid] = 0;
+            MedicoTratamientoPrecio[playerid] = 0;
+            for(new i2 = 0; i2 < MAX_PLAYERS; i2++) if(MedicoSolicitudPendiente[i2] == playerid) LimpiarSolicitudMedico(i2);
+            LimpiarSolicitudMedico(playerid);
+            MedicoNivel[playerid] = 0;
+            MedicoTratamientos[playerid] = 0;
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de medico.");
+        }
         return 1;
     }
 
@@ -2376,16 +2436,30 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/entregartroncos", true) || (!strcmp(cmd, "/entregar", true) && !strcmp(strtok(cmdtext, idx), "troncos", true))) {
-        if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "No estas trabajando de leñador.");
+    if(!strcmp(cmd, "/entregartroncos", true) || !strcmp(cmd, "/dejartroncos", true) || !strcmp(cmd, "/dejartorncos", true) || (!strcmp(cmd, "/entregar", true) && !strcmp(strtok(cmdtext, idx), "troncos", true))) {
+        if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "No estas trabajando de talador.");
         if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Primero carga los troncos en la Sadler con H.");
-        if(LenadorMaderaRuta[playerid] <= 0) return SendClientMessage(playerid, -1, "No has recolectado madera aun.");
+        if(LenadorMaderaRuta[playerid] <= 0) return SendClientMessage(playerid, -1, "No has subido troncos aun.");
         LenadorEntregando[playerid] = true;
         SetPlayerCheckpoint(playerid, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
-        SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Entrega activada. Ve al punto del trabajo para cobrar.");
+        SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Entrega activada. Lleva la camioneta al mismo CP del trabajo para cobrar por troncos.");
         return 1;
     }
 
+
+    if(!strcmp(cmd, "/curar", true)) {
+        if(MedicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de medico primero.");
+        if(MedicoNivel[playerid] > 3) SendClientMessage(playerid, 0x66FF99FF, "[Medico] Puedes usar /prote tambien por tu nivel.");
+        if(MedicoTratando[playerid]) return SendClientMessage(playerid, -1, "Ya estas aplicando un tratamiento.");
+        return ShowPlayerDialog(playerid, DIALOG_MEDICO_CURAR_ID, DIALOG_STYLE_INPUT, "{66FF99}Trabajo De Medico Kame House", "Ingresa el ID del jugador que deseas curar de vida:", "Enviar", "Cancelar");
+    }
+
+    if(!strcmp(cmd, "/prote", true)) {
+        if(MedicoNivel[playerid] < 4) return SendClientMessage(playerid, -1, "Necesitas nivel 4 de medico para curar chaleco.");
+        if(MedicoTratando[playerid]) return SendClientMessage(playerid, -1, "Ya estas aplicando un tratamiento.");
+        SetPVarInt(playerid, "MedicoModoProte", 1);
+        return ShowPlayerDialog(playerid, DIALOG_MEDICO_CURAR_ID, DIALOG_STYLE_INPUT, "{66FF99}Trabajo De Medico Kame House", "Ingresa el ID del jugador al que deseas rellenar chaleco:", "Enviar", "Cancelar");
+    }
     if(!strcmp(cmd, "/gps", true)) return SendClientMessage(playerid, -1, "El GPS ahora solo se usa desde /telefono.");
 
     if(!strcmp(cmd, "/ayuda", true)) {
@@ -2720,7 +2794,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
         MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
-        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
+        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("{66CCFF}Mina disponible\n{FFFFFF}Usa H para minar", 0x66CCFFFF, x, y, z + 0.9, 14.0, 0);
         TotalMinas++; GuardarMinas();
         return SendClientMessage(playerid, 0x00FF00FF, "Mina creada.");
     }
@@ -2733,9 +2807,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         ArbolData[TotalArboles][arbolActivo] = true; ArbolData[TotalArboles][arbolX] = x; ArbolData[TotalArboles][arbolY] = y; ArbolData[TotalArboles][arbolZ] = z;
         ArbolData[TotalArboles][arbolTalado] = false;
         ArbolData[TotalArboles][arbolObj] = CreateObject(629, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel("Arbol\nUsa H para talar", 0x8B5A2BFF, x, y, z + 0.8, 12.0, 0);
+        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel("{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 14.0, 0);
         TotalArboles++; GuardarArboles();
-        return SendClientMessage(playerid, 0x00FF00FF, "Arbol de leñador creado.");
+        return SendClientMessage(playerid, 0x00FF00FF, "Arbol de talador creado.");
     }
 
     if(!strcmp(cmd, "/eliminarpunto", true)) {
@@ -2802,7 +2876,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nTrabajo Leñador\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House\nTop Dinero Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nTrabajo Talador\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House\nTop Dinero Kame House\nTrabajo De Medico Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -3195,7 +3269,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 288.0, 413.8, "GAS");
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 262.0, 420.8, "GAS");
     PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.18, 0.78);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
@@ -3229,7 +3303,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetOutline(playerid, TextoVelocimetro[playerid], 0);
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
-    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 327.0, 401.0, "K/H");
+    TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 340.0, 401.0, "K/H");
     PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.16, 0.85);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
@@ -3283,6 +3357,8 @@ public OnPlayerConnect(playerid) {
     LenadorTieneTronco[playerid] = false;
     LenadorEntregando[playerid] = false;
     LenadorMaderaRuta[playerid] = 0;
+    TaladorNivel[playerid] = 1;
+    TaladorTroncosTalados[playerid] = 0;
     BasureroRecolectado[playerid] = 0;
     BasureroRecolectando[playerid] = false;
     BasureroTieneBolsa[playerid] = false;
@@ -3312,6 +3388,14 @@ public OnPlayerConnect(playerid) {
     MecanicoRepairPrecio[playerid] = 0;
     LimpiarSolicitudMecanico(playerid);
     PlayerTieneKitReparacion[playerid] = false;
+    MedicoNivel[playerid] = 0;
+    MedicoTratamientos[playerid] = 0;
+    MedicoTratando[playerid] = false;
+    MedicoTratamientoTimer[playerid] = -1;
+    MedicoTratamientoTarget[playerid] = -1;
+    MedicoTratamientoTipo[playerid] = 0;
+    MedicoTratamientoPrecio[playerid] = 0;
+    LimpiarSolicitudMedico(playerid);
     ArmeriaAdminArmaPendiente[playerid] = 0;
     VentaAutosAdminModeloPendiente[playerid] = 0;
     VentaAutosAdminPrecioPendiente[playerid] = 0;
@@ -3800,6 +3884,76 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         return 1;
     }
 
+
+    if(dialogid == DIALOG_MEDICO_CURAR_ID) {
+        if(!response) { DeletePVar(playerid, "MedicoModoProte"); return 1; }
+        if(MedicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de medico primero.");
+        new target = strval(inputtext);
+        new tipo = GetPVarInt(playerid, "MedicoModoProte") == 1 ? 2 : 1;
+        DeletePVar(playerid, "MedicoModoProte");
+        if(!IsPlayerConnected(target) || target == playerid) return SendClientMessage(playerid, -1, "ID invalido.");
+        if(tipo == 2 && MedicoNivel[playerid] < 4) return SendClientMessage(playerid, -1, "Necesitas nivel 4 para usar /prote.");
+        if(MedicoTratando[playerid]) return SendClientMessage(playerid, -1, "Ya estas aplicando un tratamiento.");
+        if(GetPlayerVirtualWorld(playerid) != GetPlayerVirtualWorld(target) || GetPlayerInterior(playerid) != GetPlayerInterior(target)) return SendClientMessage(playerid, -1, "Debes estar en el mismo interior/mundo que el paciente.");
+        new Float:px, Float:py, Float:pz, Float:tx, Float:ty, Float:tz;
+        GetPlayerPos(playerid, px, py, pz);
+        GetPlayerPos(target, tx, ty, tz);
+        if(GetDistanceBetweenPoints(px, py, pz, tx, ty, tz) > 7.0) return SendClientMessage(playerid, -1, "Debes estar cerca del paciente.");
+
+        new Float:actual = 0.0;
+        if(tipo == 1) GetPlayerHealth(target, actual); else GetPlayerArmour(target, actual);
+        if(actual >= 99.9) return SendClientMessage(playerid, -1, "Ese jugador ya tiene la barra completa.");
+        new faltante = floatround(100.0 - actual, floatround_ceil);
+        if(faltante < 1) faltante = 1;
+        new precio = (tipo == 1) ? (faltante * PRECIO_CURA_VIDA_COMPLETA / 100) : (faltante * PRECIO_CURA_CHALECO_COMPLETO / 100);
+        if(precio < 1) precio = 1;
+
+        LimpiarSolicitudMedico(target);
+        MedicoSolicitudPendiente[target] = playerid;
+        MedicoSolicitudTipoPendiente[target] = tipo;
+        MedicoSolicitudPrecioPendiente[target] = precio;
+        if(MedicoSolicitudTimer[target] != -1) KillTimer(MedicoSolicitudTimer[target]);
+        MedicoSolicitudTimer[target] = SetTimerEx("ExpirarSolicitudMedico", 30000, false, "d", target);
+
+        new cuerpo[512], nom[MAX_PLAYER_NAME], msg[160], tipoTxt[16];
+        GetPlayerName(playerid, nom, sizeof(nom));
+        format(tipoTxt, sizeof(tipoTxt), "%s", (tipo == 1) ? "Vida" : "Chaleco");
+        format(cuerpo, sizeof(cuerpo), "{66FF99}El medico {FFFFFF}%s {66FF99}te ofrece tratamiento.\n{FFCC66}La solicitud expira en 30 segundos.\n\n{FFFFFF}Tipo: %s\n{FFFFFF}Precio segun porcentaje faltante: {66FF99}$%d", nom, tipoTxt, precio);
+        ShowPlayerDialog(target, DIALOG_MEDICO_SOLICITUD, DIALOG_STYLE_MSGBOX, "{66FF99}Solicitud Medica", cuerpo, "Aceptar", "Rechazar");
+        format(msg, sizeof(msg), "[Medico] Enviaste solicitud al jugador %d por $%d.", target, precio);
+        SendClientMessage(playerid, 0x66FF99FF, msg);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_MEDICO_SOLICITUD) {
+        new medico = MedicoSolicitudPendiente[playerid];
+        if(!response) {
+            if(IsPlayerConnected(medico)) SendClientMessage(medico, 0xFFAA00FF, "[Medico] El paciente rechazo la solicitud.");
+            LimpiarSolicitudMedico(playerid);
+            return 1;
+        }
+        if(medico == -1 || !IsPlayerConnected(medico)) return SendClientMessage(playerid, -1, "El medico ya no esta disponible.");
+        if(MedicoNivel[medico] <= 0 || MedicoTratando[medico]) return SendClientMessage(playerid, -1, "El medico ya no esta disponible.");
+        new tipo = MedicoSolicitudTipoPendiente[playerid];
+        new precio = MedicoSolicitudPrecioPendiente[playerid];
+        if(GetPlayerMoney(playerid) < precio) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+
+        LimpiarSolicitudMedico(playerid);
+        MedicoTratando[medico] = true;
+        MedicoTratamientoTarget[medico] = playerid;
+        MedicoTratamientoTipo[medico] = tipo;
+        MedicoTratamientoPrecio[medico] = precio;
+        TogglePlayerControllable(medico, false);
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(medico, "COP_AMBIENT", "Copbrowse_loop", 4.0, true, false, false, false, 5000, t_FORCE_SYNC:SYNC_ALL);
+        new vehCong = GetPlayerVehicleID(playerid);
+        if(vehCong != INVALID_VEHICLE_ID) SetVehicleVelocity(vehCong, 0.0, 0.0, 0.0);
+        MedicoTratamientoTimer[medico] = SetTimerEx("FinalizarTratamientoMedico", 5000, false, "d", medico);
+        SendClientMessage(medico, 0x66FF99FF, "[Medico] Aplicando tratamiento (5s)...");
+        SendClientMessage(playerid, 0x66FF99FF, "[Medico] Estas recibiendo tratamiento. No te muevas.");
+        return 1;
+    }
+
     if(dialogid == DIALOG_ADMIN_NIVELES_MENU) {
         if(!response) return MostrarDialogoAdmin(playerid);
         if(!EsDueno(playerid)) return 1;
@@ -3841,7 +3995,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_ADMIN_TRABAJO_LISTA) {
         if(!response) return MostrarMenuAdminNiveles(playerid);
         if(!EsDueno(playerid)) return 1;
-        if(listitem < 0 || listitem > 4) return 1;
+        if(listitem < 0 || listitem > 6) return 1;
         AdminSetTrabajoTipo[playerid] = listitem;
         return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_TRABAJO_ID, DIALOG_STYLE_INPUT, "Niveles - Trabajo", "Ingresa ID del jugador:", "Siguiente", "Atras");
     }
@@ -3859,7 +4013,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SET_TRABAJO_ID, DIALOG_STYLE_INPUT, "Niveles - Trabajo", "Ingresa ID del jugador:", "Siguiente", "Atras");
         if(!EsDueno(playerid)) return 1;
         new id = AdminSetNivelTarget[playerid], nivel = strval(inputtext), tipo = AdminSetTrabajoTipo[playerid];
-        if(!IsPlayerConnected(id) || tipo < 0 || tipo > 4 || nivel < 0 || nivel > NIVEL_MAX_TRABAJO) return SendClientMessage(playerid, -1, "Datos invalidos.");
+        if(!IsPlayerConnected(id) || tipo < 0 || tipo > 6 || nivel < 0 || nivel > NIVEL_MAX_TRABAJO) return SendClientMessage(playerid, -1, "Datos invalidos.");
 
         new msg[144], nombreTrabajo[24];
         switch(tipo) {
@@ -3868,6 +4022,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 2: { BasureroNivel[id] = nivel; if(BasureroRecorridos[id] >= PROGRESO_BASURERO_POR_NIVEL) BasureroRecorridos[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Basurero"); }
             case 3: { ArmeroNivel[id] = nivel; if(ArmeroNivel[id] <= 0) ArmeroNivel[id] = 1; if(ArmeroExp[id] > 2) ArmeroExp[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Armero"); }
             case 4: { MecanicoNivel[id] = nivel; if(MecanicoReparaciones[id] >= PROGRESO_MECANICO_POR_NIVEL) MecanicoReparaciones[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Mecanico"); }
+            case 5: { TaladorNivel[id] = nivel; if(TaladorTroncosTalados[id] >= PROGRESO_TALADOR_POR_NIVEL) TaladorTroncosTalados[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Talador"); }
+            case 6: { MedicoNivel[id] = nivel; if(MedicoTratamientos[id] >= PROGRESO_MEDICO_POR_NIVEL) MedicoTratamientos[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Medico"); }
         }
         GuardarCuenta(id);
         format(msg, sizeof(msg), "Nivel de %s de %d actualizado a %d.", nombreTrabajo, id, nivel);
@@ -3952,6 +4108,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 14: puntoMover = puntoFacciones;
             case 15: puntoMover = puntoTiendaVirtual;
             case 16: puntoMover = puntoTopDinero;
+            case 17: puntoMover = puntoMedico;
             default: return SendClientMessage(playerid, -1, "Punto invalido.");
         }
 
@@ -4005,7 +4162,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             KH_GivePlayerMoney(playerid, -PRECIO_HACHA);
             PlayerTieneHacha[playerid] = true;
             HachaDurabilidad[playerid] = 90 + random(31);
-            return SendClientMessage(playerid, 0x66FF66FF, "Compraste un hacha para leñador.");
+            return SendClientMessage(playerid, 0x66FF66FF, "Compraste un hacha para talador.");
         }
         if(listitem == 4) {
             if(PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "Ya tienes telefono.");
@@ -4768,7 +4925,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new cmdMover[] = "/mover";
             return OnPlayerCommandText(playerid, cmdMover);
         }
-        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nArbol leñador\nHorno\nCaja loot\nPunto prepiezas\nGasolinera\nEliminar punto cercano", "Crear", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nArbol talador\nHorno\nCaja loot\nPunto prepiezas\nGasolinera\nEliminar punto cercano", "Crear", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
         if(listitem == 4) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
         if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
@@ -5997,6 +6154,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         MecanicoNivel[playerid] = 0;
                         MecanicoReparaciones[playerid] = 0;
                         PlayerTieneKitReparacion[playerid] = false;
+    MedicoNivel[playerid] = 0;
+    MedicoTratamientos[playerid] = 0;
+    MedicoTratando[playerid] = false;
+    MedicoTratamientoTimer[playerid] = -1;
+    MedicoTratamientoTarget[playerid] = -1;
+    MedicoTratamientoTipo[playerid] = 0;
+    MedicoTratamientoPrecio[playerid] = 0;
+    LimpiarSolicitudMedico(playerid);
                         if(dataVersion >= 8) {
                             if(fread(h, line)) PlayerDiamantes[playerid] = strval(line);
                             if(fread(h, line)) PlayerMembresiaTipo[playerid] = strval(line);
@@ -6020,6 +6185,16 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             if(fread(h, line)) SancionPos[playerid][0] = floatstr(line);
                             if(fread(h, line)) SancionPos[playerid][1] = floatstr(line);
                             if(fread(h, line)) SancionPos[playerid][2] = floatstr(line);
+                            TaladorNivel[playerid] = 1;
+                            TaladorTroncosTalados[playerid] = 0;
+                            MedicoNivel[playerid] = 0;
+                            MedicoTratamientos[playerid] = 0;
+                            if(dataVersion >= 12) {
+                                if(fread(h, line)) TaladorNivel[playerid] = strval(line);
+                                if(fread(h, line)) TaladorTroncosTalados[playerid] = strval(line);
+                                if(fread(h, line)) MedicoNivel[playerid] = strval(line);
+                                if(fread(h, line)) MedicoTratamientos[playerid] = strval(line);
+                            }
                         }
                         format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
                         if(dataVersion >= 6) {
@@ -6123,11 +6298,11 @@ public GuardarCuenta(playerid) {
                 CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
             fwrite(h, line);
 
-            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f\n%d\n%d\n%d\n%d",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
                 PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0,
                 PlayerDiamantes[playerid], PlayerMembresiaTipo[playerid], PlayerMembresiaExpiraTick[playerid], MecanicoNivel[playerid], MecanicoReparaciones[playerid], PlayerTieneKitReparacion[playerid] ? 1 : 0,
-                PlayerSancionado[playerid] ? 1 : 0, SancionConcepto[playerid], SancionFinTick[playerid], PlayerTieneHacha[playerid] ? 1 : 0, HachaDurabilidad[playerid], SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
+                PlayerSancionado[playerid] ? 1 : 0, SancionConcepto[playerid], SancionFinTick[playerid], PlayerTieneHacha[playerid] ? 1 : 0, HachaDurabilidad[playerid], SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2], TaladorNivel[playerid], TaladorTroncosTalados[playerid], MedicoNivel[playerid], MedicoTratamientos[playerid]);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
@@ -6386,6 +6561,14 @@ public OnPlayerDisconnect(playerid, reason) {
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
     if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
+    if(MedicoTratamientoTimer[playerid] != -1) { KillTimer(MedicoTratamientoTimer[playerid]); MedicoTratamientoTimer[playerid] = -1; }
+    if(MedicoTratando[playerid]) { new mt = MedicoTratamientoTarget[playerid]; if(IsPlayerConnected(mt)) TogglePlayerControllable(mt, true); }
+    MedicoTratando[playerid] = false;
+    MedicoTratamientoTarget[playerid] = -1;
+    MedicoTratamientoTipo[playerid] = 0;
+    MedicoTratamientoPrecio[playerid] = 0;
+    for(new im = 0; im < MAX_PLAYERS; im++) { if(MedicoSolicitudPendiente[im] == playerid) LimpiarSolicitudMedico(im); }
+    LimpiarSolicitudMedico(playerid);
     MecanicoReparando[playerid] = false;
     MecanicoRepairTarget[playerid] = -1;
     MecanicoRepairType[playerid] = 0;
@@ -6477,6 +6660,11 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
                     SendClientMessage(playerid, 0xFF0000FF, "Debes presionar H para subir la bolsa antes de conducir la Rumpo.");
                     return 1;
                 }
+            }
+            if(newstate == PLAYER_STATE_DRIVER && LenadorTrabajando[playerid] && vehid == LenadorVehiculo[playerid]) {
+                new msgTal[112];
+                format(msgTal, sizeof(msgTal), "[Talador] Troncos cargados en camioneta: %d", LenadorMaderaRuta[playerid]);
+                SendClientMessage(playerid, 0x8B5A2BFF, msgTal);
             }
             if(newstate == PLAYER_STATE_DRIVER && GasVehiculo[vehid] <= 0) {
                 new engine, lights, alarm, doors, bonnet, boot, objective;
@@ -6719,7 +6907,7 @@ stock ExpirarMembresiaSiCorresponde(playerid) {
 }
 
 stock TieneTrabajoActivo(playerid) {
-    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid] || LenadorTrabajando[playerid] || MecanicoNivel[playerid] > 0);
+    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid] || LenadorTrabajando[playerid] || MecanicoNivel[playerid] > 0 || MedicoNivel[playerid] > 0);
 }
 
 stock ContarTrabajosActivos(playerid) {
@@ -6730,6 +6918,7 @@ stock ContarTrabajosActivos(playerid) {
     if(MineroTrabajando[playerid]) c++;
     if(LenadorTrabajando[playerid]) c++;
     if(MecanicoNivel[playerid] > 0) c++;
+    if(MedicoNivel[playerid] > 0) c++;
     return c;
 }
 
@@ -7419,11 +7608,12 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoMaletero: format(dest, len, "Reservado");
         case puntoPintura: format(dest, len, "Tuning Kame House");
         case puntoMinero: format(dest, len, "Trabajo minero");
-        case puntoLenador: format(dest, len, "Trabajo leñador");
+        case puntoLenador: format(dest, len, "Trabajo talador");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
         case puntoFacciones: format(dest, len, "Facciones Kame House");
         case puntoTiendaVirtual: format(dest, len, "Tienda Virtual Kame House");
         case puntoTopDinero: format(dest, len, "Top Dinero Kame House");
+        case puntoMedico: format(dest, len, "Trabajo De Medico Kame House");
         default: format(dest, len, "Punto");
     }
     return 1;
@@ -7493,7 +7683,7 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         }
         case puntoLenador: {
             PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
-            PuntoLabel[punto] = Create3DTextLabel("{8B4513}Trabajo leñador\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+            PuntoLabel[punto] = Create3DTextLabel("{8B4513}Trabajo talador\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoPrendas: {
             PuntoPickup[punto] = CreatePickup(2704, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -7510,6 +7700,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoTiendaVirtual: {
             PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{66FFFF}Tienda Virtual Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para abrir", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 14.0, 0);
+        }
+        case puntoMedico: {
+            PuntoPickup[punto] = CreatePickup(1240, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("{66FF99}Trabajo De Medico Kame House\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para tomar trabajo", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoTopDinero: {
             PuntoPickup[punto] = 0;
@@ -7534,7 +7728,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /plantar /reparar /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /dejartroncos /plantar /reparar /curar /prote /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -8462,12 +8656,22 @@ public FinalizarTalaArbol(playerid) {
         ArbolData[a][arbolTalado] = true;
         if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
         ArbolData[a][arbolObj] = CreateObject(841, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
-        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "Troncos
-Usa H para recoger");
+        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol en cooldown\n{FFFFFF}Disponible en: 5 min 00 s");
         new desgaste = 4 + random(4);
         if(HachaDurabilidad[playerid] > 0) HachaDurabilidad[playerid] -= desgaste;
         if(HachaDurabilidad[playerid] <= 0) { PlayerTieneHacha[playerid] = false; HachaDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu hacha se rompio."); }
-        SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Arbol talado. Presiona H para recoger los troncos.");
+        TaladorTroncosTalados[playerid]++;
+        if(TaladorTroncosTalados[playerid] >= PROGRESO_TALADOR_POR_NIVEL) {
+            TaladorTroncosTalados[playerid] = 0;
+            if(TaladorNivel[playerid] < NIVEL_MAX_TRABAJO) {
+                TaladorNivel[playerid]++;
+                new lvlMsgTal[96];
+                format(lvlMsgTal, sizeof(lvlMsgTal), "Subiste al nivel %d de talador.", TaladorNivel[playerid]);
+                SendClientMessage(playerid, 0xFFFF00FF, lvlMsgTal);
+                PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
+            }
+        }
+        SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Arbol talado. Presiona H para recoger los troncos.");
     }
     return 1;
 }
@@ -8516,6 +8720,7 @@ public ActualizarTextosHornos() {
         if(!HornoData[h][hornoActivo]) continue;
         ActualizarLabelHorno(h);
     }
+    ActualizarTextosMinasArboles();
     return 1;
 }
 
@@ -8523,8 +8728,7 @@ stock ActualizarLabelHorno(hornoidx) {
     if(hornoidx < 0 || hornoidx >= TotalHornos || !HornoData[hornoidx][hornoActivo]) return 0;
     new txt[144];
     if(!HornoData[hornoidx][hornoEnUso]) {
-        format(txt, sizeof(txt), "Horno
-Usa H");
+        format(txt, sizeof(txt), "Horno\nUsa H");
         Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
         return 1;
     }
@@ -8534,9 +8738,7 @@ Usa H");
     if(IsPlayerConnected(owner)) GetPlayerName(owner, ownerName, sizeof(ownerName));
 
     if(HornoData[hornoidx][hornoListoRetiro]) {
-        format(txt, sizeof(txt), "Horno en uso
-Dueno: %s
-{66FF66}LISTO: presiona H para retirar", ownerName);
+        format(txt, sizeof(txt), "Horno en uso\nDueno: %s\n{66FF66}LISTO: presiona H para retirar", ownerName);
         Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0x66FF66FF, txt);
         return 1;
     }
@@ -8545,10 +8747,56 @@ Dueno: %s
     if(restante < 0) restante = 0;
     new left[24];
     FormatTiempoRestante(restante, left, sizeof(left));
-    format(txt, sizeof(txt), "Horno en uso
-Dueno: %s
-Tiempo: %s", ownerName, left);
+    format(txt, sizeof(txt), "Horno en uso\nDueno: %s\nTiempo: %s", ownerName, left);
     Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
+    return 1;
+}
+
+stock RestaurarArbolModeloInicial(arbolidx) {
+    if(arbolidx < 0 || arbolidx >= TotalArboles || !ArbolData[arbolidx][arbolActivo]) return 0;
+    ArbolCooldownTick[arbolidx] = 0;
+    ArbolData[arbolidx][arbolTalado] = false;
+    if(ArbolData[arbolidx][arbolObj] != 0) DestroyObject(ArbolData[arbolidx][arbolObj]);
+    ArbolData[arbolidx][arbolObj] = CreateObject(629, ArbolData[arbolidx][arbolX], ArbolData[arbolidx][arbolY], ArbolData[arbolidx][arbolZ] - 1.0, 0.0, 0.0, 0.0);
+    if(ArbolData[arbolidx][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[arbolidx][arbolLabel], 0x8B5A2BFF, "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar");
+    return 1;
+}
+
+stock ActualizarTextosMinasArboles() {
+    new now = GetTickCount();
+    new restante, mins, segs, txt[96];
+
+    for(new m = 0; m < TotalMinas; m++) {
+        if(!MinaData[m][minaActiva] || MinaData[m][minaLabel] == Text3D:-1) continue;
+        if(MinaCooldownTick[m] > now) {
+            restante = MinaCooldownTick[m] - now;
+            mins = (restante + 59999) / 60000;
+            segs = (restante / 1000) % 60;
+            format(txt, sizeof(txt), "{FFAA00}Mina en cooldown\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
+            Update3DTextLabelText(MinaData[m][minaLabel], 0xFFAA00FF, txt);
+        } else {
+            if(MinaCooldownTick[m] != 0) MinaCooldownTick[m] = 0;
+            Update3DTextLabelText(MinaData[m][minaLabel], 0x66CCFFFF, "{66CCFF}Mina disponible\n{FFFFFF}Usa H para minar");
+        }
+    }
+
+    for(new a = 0; a < TotalArboles; a++) {
+        if(!ArbolData[a][arbolActivo] || ArbolData[a][arbolLabel] == Text3D:-1) continue;
+        if(ArbolData[a][arbolTalado] && ArbolCooldownTick[a] > 0) {
+            if(ArbolCooldownTick[a] <= now) {
+                RestaurarArbolModeloInicial(a);
+            } else {
+                restante = ArbolCooldownTick[a] - now;
+                mins = (restante + 59999) / 60000;
+                segs = (restante / 1000) % 60;
+                format(txt, sizeof(txt), "{B87333}Arbol en cooldown\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
+                Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, txt);
+            }
+        } else {
+            if(ArbolData[a][arbolTalado]) RestaurarArbolModeloInicial(a);
+            else Update3DTextLabelText(ArbolData[a][arbolLabel], 0x8B5A2BFF, "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar");
+        }
+    }
     return 1;
 }
 
@@ -8578,7 +8826,7 @@ stock MostrarMenuAdminNiveles(playerid) {
 }
 
 stock MostrarMenuAdminNivelesTrabajo(playerid) {
-    return ShowPlayerDialog(playerid, DIALOG_ADMIN_TRABAJO_LISTA, DIALOG_STYLE_LIST, "Admin - Niveles De Trabajo", "Camionero\nPizzero\nBasurero\nArmero\nMecanico", "Seleccionar", "Atras");
+    return ShowPlayerDialog(playerid, DIALOG_ADMIN_TRABAJO_LISTA, DIALOG_STYLE_LIST, "Admin - Niveles De Trabajo", "Camionero\nPizzero\nBasurero\nArmero\nMecanico\nTalador\nMedico", "Seleccionar", "Atras");
 }
 
 stock MostrarDialogoMod(playerid) {
@@ -8835,6 +9083,81 @@ public FinalizarReparacionMecanico(playerid) {
     return 1;
 }
 
+stock LimpiarSolicitudMedico(playerid) {
+    if(playerid < 0 || playerid >= MAX_PLAYERS) return 0;
+    if(MedicoSolicitudTimer[playerid] != -1) {
+        KillTimer(MedicoSolicitudTimer[playerid]);
+        MedicoSolicitudTimer[playerid] = -1;
+    }
+    MedicoSolicitudPendiente[playerid] = -1;
+    MedicoSolicitudTipoPendiente[playerid] = 0;
+    MedicoSolicitudPrecioPendiente[playerid] = 0;
+    return 1;
+}
+
+public ExpirarSolicitudMedico(playerid) {
+    if(playerid < 0 || playerid >= MAX_PLAYERS) return 0;
+    MedicoSolicitudTimer[playerid] = -1;
+    new medico = MedicoSolicitudPendiente[playerid];
+    if(medico == -1) return 1;
+    MedicoSolicitudPendiente[playerid] = -1;
+    MedicoSolicitudTipoPendiente[playerid] = 0;
+    MedicoSolicitudPrecioPendiente[playerid] = 0;
+    if(IsPlayerConnected(playerid)) SendClientMessage(playerid, 0xFFAA00FF, "[Medico] La solicitud expiro (30s).");
+    if(IsPlayerConnected(medico)) SendClientMessage(medico, 0xFFAA00FF, "[Medico] El paciente no respondio a tiempo.");
+    return 1;
+}
+
+public FinalizarTratamientoMedico(playerid) {
+    if(!IsPlayerConnected(playerid)) return 0;
+    MedicoTratamientoTimer[playerid] = -1;
+    if(!MedicoTratando[playerid]) return 1;
+
+    new targetid = MedicoTratamientoTarget[playerid];
+    new tipo = MedicoTratamientoTipo[playerid];
+    new precio = MedicoTratamientoPrecio[playerid];
+    MedicoTratando[playerid] = false;
+    MedicoTratamientoTarget[playerid] = -1;
+    MedicoTratamientoTipo[playerid] = 0;
+    MedicoTratamientoPrecio[playerid] = 0;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    if(IsPlayerConnected(targetid)) TogglePlayerControllable(targetid, true);
+
+    if(!IsPlayerConnected(targetid)) return SendClientMessage(playerid, 0xFFAA00FF, "[Medico] El paciente se desconecto.");
+    if(GetPlayerMoney(targetid) < precio) {
+        SendClientMessage(playerid, 0xFF0000FF, "[Medico] El paciente no tiene dinero suficiente.");
+        SendClientMessage(targetid, 0xFF0000FF, "No tienes dinero suficiente para pagar el tratamiento.");
+        return 1;
+    }
+
+    KH_GivePlayerMoney(targetid, -precio);
+    new pagoMedico = floatround(float(precio) * PORCENTAJE_PAGO_MECANICO, floatround_floor);
+    KH_GivePlayerMoney(playerid, pagoMedico);
+
+    if(tipo == 1) {
+        SetPlayerHealth(targetid, 100.0);
+        SendClientMessage(targetid, 0x66FF99FF, "[Medico] Tratamiento de vida aplicado.");
+    } else {
+        SetPlayerArmour(targetid, 100.0);
+        SendClientMessage(targetid, 0x66FF99FF, "[Medico] Tratamiento de chaleco aplicado.");
+    }
+    SendClientMessage(playerid, 0x66FF99FF, "[Medico] Tratamiento completado. Recibiste tu pago.");
+
+    MedicoTratamientos[playerid]++;
+    if(MedicoTratamientos[playerid] >= PROGRESO_MEDICO_POR_NIVEL) {
+        MedicoTratamientos[playerid] = 0;
+        if(MedicoNivel[playerid] < NIVEL_MAX_TRABAJO) {
+            MedicoNivel[playerid]++;
+            new lvlMsg[96];
+            format(lvlMsg, sizeof(lvlMsg), "Subiste al nivel %d de medico.", MedicoNivel[playerid]);
+            SendClientMessage(playerid, 0xFFFF00FF, lvlMsg);
+            PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
+        }
+    }
+    return 1;
+}
+
 stock GuardarMinas() {
     new File:h = fopen(PATH_MINAS, io_write);
     if(!h) return 0;
@@ -8852,7 +9175,7 @@ stock CargarMinas() {
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
         MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
-        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("Mina\nUsa H para minar", 0xCCCCCCFF, x, y, z + 0.7, 12.0, 0);
+        MinaData[TotalMinas][minaLabel] = Create3DTextLabel("{66CCFF}Mina disponible\n{FFFFFF}Usa H para minar", 0x66CCFFFF, x, y, z + 0.9, 14.0, 0);
         TotalMinas++;
     }
     fclose(h);
@@ -8866,8 +9189,7 @@ stock GuardarArboles() {
     new line[128];
     for(new i = 0; i < TotalArboles; i++) {
         if(!ArbolData[i][arbolActivo]) continue;
-        format(line, sizeof(line), "%f %f %f %d
-", ArbolData[i][arbolX], ArbolData[i][arbolY], ArbolData[i][arbolZ], ArbolData[i][arbolTalado] ? 1 : 0);
+        format(line, sizeof(line), "%f %f %f %d\n", ArbolData[i][arbolX], ArbolData[i][arbolY], ArbolData[i][arbolZ], ArbolData[i][arbolTalado] ? 1 : 0);
         fwrite(h, line);
     }
     fclose(h);
@@ -8890,9 +9212,7 @@ stock CargarArboles() {
         ArbolData[TotalArboles][arbolZ] = z;
         ArbolData[TotalArboles][arbolTalado] = (talado != 0);
         ArbolData[TotalArboles][arbolObj] = CreateObject(ArbolData[TotalArboles][arbolTalado] ? 841 : 629, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel(ArbolData[TotalArboles][arbolTalado] ? "Troncos
-Usa H para recoger" : "Arbol
-Usa H para talar", 0x8B5A2BFF, x, y, z + 0.8, 12.0, 0);
+        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel(ArbolData[TotalArboles][arbolTalado] ? "{B87333}Arbol en cooldown\n{FFFFFF}Disponible en: 5 min 00 s" : "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 12.0, 0);
         TotalArboles++;
     }
     fclose(h);
@@ -9098,8 +9418,7 @@ stock EliminarPuntoSistemaCercano(playerid) {
         if(h) {
             new line[64];
             for(new b = 0; b < TotalRutasBasura; b++) {
-                format(line, sizeof(line), "%f %f %f
-", BasuraRuta[b][0], BasuraRuta[b][1], BasuraRuta[b][2]);
+                format(line, sizeof(line), "%f %f %f\n", BasuraRuta[b][0], BasuraRuta[b][1], BasuraRuta[b][2]);
                 fwrite(h, line);
             }
             fclose(h);
