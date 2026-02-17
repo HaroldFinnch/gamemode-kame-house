@@ -27,6 +27,7 @@
 #define PAGO_BASE_CAMIONERO   1700
 #define PAGO_BASE_PIZZERO       50
 #define PAGO_BASE_BASURERO     100
+#define PAGO_BASE_LENADOR      120
 
 #define NIVEL_MAX_TRABAJO    10
 #define PROGRESO_CAMIONERO_POR_NIVEL 30
@@ -36,6 +37,7 @@
 #define TIEMPO_CULTIVO_MIN   4
 #define TIEMPO_CULTIVO_MAX   5
 #define COOLDOWN_MINA_MS     600000
+#define COOLDOWN_ARBOL_MS    300000
 #define COSTO_KIT_REPARACION 1000
 #define PAGO_REPARAR_MOTOR 1500
 #define PORCENTAJE_PAGO_MECANICO 0.90
@@ -104,6 +106,7 @@
 #define PATH_CASAS          "casas.txt"
 #define PATH_PUNTOS_MOVIBLES "puntos_movibles.txt"
 #define PATH_MINAS "minas.txt"
+#define PATH_ARBOLES "arboles_lenador.txt"
 #define PATH_HORNOS "hornos.txt"
 #define PATH_CAJAS "cajas_busqueda.txt"
 #define PATH_PREPIEZAS "prepiezas_puntos.txt"
@@ -285,12 +288,14 @@
 #define MAX_HORNOS 64
 #define MAX_CAJAS 128
 #define MAX_PREPIEZA_POINTS 64
+#define MAX_ARBOLES 128
 #define MAX_PRENDAS 10
 #define MAX_EDITMAP_OBJECTS 10000
 #define VEHICULO_TEMP_SIN_USO_MS 300000
 #define MAX_PRENDAS_USUARIO 10
 #define MAX_SLOTS_MALETERO 15
 #define PRECIO_MAZO 10000
+#define PRECIO_HACHA 20000
 #define PRECIO_TELEFONO 10000
 #define COSTO_SMS 100
 #define COSTO_LLAMAR_VEHICULO 5000
@@ -322,7 +327,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 10
+#define CUENTA_DATA_VERSION 11
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -382,7 +387,15 @@ new bool:BasureroRecolectando[MAX_PLAYERS];
 new BasureroRecolectado[MAX_PLAYERS];
 new bool:BasureroTieneBolsa[MAX_PLAYERS];
 new bool:BasureroDepositandoBolsa[MAX_PLAYERS];
-new bool:BasureroBolsaVisible[MAX_PLAYERS];
+new bool:LenadorTrabajando[MAX_PLAYERS];
+new LenadorVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
+new LenadorArbolIndex[MAX_PLAYERS] = {-1, ...};
+new LenadorTimer[MAX_PLAYERS] = {-1, ...};
+new bool:LenadorTieneTronco[MAX_PLAYERS];
+new LenadorMaderaRuta[MAX_PLAYERS];
+new bool:LenadorEntregando[MAX_PLAYERS];
+new bool:PlayerTieneHacha[MAX_PLAYERS];
+new HachaDurabilidad[MAX_PLAYERS];
 
 // Variables Mecanico
 new MecanicoNivel[MAX_PLAYERS];
@@ -546,6 +559,7 @@ enum ePuntoMovible {
     puntoMaletero,
     puntoPintura,
     puntoMinero,
+    puntoLenador,
     puntoPrendas,
     puntoFacciones,
     puntoTiendaVirtual,
@@ -740,6 +754,18 @@ enum eMinaData {
 new MinaData[MAX_MINAS][eMinaData];
 new TotalMinas;
 
+enum eArbolData {
+    bool:arbolActivo,
+    Float:arbolX,
+    Float:arbolY,
+    Float:arbolZ,
+    bool:arbolTalado,
+    arbolObj,
+    Text3D:arbolLabel
+}
+new ArbolData[MAX_ARBOLES][eArbolData];
+new TotalArboles;
+
 enum eHornoData {
     bool:hornoActivo,
     Float:hornoX,
@@ -770,6 +796,7 @@ new CajaDataLoot[MAX_CAJAS][eCajaData];
 new TotalCajas;
 new CajaCooldownTick[MAX_PLAYERS][MAX_CAJAS];
 new MinaCooldownTick[MAX_MINAS];
+new ArbolCooldownTick[MAX_ARBOLES];
 new bool:MineroGPSActivo[MAX_PLAYERS];
 new bool:OmitirArmasEnProximoSpawn[MAX_PLAYERS];
 new TuningVehLista[MAX_PLAYERS][MAX_AUTOS_NORMALES_JUGADOR];
@@ -842,6 +869,7 @@ forward FinalizarRepostaje(playerid);
 forward CheckInactiveVehicles();
 forward RestaurarVehiculoTemporal(slot);
 forward FinalizarMinado(playerid);
+forward FinalizarTalaArbol(playerid);
 forward FinalizarCajaBusqueda(playerid, cajaidx);
 forward FinalizarHorno(hornoidx);
 forward ActualizarTextosHornos();
@@ -852,6 +880,12 @@ forward OcultarAnuncioJugador(playerid);
 forward OcultarDineroCambioJugador(playerid);
 stock CargarMinas();
 stock GuardarMinas();
+stock CargarArboles();
+stock GuardarArboles();
+stock SetCheckpointArbolMasCercano(playerid);
+stock GetArbolDisponibleMasCercano(playerid, ignorar = -1);
+stock EliminarPuntoSistemaCercano(playerid);
+
 stock CargarHornos();
 stock GuardarHornos();
 stock CargarCajasLoot();
@@ -1247,6 +1281,7 @@ public OnGameModeInit() {
     PuntoPos[puntoMaletero][0] = 2490.0; PuntoPos[puntoMaletero][1] = -1648.0; PuntoPos[puntoMaletero][2] = 13.3;
     PuntoPos[puntoPintura][0] = 2501.0; PuntoPos[puntoPintura][1] = -1648.0; PuntoPos[puntoPintura][2] = 13.3;
     PuntoPos[puntoMinero][0] = PuntoPos[puntoCamionero][0] + 6.0; PuntoPos[puntoMinero][1] = PuntoPos[puntoCamionero][1]; PuntoPos[puntoMinero][2] = PuntoPos[puntoCamionero][2];
+    PuntoPos[puntoLenador][0] = PuntoPos[puntoMinero][0] + 6.0; PuntoPos[puntoLenador][1] = PuntoPos[puntoMinero][1]; PuntoPos[puntoLenador][2] = PuntoPos[puntoMinero][2];
     PuntoPos[puntoPrendas][0] = PuntoPos[puntoSemilleria][0] + 6.0; PuntoPos[puntoPrendas][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoPrendas][2] = PuntoPos[puntoSemilleria][2];
     PuntoPos[puntoFacciones][0] = POS_FACCION_X; PuntoPos[puntoFacciones][1] = POS_FACCION_Y; PuntoPos[puntoFacciones][2] = POS_FACCION_Z;
     PuntoPos[puntoTiendaVirtual][0] = PuntoPos[puntoSemilleria][0] + 12.0; PuntoPos[puntoTiendaVirtual][1] = PuntoPos[puntoSemilleria][1]; PuntoPos[puntoTiendaVirtual][2] = PuntoPos[puntoSemilleria][2];
@@ -1286,6 +1321,7 @@ public OnGameModeInit() {
     BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
     CargarRutasBasura();
     CargarMinas();
+    CargarArboles();
     CargarHornos();
     CargarCajasLoot();
     CargarPrepiezaPoints();
@@ -1409,6 +1445,26 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
+    if(LenadorTrabajando[playerid] && LenadorTieneTronco[playerid] && !IsPlayerInAnyVehicle(playerid)) {
+        new Float:lvx, Float:lvy, Float:lvz;
+        if(LenadorVehiculo[playerid] == INVALID_VEHICLE_ID || !IsValidVehicle(LenadorVehiculo[playerid])) return SendClientMessage(playerid, -1, "No tienes la Sadler del trabajo activa.");
+        GetVehiclePos(LenadorVehiculo[playerid], lvx, lvy, lvz);
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, lvx, lvy, lvz)) return SendClientMessage(playerid, -1, "Debes estar junto a la Sadler para cargar los troncos.");
+        TogglePlayerControllable(playerid, false);
+        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 1200, t_FORCE_SYNC:SYNC_ALL);
+        SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
+        if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9);
+        LenadorTieneTronco[playerid] = false;
+        new madera = 5 + random(6);
+        InvMadera[playerid] += madera;
+        LenadorMaderaRuta[playerid] += madera;
+        new txtCarga[112];
+        format(txtCarga, sizeof(txtCarga), "[Leñador] Cargaste troncos y obtuviste %d madera(s).", madera);
+        SendClientMessage(playerid, 0x66FF66FF, txtCarga);
+        if(SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Te marcamos el siguiente arbol.");
+        return 1;
+    }
+
     if(PlayerInCasa[playerid] != -1) {
         if(CosecharCultivoCercano(playerid)) return 1;
     }
@@ -1481,6 +1537,20 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         return 1;
     }
 
+    if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2])) {
+        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+        LenadorTrabajando[playerid] = true;
+        LenadorEntregando[playerid] = false;
+        LenadorMaderaRuta[playerid] = 0;
+        LenadorTieneTronco[playerid] = false;
+        if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) DestroyVehicle(LenadorVehiculo[playerid]);
+        CrearVehiculoTrabajoUnico(playerid, 543, PuntoPos[puntoLenador][0] + 3.0, PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2] + 1.0, 0.0, 1, 1, LenadorVehiculo[playerid]);
+        PutPlayerInVehicle(playerid, LenadorVehiculo[playerid], 0);
+        if(!SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0xFFAA00FF, "[Leñador] No hay arboles disponibles por ahora.");
+        else SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Trabajo activado. Toma tu hacha y tala arboles con H.");
+        return 1;
+    }
+
     for(new m = 0; m < TotalMinas; m++) {
         if(!MinaData[m][minaActiva]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
@@ -1497,6 +1567,47 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         MineroTimer[playerid] = SetTimerEx("FinalizarMinado", segs * 1000, false, "d", playerid);
         new msgm[96]; format(msgm, sizeof(msgm), "[Minero] Minando... tiempo estimado: %d segundos.", segs);
         SendClientMessage(playerid, 0xFFFF66FF, msgm);
+        return 1;
+    }
+
+    for(new a = 0; a < TotalArboles; a++) {
+        if(!ArbolData[a][arbolActivo]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 2.5, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ])) continue;
+        if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de leñador primero.");
+        if(!PlayerTieneHacha[playerid] || HachaDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un hacha con durabilidad. Comprala en Tienda Kame House.");
+        if(LenadorTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas realizando una accion de leñador.");
+        if(!ArbolData[a][arbolTalado]) {
+            LenadorArbolIndex[playerid] = a;
+            TogglePlayerControllable(playerid, false);
+            SetPlayerAttachedObject(playerid, 8, 19590, 6, 0.10, 0.03, 0.00, 0.0, 0.0, 0.0, 0.85, 0.85, 0.85);
+            ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, 3000, t_FORCE_SYNC:SYNC_ALL);
+            LenadorTimer[playerid] = SetTimerEx("FinalizarTalaArbol", 3000, false, "d", playerid);
+            SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Talando arbol...");
+            return 1;
+        }
+
+        if(ArbolCooldownTick[a] > 0 && GetTickCount() >= ArbolCooldownTick[a]) {
+            ArbolCooldownTick[a] = 0;
+            ArbolData[a][arbolTalado] = false;
+            if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
+            ArbolData[a][arbolObj] = CreateObject(629, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
+            if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0x8B5A2BFF, "Arbol\nUsa H para talar");
+            SendClientMessage(playerid, 0x66FF66FF, "[Leñador] Este arbol ya se regenero. Puedes talarlo otra vez.");
+            return 1;
+        }
+
+        if(ArbolCooldownTick[a] > 0) {
+            new leftArbol[24], msgArbol[96];
+            FormatTiempoRestante(ArbolCooldownTick[a] - GetTickCount(), leftArbol, sizeof(leftArbol));
+            format(msgArbol, sizeof(msgArbol), "[Leñador] Arbol en cooldown: %s", leftArbol);
+            return SendClientMessage(playerid, 0xFFAA00FF, msgArbol);
+        }
+
+        if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Ya llevas troncos en la mano. Cargalos en la Sadler con H.");
+        LenadorTieneTronco[playerid] = true;
+        ArbolCooldownTick[a] = GetTickCount() + COOLDOWN_ARBOL_MS;
+        SetPlayerAttachedObject(playerid, 9, 1463, 6, 0.11, 0.05, 0.03, 0.0, 0.0, 0.0, 0.75, 0.75, 0.75);
+        SendClientMessage(playerid, 0xB87333FF, "[Leñador] Recogiste los troncos. Cargalos en la Sadler con H.");
         return 1;
     }
 
@@ -1597,7 +1708,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
 public OnPlayerEnterCheckpoint(playerid)
 {
-    if(GPSCheckpointActivo[playerid] && TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0) {
+    if(GPSCheckpointActivo[playerid] && TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !LenadorTrabajando[playerid]) {
         DisablePlayerCheckpoint(playerid);
         GPSCheckpointActivo[playerid] = false;
         SendClientMessage(playerid, 0x66FF66FF, "Llegaste al punto GPS. Checkpoint removido.");
@@ -1663,6 +1774,24 @@ public OnPlayerEnterCheckpoint(playerid)
         SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Baja de la Rumpo y presiona H para recolectar (3s).");
         return 1;
     }
+
+    if(LenadorTrabajando[playerid] && LenadorEntregando[playerid]) {
+        if(GetPlayerVehicleID(playerid) != LenadorVehiculo[playerid]) return SendClientMessage(playerid, -1, "Debes usar la Sadler del trabajo para entregar.");
+        DisablePlayerCheckpoint(playerid);
+        new pagoBase = PAGO_BASE_LENADOR * LenadorMaderaRuta[playerid];
+        if(pagoBase < 500) pagoBase = 500;
+        new bonusMembresia = GetBonusTrabajoMembresia(playerid);
+        new totalPago = pagoBase + bonusMembresia;
+        KH_GivePlayerMoney(playerid, totalPago);
+        new msg[144];
+        format(msg, sizeof(msg), "[Leñador] Entregaste %d madera(s). Pago: $%d (+$%d bono).", LenadorMaderaRuta[playerid], totalPago, bonusMembresia);
+        SendClientMessage(playerid, 0x66FF66FF, msg);
+        LenadorMaderaRuta[playerid] = 0;
+        LenadorEntregando[playerid] = false;
+        SetCheckpointArbolMasCercano(playerid);
+        return 1;
+    }
+
     if(TrabajandoPizzero[playerid] == 1) {
         if(GetPlayerVehicleID(playerid) != PizzeroVehiculo[playerid]) {
             SendClientMessage(playerid, 0xFF0000FF, "PIZZERO CANCELADO: Debes usar la moto de la pizzeria.");
@@ -2177,7 +2306,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid] && MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid] && !LenadorTrabajando[playerid] && MecanicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
         if(TrabajandoCamionero[playerid] > 0) {
             CanceladoTrabajo(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
@@ -2198,6 +2327,20 @@ public OnPlayerCommandText(playerid, cmdtext[])
             TogglePlayerControllable(playerid, true);
             RemovePlayerAttachedObject(playerid, 8);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de minero.");
+        }
+        if(LenadorTrabajando[playerid]) {
+            LenadorTrabajando[playerid] = false;
+            LenadorEntregando[playerid] = false;
+            LenadorMaderaRuta[playerid] = 0;
+            LenadorArbolIndex[playerid] = -1;
+            if(LenadorTimer[playerid] != -1) { KillTimer(LenadorTimer[playerid]); LenadorTimer[playerid] = -1; }
+            TogglePlayerControllable(playerid, true);
+            ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+            if(IsPlayerAttachedObjectSlotUsed(playerid, 8)) RemovePlayerAttachedObject(playerid, 8);
+            if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9); LenadorTieneTronco[playerid] = false; }
+            DisablePlayerCheckpoint(playerid);
+            if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de leñador.");
         }
         if(MecanicoNivel[playerid] > 0) {
             if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
@@ -2229,6 +2372,16 @@ public OnPlayerCommandText(playerid, cmdtext[])
         BasureroEntregando[playerid] = 1;
         SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
         SendClientMessage(playerid, 0xFFAA00FF, "Entrega activada. Ve al vertedero para cobrar lo recolectado hasta ahora.");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/entregartroncos", true) || (!strcmp(cmd, "/entregar", true) && !strcmp(strtok(cmdtext, idx), "troncos", true))) {
+        if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "No estas trabajando de leñador.");
+        if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Primero carga los troncos en la Sadler con H.");
+        if(LenadorMaderaRuta[playerid] <= 0) return SendClientMessage(playerid, -1, "No has recolectado madera aun.");
+        LenadorEntregando[playerid] = true;
+        SetPlayerCheckpoint(playerid, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
+        SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Entrega activada. Ve al punto del trabajo para cobrar.");
         return 1;
     }
 
@@ -2571,6 +2724,25 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return SendClientMessage(playerid, 0x00FF00FF, "Mina creada.");
     }
 
+
+    if(!strcmp(cmd, "/creararbol", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+        if(TotalArboles >= MAX_ARBOLES) return SendClientMessage(playerid, -1, "Limite de arboles alcanzado.");
+        new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
+        ArbolData[TotalArboles][arbolActivo] = true; ArbolData[TotalArboles][arbolX] = x; ArbolData[TotalArboles][arbolY] = y; ArbolData[TotalArboles][arbolZ] = z;
+        ArbolData[TotalArboles][arbolTalado] = false;
+        ArbolData[TotalArboles][arbolObj] = CreateObject(629, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel("Arbol\nUsa H para talar", 0x8B5A2BFF, x, y, z + 0.8, 12.0, 0);
+        TotalArboles++; GuardarArboles();
+        return SendClientMessage(playerid, 0x00FF00FF, "Arbol de leñador creado.");
+    }
+
+    if(!strcmp(cmd, "/eliminarpunto", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
+        if(!EliminarPuntoSistemaCercano(playerid)) return SendClientMessage(playerid, -1, "No hay punto de sistema cercano para eliminar.");
+        return SendClientMessage(playerid, 0x66FF66FF, "Punto de sistema eliminado correctamente.");
+    }
+
     if(!strcmp(cmd, "/crearhorno", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
         if(TotalHornos >= MAX_HORNOS) return SendClientMessage(playerid, -1, "Limite de hornos alcanzado.");
@@ -2629,7 +2801,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/mover", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres Owner.");
-        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House\nTop Dinero Kame House", "Mover aqui", "Cerrar");
+        ShowPlayerDialog(playerid, DIALOG_MOVER_MENU, DIALOG_STYLE_LIST, "Mover iconos y puntos", "Trabajo Camionero\nPizzeria\nTrabajo Basurero\nDeposito de Carga\nBanco\nTienda Kame House\nTrabajo De Mecanico\nArmeria\nVenta de autos\nVenta de skins\nTuning Kame House\nTrabajo Minero\nTrabajo Leñador\nPrendas Kame House\nFacciones Kame House\nTienda Virtual Kame House\nTop Dinero Kame House", "Mover aqui", "Cerrar");
         return 1;
     }
 
@@ -3022,8 +3194,8 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawBoxColour(playerid, BarraHambre[playerid], COLOR_HAMBRE);
     PlayerTextDrawFont(playerid, BarraHambre[playerid], TEXT_DRAW_FONT_1);
 
-    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 276.0, 417.2, "GAS:");
-    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.20, 0.9);
+    TextoBarraGas[playerid] = CreatePlayerTextDraw(playerid, 288.0, 413.8, "GAS");
+    PlayerTextDrawLetterSize(playerid, TextoBarraGas[playerid], 0.18, 0.78);
     PlayerTextDrawAlignment(playerid, TextoBarraGas[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoBarraGas[playerid], 0xFFFFFFFF);
     PlayerTextDrawFont(playerid, TextoBarraGas[playerid], TEXT_DRAW_FONT_1);
@@ -3057,7 +3229,7 @@ public OnPlayerConnect(playerid) {
     PlayerTextDrawSetShadow(playerid, TextoVelocimetro[playerid], 0);
 
     TextoVelocimetroUnidad[playerid] = CreatePlayerTextDraw(playerid, 327.0, 401.0, "K/H");
-    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.20, 1.0);
+    PlayerTextDrawLetterSize(playerid, TextoVelocimetroUnidad[playerid], 0.16, 0.85);
     PlayerTextDrawAlignment(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_ALIGN_LEFT);
     PlayerTextDrawColour(playerid, TextoVelocimetroUnidad[playerid], 0xD2DAFFFF);
     PlayerTextDrawFont(playerid, TextoVelocimetroUnidad[playerid], TEXT_DRAW_FONT_1);
@@ -3105,6 +3277,11 @@ public OnPlayerConnect(playerid) {
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
     BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorTrabajando[playerid] = false;
+    LenadorTieneTronco[playerid] = false;
+    LenadorEntregando[playerid] = false;
+    LenadorMaderaRuta[playerid] = 0;
     BasureroRecolectado[playerid] = 0;
     BasureroRecolectando[playerid] = false;
     BasureroTieneBolsa[playerid] = false;
@@ -3203,6 +3380,15 @@ public OnPlayerConnect(playerid) {
     InvCarbon[playerid] = 0;
     PlayerTieneMazo[playerid] = false;
     MazoDurabilidad[playerid] = 0;
+    PlayerTieneHacha[playerid] = false;
+    HachaDurabilidad[playerid] = 0;
+    LenadorTrabajando[playerid] = false;
+    LenadorVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorArbolIndex[playerid] = -1;
+    LenadorTimer[playerid] = -1;
+    LenadorTieneTronco[playerid] = false;
+    LenadorMaderaRuta[playerid] = 0;
+    LenadorEntregando[playerid] = false;
     ArmeroNivel[playerid] = 1;
     ArmeroExp[playerid] = 0;
     PlantasColocadas[playerid] = 0;
@@ -3760,10 +3946,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 9: puntoMover = puntoVentaSkins;
             case 10: puntoMover = puntoPintura;
             case 11: puntoMover = puntoMinero;
-            case 12: puntoMover = puntoPrendas;
-            case 13: puntoMover = puntoFacciones;
-            case 14: puntoMover = puntoTiendaVirtual;
-            case 15: puntoMover = puntoTopDinero;
+            case 12: puntoMover = puntoLenador;
+            case 13: puntoMover = puntoPrendas;
+            case 14: puntoMover = puntoFacciones;
+            case 15: puntoMover = puntoTiendaVirtual;
+            case 16: puntoMover = puntoTopDinero;
             default: return SendClientMessage(playerid, -1, "Punto invalido.");
         }
 
@@ -3803,23 +3990,30 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_SEMILLERIA) {
         if(!response) return 1;
-        if(listitem < 0 || listitem > 4) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        if(listitem < 0 || listitem > 5) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         KameTiendaTipoPendiente[playerid] = listitem;
         if(listitem == 2) {
             if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
             KH_GivePlayerMoney(playerid, -PRECIO_MAZO);
             PlayerTieneMazo[playerid] = true;
-            MazoDurabilidad[playerid] = 120 + random(61);
+            MazoDurabilidad[playerid] = 95 + random(26);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
         }
         if(listitem == 3) {
+            if(GetPlayerMoney(playerid) < PRECIO_HACHA) return SendClientMessage(playerid, -1, "No tienes dinero para el hacha.");
+            KH_GivePlayerMoney(playerid, -PRECIO_HACHA);
+            PlayerTieneHacha[playerid] = true;
+            HachaDurabilidad[playerid] = 90 + random(31);
+            return SendClientMessage(playerid, 0x66FF66FF, "Compraste un hacha para leñador.");
+        }
+        if(listitem == 4) {
             if(PlayerTieneTelefono[playerid]) return SendClientMessage(playerid, -1, "Ya tienes telefono.");
             if(GetPlayerMoney(playerid) < PRECIO_TELEFONO) return SendClientMessage(playerid, -1, "No tienes dinero para el telefono.");
             KH_GivePlayerMoney(playerid, -PRECIO_TELEFONO);
             PlayerTieneTelefono[playerid] = true;
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un telefono. Usa /telefono para abrirlo.");
         }
-        if(listitem == 4) {
+        if(listitem == 5) {
             if(PlayerTieneKitReparacion[playerid]) return SendClientMessage(playerid, -1, "Ya tienes un Kit De Reparacion.");
             if(GetPlayerMoney(playerid) < COSTO_KIT_REPARACION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para el kit.");
             KH_GivePlayerMoney(playerid, -COSTO_KIT_REPARACION);
@@ -4573,7 +4767,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new cmdMover[] = "/mover";
             return OnPlayerCommandText(playerid, cmdMover);
         }
-        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nHorno\nCaja loot\nPunto prepiezas\nGasolinera", "Crear", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_CREAR_MENU, DIALOG_STYLE_LIST, "Admin - Crear puntos", "Parada camionero\nParada pizzero\nParada basurero\nMina\nArbol leñador\nHorno\nCaja loot\nPunto prepiezas\nGasolinera\nEliminar punto cercano", "Crear", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Admin - Comandos", "/ir [id] /tp (mapa) /traer /kick /kill /cord /sacarveh /fly /rc /admprendas", "Cerrar", "");
         if(listitem == 4) return ShowPlayerDialog(playerid, DIALOG_ADMIN_SANCION_CONCEPTO, DIALOG_STYLE_LIST, "Admin - Sancionar", "PG\nDM\nMG\nRK\nCK\nNRE\nNVVPJ\nER\nFR", "Siguiente", "Atras");
         if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_ADMIN_UNSAN_ID, DIALOG_STYLE_INPUT, "Admin - Quitar sancion", "Ingresa ID del jugador sancionado", "Siguiente", "Atras");
@@ -4634,20 +4828,28 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return OnPlayerCommandText(playerid, cmdCrearMina);
         }
         if(listitem == 4) {
+            new cmdCrearArbol[] = "/creararbol";
+            return OnPlayerCommandText(playerid, cmdCrearArbol);
+        }
+        if(listitem == 5) {
             new cmdCrearHorno[] = "/crearhorno";
             return OnPlayerCommandText(playerid, cmdCrearHorno);
         }
-        if(listitem == 5) {
+        if(listitem == 6) {
             new cmdCrearCaja[] = "/crearcaja";
             return OnPlayerCommandText(playerid, cmdCrearCaja);
         }
-        if(listitem == 6) {
+        if(listitem == 7) {
             new cmdCrearPrepiezas[] = "/crearprepiezas";
             return OnPlayerCommandText(playerid, cmdCrearPrepiezas);
         }
-        if(listitem == 7) {
+        if(listitem == 8) {
             new cmdVentagas[] = "/ventagas";
             return OnPlayerCommandText(playerid, cmdVentagas);
+        }
+        if(listitem == 9) {
+            new cmdEliminarPunto[] = "/eliminarpunto";
+            return OnPlayerCommandText(playerid, cmdEliminarPunto);
         }
         return 1;
     }
@@ -5808,6 +6010,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             if(fread(h, line)) PlayerSancionado[playerid] = strval(line) != 0;
                             if(fread(h, line)) SancionConcepto[playerid] = strval(line);
                             if(fread(h, line)) SancionFinTick[playerid] = strval(line);
+                            PlayerTieneHacha[playerid] = false;
+                            HachaDurabilidad[playerid] = 0;
+                            if(dataVersion >= 11) {
+                                if(fread(h, line)) PlayerTieneHacha[playerid] = strval(line) != 0;
+                                if(fread(h, line)) HachaDurabilidad[playerid] = strval(line);
+                            }
                             if(fread(h, line)) SancionPos[playerid][0] = floatstr(line);
                             if(fread(h, line)) SancionPos[playerid][1] = floatstr(line);
                             if(fread(h, line)) SancionPos[playerid][2] = floatstr(line);
@@ -5914,11 +6122,11 @@ public GuardarCuenta(playerid) {
                 CamioneroNivel[playerid], CamioneroViajes[playerid], PizzeroNivel[playerid], PizzeroEntregas[playerid], PlayerBankMoney[playerid], InvSemillaHierba[playerid], InvSemillaFlor[playerid], InvHierba[playerid], InvFlor[playerid], PlayerTiempoJugadoMin[playerid], PlayerSkinGuardada[playerid], p[0], p[1], p[2], CUENTA_DATA_VERSION);
             fwrite(h, line);
 
-            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
+            format(line, sizeof(line), "\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%f\n%f\n%f",
                 InvMadera[playerid], InvPiedra[playerid], InvCobre[playerid], InvHierroMineral[playerid], InvPolvora[playerid], InvPrepieza[playerid], InvCarbon[playerid],
                 PlayerTieneMazo[playerid] ? 1 : 0, MazoDurabilidad[playerid], ArmeroNivel[playerid], ArmeroExp[playerid], BasureroNivel[playerid], BasureroRecorridos[playerid], BidonGasolina[playerid], PlayerTieneTelefono[playerid] ? 1 : 0,
                 PlayerDiamantes[playerid], PlayerMembresiaTipo[playerid], PlayerMembresiaExpiraTick[playerid], MecanicoNivel[playerid], MecanicoReparaciones[playerid], PlayerTieneKitReparacion[playerid] ? 1 : 0,
-                PlayerSancionado[playerid] ? 1 : 0, SancionConcepto[playerid], SancionFinTick[playerid], SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
+                PlayerSancionado[playerid] ? 1 : 0, SancionConcepto[playerid], SancionFinTick[playerid], PlayerTieneHacha[playerid] ? 1 : 0, HachaDurabilidad[playerid], SancionPos[playerid][0], SancionPos[playerid][1], SancionPos[playerid][2]);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
@@ -6097,6 +6305,7 @@ public AutoGuardadoGlobal() {
     GuardarCasas();
     GuardarPuntosMovibles();
     GuardarMinas();
+    GuardarArboles();
     GuardarHornos();
     GuardarCajasLoot();
     GuardarPrepiezaPoints();
@@ -6155,12 +6364,18 @@ public OnPlayerDisconnect(playerid, reason) {
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
     if(BasureroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(BasureroVehiculo[playerid]);
+    if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(LenadorVehiculo[playerid]);
     TrabajandoCamionero[playerid] = 0;
     TrabajandoPizzero[playerid] = 0;
     TrabajandoBasurero[playerid] = 0;
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     PizzeroVehiculo[playerid] = INVALID_VEHICLE_ID;
     BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorTrabajando[playerid] = false;
+    LenadorTieneTronco[playerid] = false;
+    LenadorEntregando[playerid] = false;
+    LenadorMaderaRuta[playerid] = 0;
     BasureroRecolectado[playerid] = 0;
     BasureroRecolectando[playerid] = false;
     BasureroTieneBolsa[playerid] = false;
@@ -6364,8 +6579,8 @@ public OnPlayerUpdate(playerid) {
             if(vehHealth >= 900.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
             else if(vehHealth >= 600.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFFD166FF);
             else PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFF6B6BFF);
-            if(kmh >= 120) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF6B6BFF);
-            else if(kmh >= 60) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFD166FF);
+            if(kmh >= 150) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF2020FF);
+            else if(kmh >= 120) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF7F7FFF);
             else PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
             if(GasVehiculo[vehid] <= 0) {
                 new engine, lights, alarm, doors, bonnet, boot, objective;
@@ -6503,7 +6718,7 @@ stock ExpirarMembresiaSiCorresponde(playerid) {
 }
 
 stock TieneTrabajoActivo(playerid) {
-    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid] || MecanicoNivel[playerid] > 0);
+    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid] || LenadorTrabajando[playerid] || MecanicoNivel[playerid] > 0);
 }
 
 stock ContarTrabajosActivos(playerid) {
@@ -6512,6 +6727,7 @@ stock ContarTrabajosActivos(playerid) {
     if(TrabajandoPizzero[playerid] > 0) c++;
     if(TrabajandoBasurero[playerid] > 0) c++;
     if(MineroTrabajando[playerid]) c++;
+    if(LenadorTrabajando[playerid]) c++;
     if(MecanicoNivel[playerid] > 0) c++;
     return c;
 }
@@ -6869,6 +7085,11 @@ stock FinalizarTrabajoBasurero(playerid) {
 
     if(BasureroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(BasureroVehiculo[playerid]);
     BasureroVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorVehiculo[playerid] = INVALID_VEHICLE_ID;
+    LenadorTrabajando[playerid] = false;
+    LenadorTieneTronco[playerid] = false;
+    LenadorEntregando[playerid] = false;
+    LenadorMaderaRuta[playerid] = 0;
     TrabajandoBasurero[playerid] = 0;
     BasureroEntregando[playerid] = 0;
     BasureroFloresEncontradas[playerid] = 0;
@@ -6948,7 +7169,7 @@ stock GetTelefonoVehiculoByListIndex(playerid, listindex) {
 
 stock ShowSemilleriaMenu(playerid) {
     new body[256];
-    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)\nTelefono celular ($10000)\nKit De Reparacion ($%d)", COSTO_KIT_REPARACION);
+    format(body, sizeof(body), "Semillas de hierba verde\nSemillas de flores\nMazo de minero ($10000)\nHacha ($20000)\nTelefono celular ($10000)\nKit De Reparacion ($%d)", COSTO_KIT_REPARACION);
     ShowPlayerDialog(playerid, DIALOG_SEMILLERIA, DIALOG_STYLE_LIST, "Tienda Kame House", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -7191,6 +7412,7 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoMaletero: format(dest, len, "Reservado");
         case puntoPintura: format(dest, len, "Tuning Kame House");
         case puntoMinero: format(dest, len, "Trabajo minero");
+        case puntoLenador: format(dest, len, "Trabajo leñador");
         case puntoPrendas: format(dest, len, "Prendas Kame House");
         case puntoFacciones: format(dest, len, "Facciones Kame House");
         case puntoTiendaVirtual: format(dest, len, "Tienda Virtual Kame House");
@@ -7261,6 +7483,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
         case puntoMinero: {
             PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
             PuntoLabel[punto] = Create3DTextLabel("{CCCCCC}Trabajo minero\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
+        }
+        case puntoLenador: {
+            PuntoPickup[punto] = CreatePickup(1239, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            PuntoLabel[punto] = Create3DTextLabel("{8B4513}Trabajo leñador\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para iniciar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoPrendas: {
             PuntoPickup[punto] = CreatePickup(2704, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
@@ -8198,8 +8424,8 @@ public FinalizarMinado(playerid) {
     InvPiedra[playerid] += piedra;
     InvCobre[playerid] += cobre;
     InvHierroMineral[playerid] += hierro;
-    new desgaste = MineroDuracionActual[playerid] / 8;
-    if(desgaste < 1) desgaste = 1;
+    new desgaste = MineroDuracionActual[playerid] / 4;
+    if(desgaste < 2) desgaste = 2;
     if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid] -= desgaste;
     MineroDuracionActual[playerid] = 0;
     if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
@@ -8211,6 +8437,30 @@ public FinalizarMinado(playerid) {
     if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
         if(SetCheckpointMinaMasCercana(playerid)) SendClientMessage(playerid, 0x66CCFFFF, "[Minero] Mina completada. Te marcamos la siguiente mina disponible mas cercana.");
         else SendClientMessage(playerid, 0xFFAA00FF, "[Minero] No hay otra mina disponible por ahora. Espera regeneracion.");
+    }
+    return 1;
+}
+
+
+public FinalizarTalaArbol(playerid) {
+    if(!IsPlayerConnected(playerid)) return 1;
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, 8)) RemovePlayerAttachedObject(playerid, 8);
+    LenadorTimer[playerid] = -1;
+    new a = LenadorArbolIndex[playerid];
+    LenadorArbolIndex[playerid] = -1;
+    if(a < 0 || a >= TotalArboles || !ArbolData[a][arbolActivo]) return 1;
+    if(!ArbolData[a][arbolTalado]) {
+        ArbolData[a][arbolTalado] = true;
+        if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
+        ArbolData[a][arbolObj] = CreateObject(841, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
+        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "Troncos
+Usa H para recoger");
+        new desgaste = 4 + random(4);
+        if(HachaDurabilidad[playerid] > 0) HachaDurabilidad[playerid] -= desgaste;
+        if(HachaDurabilidad[playerid] <= 0) { PlayerTieneHacha[playerid] = false; HachaDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu hacha se rompio."); }
+        SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Arbol talado. Presiona H para recoger los troncos.");
     }
     return 1;
 }
@@ -8266,7 +8516,8 @@ stock ActualizarLabelHorno(hornoidx) {
     if(hornoidx < 0 || hornoidx >= TotalHornos || !HornoData[hornoidx][hornoActivo]) return 0;
     new txt[144];
     if(!HornoData[hornoidx][hornoEnUso]) {
-        format(txt, sizeof(txt), "Horno\nUsa H");
+        format(txt, sizeof(txt), "Horno
+Usa H");
         Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
         return 1;
     }
@@ -8276,7 +8527,9 @@ stock ActualizarLabelHorno(hornoidx) {
     if(IsPlayerConnected(owner)) GetPlayerName(owner, ownerName, sizeof(ownerName));
 
     if(HornoData[hornoidx][hornoListoRetiro]) {
-        format(txt, sizeof(txt), "Horno en uso\nDueno: %s\n{66FF66}LISTO: presiona H para retirar", ownerName);
+        format(txt, sizeof(txt), "Horno en uso
+Dueno: %s
+{66FF66}LISTO: presiona H para retirar", ownerName);
         Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0x66FF66FF, txt);
         return 1;
     }
@@ -8285,7 +8538,9 @@ stock ActualizarLabelHorno(hornoidx) {
     if(restante < 0) restante = 0;
     new left[24];
     FormatTiempoRestante(restante, left, sizeof(left));
-    format(txt, sizeof(txt), "Horno en uso\nDueno: %s\nTiempo: %s", ownerName, left);
+    format(txt, sizeof(txt), "Horno en uso
+Dueno: %s
+Tiempo: %s", ownerName, left);
     Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
     return 1;
 }
@@ -8597,6 +8852,46 @@ stock CargarMinas() {
     return 1;
 }
 
+
+stock GuardarArboles() {
+    new File:h = fopen(PATH_ARBOLES, io_write);
+    if(!h) return 0;
+    new line[128];
+    for(new i = 0; i < TotalArboles; i++) {
+        if(!ArbolData[i][arbolActivo]) continue;
+        format(line, sizeof(line), "%f %f %f %d
+", ArbolData[i][arbolX], ArbolData[i][arbolY], ArbolData[i][arbolZ], ArbolData[i][arbolTalado] ? 1 : 0);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarArboles() {
+    new File:h = fopen(PATH_ARBOLES, io_read), line[128];
+    if(!h) return 0;
+    TotalArboles = 0;
+    while(fread(h, line) && TotalArboles < MAX_ARBOLES) {
+        new idx = 0;
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+        new talado = strval(strtok(line, idx));
+        ArbolData[TotalArboles][arbolActivo] = true;
+        ArbolData[TotalArboles][arbolX] = x;
+        ArbolData[TotalArboles][arbolY] = y;
+        ArbolData[TotalArboles][arbolZ] = z;
+        ArbolData[TotalArboles][arbolTalado] = (talado != 0);
+        ArbolData[TotalArboles][arbolObj] = CreateObject(ArbolData[TotalArboles][arbolTalado] ? 841 : 629, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel(ArbolData[TotalArboles][arbolTalado] ? "Troncos
+Usa H para recoger" : "Arbol
+Usa H para talar", 0x8B5A2BFF, x, y, z + 0.8, 12.0, 0);
+        TotalArboles++;
+    }
+    fclose(h);
+    return 1;
+}
+
 stock AplicarTexturaMinaEstatica(objectid) {
     if(objectid == 0) return 0;
     // Modelo 748 (sm_scrb_grp1) ya incluye la textura objetivo.
@@ -8742,6 +9037,70 @@ stock CargarPrepiezaPoints() {
 
     fclose(h);
     return 1;
+}
+
+
+stock GetArbolDisponibleMasCercano(playerid, ignorar = -1) {
+    new Float:px, Float:py, Float:pz;
+    GetPlayerPos(playerid, px, py, pz);
+    new mejor = -1; new Float:mejorDist = 999999.0;
+    for(new i = 0; i < TotalArboles; i++) {
+        if(!ArbolData[i][arbolActivo] || i == ignorar || ArbolData[i][arbolTalado]) continue;
+        new Float:d = GetDistanceBetweenPoints(px, py, pz, ArbolData[i][arbolX], ArbolData[i][arbolY], ArbolData[i][arbolZ]);
+        if(d < mejorDist) { mejorDist = d; mejor = i; }
+    }
+    return mejor;
+}
+
+stock SetCheckpointArbolMasCercano(playerid) {
+    new a = GetArbolDisponibleMasCercano(playerid);
+    if(a == -1) { DisablePlayerCheckpoint(playerid); return 0; }
+    SetPlayerCheckpoint(playerid, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ], 4.5);
+    return 1;
+}
+
+stock EliminarPuntoSistemaCercano(playerid) {
+    for(new i = 0; i < TotalMinas; i++) {
+        if(!MinaData[i][minaActiva]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, MinaData[i][minaX], MinaData[i][minaY], MinaData[i][minaZ])) continue;
+        MinaData[i][minaActiva] = false;
+        if(MinaData[i][minaObj] != 0) DestroyObject(MinaData[i][minaObj]);
+        if(MinaData[i][minaLabel] != Text3D:-1) Delete3DTextLabel(MinaData[i][minaLabel]);
+        GuardarMinas();
+        return 1;
+    }
+
+    for(new i = 0; i < TotalArboles; i++) {
+        if(!ArbolData[i][arbolActivo]) continue;
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, ArbolData[i][arbolX], ArbolData[i][arbolY], ArbolData[i][arbolZ])) continue;
+        ArbolData[i][arbolActivo] = false;
+        if(ArbolData[i][arbolObj] != 0) DestroyObject(ArbolData[i][arbolObj]);
+        if(ArbolData[i][arbolLabel] != Text3D:-1) Delete3DTextLabel(ArbolData[i][arbolLabel]);
+        GuardarArboles();
+        return 1;
+    }
+
+    for(new i = 0; i < TotalRutasBasura; i++) {
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, BasuraRuta[i][0], BasuraRuta[i][1], BasuraRuta[i][2])) continue;
+        BasuraRuta[i][0] = BasuraRuta[TotalRutasBasura - 1][0];
+        BasuraRuta[i][1] = BasuraRuta[TotalRutasBasura - 1][1];
+        BasuraRuta[i][2] = BasuraRuta[TotalRutasBasura - 1][2];
+        TotalRutasBasura--;
+
+        new File:h = fopen(PATH_RUTAS_BASURA, io_write);
+        if(h) {
+            new line[64];
+            for(new b = 0; b < TotalRutasBasura; b++) {
+                format(line, sizeof(line), "%f %f %f
+", BasuraRuta[b][0], BasuraRuta[b][1], BasuraRuta[b][2]);
+                fwrite(h, line);
+            }
+            fclose(h);
+        }
+        CargarRutasBasura();
+        return 1;
+    }
+    return 0;
 }
 
 stock CrearPrendasDefault() {
