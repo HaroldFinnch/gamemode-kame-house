@@ -37,6 +37,7 @@
 #define TIEMPO_CULTIVO_MIN   4
 #define TIEMPO_CULTIVO_MAX   5
 #define COOLDOWN_MINA_MS     600000
+#define COOLDOWN_ARBOL_MS    300000
 #define COSTO_KIT_REPARACION 1000
 #define PAGO_REPARAR_MOTOR 1500
 #define PORCENTAJE_PAGO_MECANICO 0.90
@@ -795,6 +796,7 @@ new CajaDataLoot[MAX_CAJAS][eCajaData];
 new TotalCajas;
 new CajaCooldownTick[MAX_PLAYERS][MAX_CAJAS];
 new MinaCooldownTick[MAX_MINAS];
+new ArbolCooldownTick[MAX_ARBOLES];
 new bool:MineroGPSActivo[MAX_PLAYERS];
 new bool:OmitirArmasEnProximoSpawn[MAX_PLAYERS];
 new TuningVehLista[MAX_PLAYERS][MAX_AUTOS_NORMALES_JUGADOR];
@@ -1453,7 +1455,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
         if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9);
         LenadorTieneTronco[playerid] = false;
-        SendClientMessage(playerid, 0x66FF66FF, "[Leñador] Troncos cargados en la Sadler.");
+        new madera = 5 + random(6);
+        InvMadera[playerid] += madera;
+        LenadorMaderaRuta[playerid] += madera;
+        new txtCarga[112];
+        format(txtCarga, sizeof(txtCarga), "[Leñador] Cargaste troncos y obtuviste %d madera(s).", madera);
+        SendClientMessage(playerid, 0x66FF66FF, txtCarga);
         if(SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Te marcamos el siguiente arbol.");
         return 1;
     }
@@ -1578,14 +1585,29 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             SendClientMessage(playerid, 0x8B5A2BFF, "[Leñador] Talando arbol...");
             return 1;
         }
+
+        if(ArbolCooldownTick[a] > 0 && GetTickCount() >= ArbolCooldownTick[a]) {
+            ArbolCooldownTick[a] = 0;
+            ArbolData[a][arbolTalado] = false;
+            if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
+            ArbolData[a][arbolObj] = CreateObject(629, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
+            if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0x8B5A2BFF, "Arbol\nUsa H para talar");
+            SendClientMessage(playerid, 0x66FF66FF, "[Leñador] Este arbol ya se regenero. Puedes talarlo otra vez.");
+            return 1;
+        }
+
+        if(ArbolCooldownTick[a] > 0) {
+            new leftArbol[24], msgArbol[96];
+            FormatTiempoRestante(ArbolCooldownTick[a] - GetTickCount(), leftArbol, sizeof(leftArbol));
+            format(msgArbol, sizeof(msgArbol), "[Leñador] Arbol en cooldown: %s", leftArbol);
+            return SendClientMessage(playerid, 0xFFAA00FF, msgArbol);
+        }
+
         if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Ya llevas troncos en la mano. Cargalos en la Sadler con H.");
         LenadorTieneTronco[playerid] = true;
+        ArbolCooldownTick[a] = GetTickCount() + COOLDOWN_ARBOL_MS;
         SetPlayerAttachedObject(playerid, 9, 1463, 6, 0.11, 0.05, 0.03, 0.0, 0.0, 0.0, 0.75, 0.75, 0.75);
-        new madera = 1 + random(10);
-        InvMadera[playerid] += madera;
-        LenadorMaderaRuta[playerid] += madera;
-        new txtM[100]; format(txtM, sizeof(txtM), "[Leñador] Recogiste %d madera(s). Cargalas en la Sadler con H.", madera);
-        SendClientMessage(playerid, 0xB87333FF, txtM);
+        SendClientMessage(playerid, 0xB87333FF, "[Leñador] Recogiste los troncos. Cargalos en la Sadler con H.");
         return 1;
     }
 
