@@ -1645,12 +1645,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!ArbolData[a][arbolActivo]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ])) continue;
         if(!LenadorTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de talador primero.");
-        if(!PlayerTieneHacha[playerid] || HachaDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un hacha con durabilidad. Comprala en Tienda Kame House.");
         if(LenadorTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas realizando una accion de talador.");
         if(!ArbolData[a][arbolTalado]) {
+            if(!PlayerTieneHacha[playerid] || HachaDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un hacha con durabilidad. Comprala en Tienda Kame House.");
             LenadorArbolIndex[playerid] = a;
             TogglePlayerControllable(playerid, false);
-            SetPlayerAttachedObject(playerid, ATTACH_SLOT_HACHA, 19590, 6, 0.07, 0.02, -0.03, 0.0, 95.0, 8.0, 1.0, 1.0, 1.0);
+            SetPlayerAttachedObject(playerid, ATTACH_SLOT_HACHA, 19590, 6, 0.03, 0.01, -0.02, -5.0, 98.0, 5.0, 0.42, 0.42, 0.42);
             ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, 3000, t_FORCE_SYNC:SYNC_ALL);
             LenadorTimer[playerid] = SetTimerEx("FinalizarTalaArbol", 3000, false, "d", playerid);
             SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Talando arbol...");
@@ -2375,11 +2375,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/inventario", true) || !strcmp(cmd, "/inv", true) || !strcmp(cmd, "/cosas", true)) {
-        new inv[512];
+        new inv[640];
         new mazoPct = MazoDurabilidad[playerid];
+        new hachaPct = HachaDurabilidad[playerid];
         if(mazoPct < 0) mazoPct = 0;
         if(mazoPct > 100) mazoPct = 100;
-        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF} %d\n{FF66CC}Flor:{FFFFFF} %d\n{A9A9A9}Hierro:{FFFFFF} %d\n{B87333}Cobre:{FFFFFF} %d\n{C0C0C0}Piedra:{FFFFFF} %d\n{8B4513}Madera:{FFFFFF} %d\n{FFD700}Polvora:{FFFFFF} %d\n{555555}Carbon:{FFFFFF} %d\n{99CCFF}Prepiezas:{FFFFFF} %d\n{99FF99}Dinero:{FFFFFF} $%d\n{66CC66}Banco:{FFFFFF} $%d\n{FFCC66}Mazo:{FFFFFF} %d%%", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? mazoPct : 0);
+        if(hachaPct < 0) hachaPct = 0;
+        if(hachaPct > 100) hachaPct = 100;
+        format(inv, sizeof(inv), "{66FF66}Hierba:{FFFFFF} %d\n{FF66CC}Flor:{FFFFFF} %d\n{A9A9A9}Hierro:{FFFFFF} %d\n{B87333}Cobre:{FFFFFF} %d\n{C0C0C0}Piedra:{FFFFFF} %d\n{8B4513}Madera:{FFFFFF} %d\n{FFD700}Polvora:{FFFFFF} %d\n{555555}Carbon:{FFFFFF} %d\n{99CCFF}Prepiezas:{FFFFFF} %d\n{99FF99}Dinero:{FFFFFF} $%d\n{66CC66}Banco:{FFFFFF} $%d\n{FFCC66}Mazo:{FFFFFF} %d%%\n{8B5A2B}Hacha:{FFFFFF} %d%%", InvHierba[playerid], InvFlor[playerid], InvHierroMineral[playerid], InvCobre[playerid], InvPiedra[playerid], InvMadera[playerid], InvPolvora[playerid], InvCarbon[playerid], InvPrepieza[playerid], GetPlayerMoney(playerid), PlayerBankMoney[playerid], PlayerTieneMazo[playerid] ? mazoPct : 0, PlayerTieneHacha[playerid] ? hachaPct : 0);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Inventario", inv, "Cerrar", "");
         return 1;
     }
@@ -3794,7 +3797,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: /mina, H en mina, H en horno, /inventario (/inv), /dejartrabajo.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
@@ -8692,8 +8695,7 @@ public FinalizarMinado(playerid) {
     InvPiedra[playerid] += piedra;
     InvCobre[playerid] += cobre;
     InvHierroMineral[playerid] += hierro;
-    new desgaste = MineroDuracionActual[playerid] / 4;
-    if(desgaste < 2) desgaste = 2;
+    new desgaste = 1 + random(2);
     if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid] -= desgaste;
     MineroDuracionActual[playerid] = 0;
     if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
@@ -8725,7 +8727,7 @@ public FinalizarTalaArbol(playerid) {
         if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
         ArbolData[a][arbolObj] = CreateObject(MODELO_ARBOL_TALADO, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
         if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: 5 min 00 s");
-        new desgaste = 4 + random(4);
+        new desgaste = 1 + random(2);
         if(HachaDurabilidad[playerid] > 0) HachaDurabilidad[playerid] -= desgaste;
         if(HachaDurabilidad[playerid] <= 0) { PlayerTieneHacha[playerid] = false; HachaDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu hacha se rompio."); }
         TaladorTroncosTalados[playerid]++;
