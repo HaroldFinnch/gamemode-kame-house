@@ -207,6 +207,7 @@
 #define DIALOG_MECANICO_REPARAR_PRECIO 170
 #define DIALOG_MEDICO_CURAR_ID 172
 #define DIALOG_MEDICO_SOLICITUD 173
+#define DIALOG_DEJARTRABAJO 174
 #define DIALOG_ADMIN_NIVELES_MENU 153
 #define DIALOG_ADMIN_SET_NIVEL_ID 154
 #define DIALOG_ADMIN_SET_NIVEL_VALOR 155
@@ -375,6 +376,30 @@ new PlayerMembresiaExpiraTick[MAX_PLAYERS];
 new AdminMembresiaTipoPendiente[MAX_PLAYERS];
 new AdminMembresiaTargetPendiente[MAX_PLAYERS] = {-1, ...};
 new AdminPrecioVipDineroPendiente[MAX_PLAYERS];
+
+enum eCheckpointTrabajo {
+    CP_TRABAJO_NINGUNO = 0,
+    CP_TRABAJO_CAMIONERO,
+    CP_TRABAJO_PIZZERO,
+    CP_TRABAJO_BASURERO,
+    CP_TRABAJO_MINERO,
+    CP_TRABAJO_LENADOR_ARBOL,
+    CP_TRABAJO_LENADOR_ENTREGA
+};
+
+enum eTrabajoTipo {
+    TRABAJO_CAMIONERO = 1,
+    TRABAJO_PIZZERO,
+    TRABAJO_BASURERO,
+    TRABAJO_MINERO,
+    TRABAJO_LENADOR,
+    TRABAJO_MECANICO,
+    TRABAJO_MEDICO
+};
+
+new PlayerCheckpointTrabajo[MAX_PLAYERS];
+new DejarTrabajoOpciones[MAX_PLAYERS][8];
+new DejarTrabajoOpcionesCount[MAX_PLAYERS];
 
 // Variables Camionero
 new TrabajandoCamionero[MAX_PLAYERS];
@@ -968,6 +993,11 @@ stock IniciarReparacionMecanico(playerid, targetid, tipoReparacion, costoAcordad
 stock LimpiarSolicitudMecanico(playerid);
 stock EnviarReporteAStaff(reporta, reportado, const concepto[]);
 stock AgregarReporte(reporta, reportado, const concepto[]);
+stock SetCheckpointTrabajo(playerid, eCheckpointTrabajo:tipo, Float:x, Float:y, Float:z, Float:size);
+stock LimpiarCheckpointTrabajo(playerid, bool:desactivar = true);
+stock DejarTrabajoEspecifico(playerid, eTrabajoTipo:tipo);
+stock ConstruirListaTrabajosActivos(playerid, lista[], len, bool:conIndices = false);
+stock ObtenerTrabajosActivosTexto(playerid, dest[], len);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -992,7 +1022,7 @@ public FinalizarRecolectaBasura(playerid) {
         SetPlayerAttachedObject(playerid, 9, BOLSA_OBJ_MODEL, 6, 0.10, 0.05, -0.05, 0.0, 90.0, 0.0, 0.70, 0.75, 0.70);
         BasureroBolsaVisible[playerid] = true;
     }
-    SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 4.5);
+    SetCheckpointTrabajo(playerid, CP_TRABAJO_BASURERO, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 4.5);
     SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Tienes una bolsa. Acercate a la Rumpo y presiona H para cargarla.");
     EnviarEntornoAccion(playerid, "recoge una bolsa de basura y la carga sobre su hombro.");
 
@@ -1483,7 +1513,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         }
         if(BasureroRecolectado[playerid] >= TotalRutasBasura) {
             BasureroEntregando[playerid] = 1;
-            SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
+            SetCheckpointTrabajo(playerid, CP_TRABAJO_BASURERO, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
             SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ruta completa. Sube a la Rumpo y regresa al vertedero para cobrar.");
         } else {
             SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Bolsa subida a la Rumpo. Ve al siguiente punto.");
@@ -1502,6 +1532,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
         if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO);
         SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
+        ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
         LenadorTieneTronco[playerid] = false;
         LenadorMaderaRuta[playerid]++;
         new madera = 0;
@@ -1515,7 +1546,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Te marcamos el siguiente arbol.");
         } else if(LenadorMaderaRuta[playerid] > 0) {
             LenadorEntregando[playerid] = true;
-            SetPlayerCheckpoint(playerid, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
+            SetCheckpointTrabajo(playerid, CP_TRABAJO_LENADOR_ENTREGA, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
             SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] No hay mas arboles disponibles. Regresa a entregar los troncos.");
         }
         return 1;
@@ -1741,7 +1772,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
 
         TrabajandoCamionero[playerid] = 1;
-        SetPlayerCheckpoint(playerid, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 5.0);
+        SetCheckpointTrabajo(playerid, CP_TRABAJO_CAMIONERO, PuntoPos[puntoCarga][0], PuntoPos[puntoCarga][1], PuntoPos[puntoCarga][2], 5.0);
         SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Sube al camion y ve al punto de carga.");
         EnviarEntornoAccion(playerid, "enciende su camion de reparto e inicia una nueva ruta.");
         return 1;
@@ -1784,119 +1815,131 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
 public OnPlayerEnterCheckpoint(playerid)
 {
-    if(GPSCheckpointActivo[playerid] && TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !LenadorTrabajando[playerid]) {
+    if(PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_CAMIONERO && TrabajandoCamionero[playerid] <= 0) PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+    if(PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_PIZZERO && TrabajandoPizzero[playerid] <= 0) PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+    if(PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_BASURERO && TrabajandoBasurero[playerid] <= 0) PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+    if(PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_MINERO && !MineroTrabajando[playerid]) PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+    if((PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_LENADOR_ARBOL || PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_LENADOR_ENTREGA) && !LenadorTrabajando[playerid]) PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+
+    if(GPSCheckpointActivo[playerid] && PlayerCheckpointTrabajo[playerid] == CP_TRABAJO_NINGUNO) {
         DisablePlayerCheckpoint(playerid);
         GPSCheckpointActivo[playerid] = false;
         SendClientMessage(playerid, 0x66FF66FF, "Llegaste al punto GPS. Checkpoint removido.");
         return 1;
     }
 
-    if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
-        DisablePlayerCheckpoint(playerid);
-        SendClientMessage(playerid, 0x66CCFFFF, "[Minero] Llegaste a la mina marcada. Presiona H para minar.");
-        return 1;
-    }
-
-    if(LenadorTrabajando[playerid] && !LenadorEntregando[playerid]) {
-        DisablePlayerCheckpoint(playerid);
-        SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Llegaste al arbol marcado. Presiona H para talar.");
-        return 1;
-    }
-
-    if(TrabajandoCamionero[playerid] >= 2 && GetPlayerVehicleID(playerid) != CamioneroVehiculo[playerid])
-    {
-        SendClientMessage(playerid, 0xFF0000FF, "TRABAJO CANCELADO: Debes estar en el vehiculo de la empresa.");
-        CanceladoTrabajo(playerid);
-        return 1;
-    }
-
-    if(TrabajandoCamionero[playerid] == 1) { // Llegando a cargar
-        DisablePlayerCheckpoint(playerid);
-        TogglePlayerControllable(playerid, false);
-        GameTextForPlayer(playerid, "~w~CARGANDO...~n~~y~Espere", 3000, 3);
-        SetTimerEx("FinalizarCarga", 20000, false, "d", playerid);
-        TrabajandoCamionero[playerid] = 2;
-        EnviarEntornoAccion(playerid, "asegura la mercancia y comienza la carga del camion.");
-    }
-    else if(TrabajandoCamionero[playerid] == 3) { // Llegando a entregar
-        DisablePlayerCheckpoint(playerid);
-        TogglePlayerControllable(playerid, false);
-        GameTextForPlayer(playerid, "~w~DESCARGANDO...~n~~y~Espere", 3000, 3);
-        SetTimerEx("FinalizarDescarga", 10000, false, "d", playerid);
-        TrabajandoCamionero[playerid] = 4;
-        EnviarEntornoAccion(playerid, "maniobra el camion y empieza la descarga de mercancia.");
-    }
-    else if(TrabajandoCamionero[playerid] == 5) { // Volviendo a base
-        DisablePlayerCheckpoint(playerid);
-        FinalizarTrabajo(playerid);
-        return 1;
-    }
-
-
-    if(TrabajandoBasurero[playerid] >= 1) {
-        if(BasureroDepositandoBolsa[playerid]) {
-            if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
-                SendClientMessage(playerid, 0xFF0000FF, "[Basurero] Sube a la Rumpo para cargar la bolsa.");
-                return 1;
+    switch(PlayerCheckpointTrabajo[playerid]) {
+        case CP_TRABAJO_MINERO: {
+            if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
+                LimpiarCheckpointTrabajo(playerid);
+                SendClientMessage(playerid, 0x66CCFFFF, "[Minero] Llegaste a la mina marcada. Presiona H para minar.");
             }
-            SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Acercate a la Rumpo y presiona H para subir la bolsa.");
             return 1;
         }
-
-        if(BasureroEntregando[playerid] == 1) {
-            if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
-                SendClientMessage(playerid, 0xFF0000FF, "Debes entregar la basura usando la Rumpo del trabajo.");
-                return 1;
+        case CP_TRABAJO_LENADOR_ARBOL: {
+            if(LenadorTrabajando[playerid] && !LenadorEntregando[playerid]) {
+                LimpiarCheckpointTrabajo(playerid);
+                SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Llegaste al arbol marcado. Presiona H para talar.");
             }
-            DisablePlayerCheckpoint(playerid);
-            FinalizarTrabajoBasurero(playerid);
             return 1;
         }
-
-        if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
-            SendClientMessage(playerid, 0xFFFF00FF, "[Basurero] Baja de la Rumpo y presiona H para recolectar la basura.");
+        case CP_TRABAJO_CAMIONERO: {
+            if(TrabajandoCamionero[playerid] >= 2 && GetPlayerVehicleID(playerid) != CamioneroVehiculo[playerid]) {
+                SendClientMessage(playerid, 0xFF0000FF, "TRABAJO CANCELADO: Debes estar en el vehiculo de la empresa.");
+                CanceladoTrabajo(playerid);
+                return 1;
+            }
+            if(TrabajandoCamionero[playerid] == 1) {
+                LimpiarCheckpointTrabajo(playerid);
+                TogglePlayerControllable(playerid, false);
+                GameTextForPlayer(playerid, "~w~CARGANDO...~n~~y~Espere", 3000, 3);
+                SetTimerEx("FinalizarCarga", 20000, false, "d", playerid);
+                TrabajandoCamionero[playerid] = 2;
+                EnviarEntornoAccion(playerid, "asegura la mercancia y comienza la carga del camion.");
+                return 1;
+            }
+            if(TrabajandoCamionero[playerid] == 3) {
+                LimpiarCheckpointTrabajo(playerid);
+                TogglePlayerControllable(playerid, false);
+                GameTextForPlayer(playerid, "~w~DESCARGANDO...~n~~y~Espere", 3000, 3);
+                SetTimerEx("FinalizarDescarga", 10000, false, "d", playerid);
+                TrabajandoCamionero[playerid] = 4;
+                EnviarEntornoAccion(playerid, "maniobra el camion y empieza la descarga de mercancia.");
+                return 1;
+            }
+            if(TrabajandoCamionero[playerid] == 5) {
+                LimpiarCheckpointTrabajo(playerid);
+                FinalizarTrabajo(playerid);
+            }
+            return 1;
+        }
+        case CP_TRABAJO_BASURERO: {
+            if(TrabajandoBasurero[playerid] <= 0) return 1;
+            if(BasureroDepositandoBolsa[playerid]) {
+                if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
+                    SendClientMessage(playerid, 0xFF0000FF, "[Basurero] Sube a la Rumpo para cargar la bolsa.");
+                    return 1;
+                }
+                SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Acercate a la Rumpo y presiona H para subir la bolsa.");
+                return 1;
+            }
+            if(BasureroEntregando[playerid] == 1) {
+                if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
+                    SendClientMessage(playerid, 0xFF0000FF, "Debes entregar la basura usando la Rumpo del trabajo.");
+                    return 1;
+                }
+                LimpiarCheckpointTrabajo(playerid);
+                FinalizarTrabajoBasurero(playerid);
+                return 1;
+            }
+            if(GetPlayerVehicleID(playerid) != BasureroVehiculo[playerid]) {
+                SendClientMessage(playerid, 0xFFFF00FF, "[Basurero] Baja de la Rumpo y presiona H para recolectar la basura.");
+                BasureroRecolectando[playerid] = true;
+                return 1;
+            }
+            LimpiarCheckpointTrabajo(playerid);
+            TrabajandoBasurero[playerid] = 2;
             BasureroRecolectando[playerid] = true;
+            SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Baja de la Rumpo y presiona H para recolectar (3s).");
             return 1;
         }
-        DisablePlayerCheckpoint(playerid);
-        TrabajandoBasurero[playerid] = 2;
-        BasureroRecolectando[playerid] = true;
-        SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Baja de la Rumpo y presiona H para recolectar (3s).");
-        return 1;
-    }
-
-    if(LenadorTrabajando[playerid] && LenadorEntregando[playerid]) {
-        if(GetPlayerVehicleID(playerid) != LenadorVehiculo[playerid]) return SendClientMessage(playerid, -1, "Debes usar la Sadler del trabajo para entregar.");
-        DisablePlayerCheckpoint(playerid);
-        new pagoBase = PAGO_POR_TRONCO_TALADOR * LenadorMaderaRuta[playerid];
-        new bonusNivel = TaladorNivel[playerid] * 50;
-        new bonusMembresia = GetBonusTrabajoMembresia(playerid);
-        new totalPago = pagoBase + bonusNivel + bonusMembresia;
-        KH_GivePlayerMoney(playerid, totalPago);
-        new msg[160];
-        format(msg, sizeof(msg), "[Talador] Entregaste %d tronco(s). Pago base:$%d | Nivel:$%d | Membresia:$%d | Total:$%d", LenadorMaderaRuta[playerid], pagoBase, bonusNivel, bonusMembresia, totalPago);
-        SendClientMessage(playerid, 0x66FF66FF, msg);
-        EnviarEntornoAccion(playerid, "descarga los troncos y cobra por el lote entregado.");
-        LenadorMaderaRuta[playerid] = 0;
-        LenadorEntregando[playerid] = false;
-        SetCheckpointArbolMasCercano(playerid);
-        return 1;
-    }
-
-    if(TrabajandoPizzero[playerid] == 1) {
-        if(GetPlayerVehicleID(playerid) != PizzeroVehiculo[playerid]) {
-            SendClientMessage(playerid, 0xFF0000FF, "PIZZERO CANCELADO: Debes usar la moto de la pizzeria.");
-            CanceladoTrabajoPizzero(playerid);
+        case CP_TRABAJO_LENADOR_ENTREGA: {
+            if(!(LenadorTrabajando[playerid] && LenadorEntregando[playerid])) return 1;
+            if(GetPlayerVehicleID(playerid) != LenadorVehiculo[playerid]) return SendClientMessage(playerid, -1, "Debes usar la Sadler del trabajo para entregar.");
+            LimpiarCheckpointTrabajo(playerid);
+            new pagoBase = PAGO_POR_TRONCO_TALADOR * LenadorMaderaRuta[playerid];
+            new bonusNivel = TaladorNivel[playerid] * 50;
+            new bonusMembresia = GetBonusTrabajoMembresia(playerid);
+            new totalPago = pagoBase + bonusNivel + bonusMembresia;
+            KH_GivePlayerMoney(playerid, totalPago);
+            new msg[160];
+            format(msg, sizeof(msg), "[Talador] Entregaste %d tronco(s). Pago base:$%d | Nivel:$%d | Membresia:$%d | Total:$%d", LenadorMaderaRuta[playerid], pagoBase, bonusNivel, bonusMembresia, totalPago);
+            SendClientMessage(playerid, 0x66FF66FF, msg);
+            EnviarEntornoAccion(playerid, "descarga los troncos y cobra por el lote entregado.");
+            LenadorMaderaRuta[playerid] = 0;
+            LenadorEntregando[playerid] = false;
+            if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
+            LenadorTrabajando[playerid] = false;
+            SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Entrega finalizada. La camioneta fue retirada; toma el trabajo nuevamente para otra ruta.");
             return 1;
         }
-        DisablePlayerCheckpoint(playerid);
-        TogglePlayerControllable(playerid, false);
-        ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
-        GameTextForPlayer(playerid, "~r~ENTREGANDO PIZZA", 2500, 3);
-        SetTimerEx("FinalizarEntregaPizza", 10000, false, "d", playerid);
-        TrabajandoPizzero[playerid] = 2;
-        EnviarEntornoAccion(playerid, "entrega una pizza y verifica el recibo del pedido.");
-        return 1;
+        case CP_TRABAJO_PIZZERO: {
+            if(TrabajandoPizzero[playerid] == 1) {
+                if(GetPlayerVehicleID(playerid) != PizzeroVehiculo[playerid]) {
+                    SendClientMessage(playerid, 0xFF0000FF, "PIZZERO CANCELADO: Debes usar la moto de la pizzeria.");
+                    CanceladoTrabajoPizzero(playerid);
+                    return 1;
+                }
+                LimpiarCheckpointTrabajo(playerid);
+                TogglePlayerControllable(playerid, false);
+                ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
+                GameTextForPlayer(playerid, "~r~ENTREGANDO PIZZA", 2500, 3);
+                SetTimerEx("FinalizarEntregaPizza", 10000, false, "d", playerid);
+                TrabajandoPizzero[playerid] = 2;
+                EnviarEntornoAccion(playerid, "entrega una pizza y verifica el recibo del pedido.");
+            }
+            return 1;
+        }
     }
     return 1;
 }
@@ -1922,7 +1965,7 @@ public FinalizarCarga(playerid) {
             CamioneroDestino[playerid][0] = rx;
             CamioneroDestino[playerid][1] = ry;
             CamioneroDestino[playerid][2] = rz;
-            SetPlayerCheckpoint(playerid, rx, ry, rz, 5.0);
+            SetCheckpointTrabajo(playerid, CP_TRABAJO_CAMIONERO, rx, ry, rz, 5.0);
             SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Carga completa. Entrega la mercancia en el checkpoint.");
         }
         fclose(h);
@@ -1940,19 +1983,143 @@ public ClearPlayerAnimLock(playerid) {
     return 1;
 }
 
+stock SetCheckpointTrabajo(playerid, eCheckpointTrabajo:tipo, Float:x, Float:y, Float:z, Float:size) {
+    SetPlayerCheckpoint(playerid, x, y, z, size);
+    PlayerCheckpointTrabajo[playerid] = _:tipo;
+    return 1;
+}
+
+stock LimpiarCheckpointTrabajo(playerid, bool:desactivar = true) {
+    if(desactivar) DisablePlayerCheckpoint(playerid);
+    PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+    return 1;
+}
+
+stock DejarTrabajoEspecifico(playerid, eTrabajoTipo:tipo) {
+    switch(tipo) {
+        case TRABAJO_CAMIONERO: {
+            if(TrabajandoCamionero[playerid] <= 0) return 0;
+            CanceladoTrabajo(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
+        }
+        case TRABAJO_PIZZERO: {
+            if(TrabajandoPizzero[playerid] <= 0) return 0;
+            CanceladoTrabajoPizzero(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de pizzero.");
+        }
+        case TRABAJO_BASURERO: {
+            if(TrabajandoBasurero[playerid] <= 0) return 0;
+            FinalizarTrabajoBasurero(playerid);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de basurero.");
+        }
+        case TRABAJO_MINERO: {
+            if(!MineroTrabajando[playerid]) return 0;
+            MineroTrabajando[playerid] = false;
+            MineroGPSActivo[playerid] = false;
+            LimpiarCheckpointTrabajo(playerid);
+            if(MineroTimer[playerid] != -1) { KillTimer(MineroTimer[playerid]); MineroTimer[playerid] = -1; }
+            TogglePlayerControllable(playerid, true);
+            if(IsPlayerAttachedObjectSlotUsed(playerid, 8)) RemovePlayerAttachedObject(playerid, 8);
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de minero.");
+        }
+        case TRABAJO_LENADOR: {
+            if(!LenadorTrabajando[playerid]) return 0;
+            LenadorTrabajando[playerid] = false;
+            LenadorEntregando[playerid] = false;
+            LenadorMaderaRuta[playerid] = 0;
+            LenadorArbolIndex[playerid] = -1;
+            if(LenadorTimer[playerid] != -1) { KillTimer(LenadorTimer[playerid]); LenadorTimer[playerid] = -1; }
+            TogglePlayerControllable(playerid, true);
+            ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+            if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
+            if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO); SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE); LenadorTieneTronco[playerid] = false; }
+            LimpiarCheckpointTrabajo(playerid);
+            if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de talador.");
+        }
+        case TRABAJO_MECANICO: {
+            if(MecanicoNivel[playerid] <= 0) return 0;
+            if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
+            if(MecanicoReparando[playerid]) {
+                ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+                TogglePlayerControllable(playerid, true);
+                new t = MecanicoRepairTarget[playerid];
+                if(IsPlayerConnected(t)) { TogglePlayerControllable(t, true); ClearAnimations(t, t_FORCE_SYNC:SYNC_ALL); SendClientMessage(t, 0xFFAA00FF, "Tu reparacion fue cancelada porque el mecanico abandono el trabajo."); }
+            }
+            MecanicoReparando[playerid] = false;
+            MecanicoRepairTarget[playerid] = -1;
+            MecanicoRepairType[playerid] = 0;
+            MecanicoRepairPrecio[playerid] = 0;
+            for(new i = 0; i < MAX_PLAYERS; i++) if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
+            LimpiarSolicitudMecanico(playerid);
+            MecanicoNivel[playerid] = 0;
+            MecanicoReparaciones[playerid] = 0;
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de mecanico.");
+        }
+        case TRABAJO_MEDICO: {
+            if(MedicoNivel[playerid] <= 0) return 0;
+            if(MedicoTratamientoTimer[playerid] != -1) { KillTimer(MedicoTratamientoTimer[playerid]); MedicoTratamientoTimer[playerid] = -1; }
+            if(MedicoTratando[playerid]) {
+                new t2 = MedicoTratamientoTarget[playerid];
+                TogglePlayerControllable(playerid, true);
+                ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+                if(IsPlayerConnected(t2)) { TogglePlayerControllable(t2, true); SendClientMessage(t2, 0xFFAA00FF, "Tu tratamiento fue cancelado porque el medico abandono el trabajo."); }
+            }
+            MedicoTratando[playerid] = false;
+            MedicoTratamientoTarget[playerid] = -1;
+            MedicoTratamientoTipo[playerid] = 0;
+            MedicoTratamientoPrecio[playerid] = 0;
+            for(new i2 = 0; i2 < MAX_PLAYERS; i2++) if(MedicoSolicitudPendiente[i2] == playerid) LimpiarSolicitudMedico(i2);
+            LimpiarSolicitudMedico(playerid);
+            MedicoNivel[playerid] = 0;
+            MedicoTratamientos[playerid] = 0;
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de medico.");
+        }
+    }
+    return 1;
+}
+
+stock ConstruirListaTrabajosActivos(playerid, lista[], len, bool:conIndices = false) {
+    format(lista, len, "");
+    DejarTrabajoOpcionesCount[playerid] = 0;
+    new line[72];
+    #define ADD_TRABAJO(_cond,_id,_txt) if(_cond) { if(conIndices) format(line, sizeof(line), "%d) %s\n", DejarTrabajoOpcionesCount[playerid] + 1, _txt); else format(line, sizeof(line), "%s\n", _txt); strcat(lista, line); DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = _id; }
+    ADD_TRABAJO(TrabajandoCamionero[playerid] > 0, TRABAJO_CAMIONERO, "Camionero")
+    ADD_TRABAJO(TrabajandoPizzero[playerid] > 0, TRABAJO_PIZZERO, "Pizzero")
+    ADD_TRABAJO(TrabajandoBasurero[playerid] > 0, TRABAJO_BASURERO, "Basurero")
+    ADD_TRABAJO(MineroTrabajando[playerid], TRABAJO_MINERO, "Minero")
+    ADD_TRABAJO(LenadorTrabajando[playerid], TRABAJO_LENADOR, "Talador")
+    ADD_TRABAJO(MecanicoNivel[playerid] > 0, TRABAJO_MECANICO, "Mecanico")
+    ADD_TRABAJO(MedicoNivel[playerid] > 0, TRABAJO_MEDICO, "Medico")
+    #undef ADD_TRABAJO
+    if(strlen(lista) > 0 && lista[strlen(lista) - 1] == '\n') lista[strlen(lista) - 1] = '\0';
+    return DejarTrabajoOpcionesCount[playerid];
+}
+
+stock ObtenerTrabajosActivosTexto(playerid, dest[], len) {
+    new lista[256];
+    new total = ConstruirListaTrabajosActivos(playerid, lista, sizeof(lista), false);
+    if(total <= 0) format(dest, len, "Ninguno");
+    else {
+        for(new i = 0; i < strlen(lista); i++) if(lista[i] == '\n') lista[i] = ',';
+        format(dest, len, "%s", lista);
+    }
+    return 1;
+}
+
 forward FinalizarEntregaPizza(playerid);
 forward ActualizarCultivo(playerid);
 public FinalizarDescarga(playerid) {
     TogglePlayerControllable(playerid, true);
     TrabajandoCamionero[playerid] = 5;
-    SetPlayerCheckpoint(playerid, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 5.0);
+    SetCheckpointTrabajo(playerid, CP_TRABAJO_CAMIONERO, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2], 5.0);
     SendClientMessage(playerid, -1, "{FFD700}[Camionero]{FFFFFF} Descarga lista. Regresa al deposito para cobrar.");
     EnviarEntornoAccion(playerid, "termina la descarga del camion y cierra la compuerta.");
     return 1;
 }
 
 stock CanceladoTrabajo(playerid) {
-    DisablePlayerCheckpoint(playerid);
+    LimpiarCheckpointTrabajo(playerid);
     if(CamioneroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(CamioneroVehiculo[playerid]);
     CamioneroVehiculo[playerid] = INVALID_VEHICLE_ID;
     TrabajandoCamionero[playerid] = 0;
@@ -2044,7 +2211,7 @@ public AsignarRutaPizzero(playerid) {
     PizzeroDestino[playerid][0] = rx;
     PizzeroDestino[playerid][1] = ry;
     PizzeroDestino[playerid][2] = rz;
-    SetPlayerCheckpoint(playerid, rx, ry, rz, 4.0);
+    SetCheckpointTrabajo(playerid, CP_TRABAJO_PIZZERO, rx, ry, rz, 4.0);
     TrabajandoPizzero[playerid] = 1;
     SendClientMessage(playerid, 0xFF8C00FF, "[Trabajo Pizzero] Nueva entrega asignada. Ve al checkpoint y entrega la pizza.");
     return 1;
@@ -2092,7 +2259,7 @@ public FinalizarEntregaPizza(playerid) {
 }
 
 stock CanceladoTrabajoPizzero(playerid) {
-    DisablePlayerCheckpoint(playerid);
+    LimpiarCheckpointTrabajo(playerid);
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     if(PizzeroVehiculo[playerid] != INVALID_VEHICLE_ID) DestroyVehicle(PizzeroVehiculo[playerid]);
@@ -2208,12 +2375,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new reqCam = GetRequisitoNivel(RequisitosCamionero, CamioneroNivel[playerid]);
         new reqPiz = GetRequisitoNivel(RequisitosPizzero, PizzeroNivel[playerid]);
         new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
+        new reqMin = GetRequisitoNivel(RequisitosMinero, MineroNivel[playerid]);
         new reqArm = GetRequisitoNivel(RequisitosArmero, ArmeroNivel[playerid]);
         new reqMec = GetRequisitoNivel(RequisitosMecanico, MecanicoNivel[playerid]);
         new reqTal = GetRequisitoNivel(RequisitosTalador, TaladorNivel[playerid]);
         new reqMed = GetRequisitoNivel(RequisitosMedico, MedicoNivel[playerid]);
-        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/%d\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
+        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{AAAAAA}Minero{FFFFFF} Nivel: {AAAAAA}%d/%d\n{AAAAAA}Extracciones:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/%d\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
             CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], reqCam,
+            MineroNivel[playerid], NIVEL_MAX_TRABAJO, MineroExtracciones[playerid], reqMin,
             PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], reqPiz,
             BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], reqBas,
             ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid], reqArm,
@@ -2260,7 +2429,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new body[1200], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8];
+        new body[1400], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8], trabajosActivos[200];
         if(PlayerFaccionId[playerid] != -1) {
             format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
             ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], faccionColorHex, sizeof(faccionColorHex));
@@ -2283,8 +2452,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new limitePrendas = GetLimitePrendasJugador(playerid);
         new limiteTrabajos = GetLimiteTrabajosJugador(playerid);
         new bonusTrabajo = GetBonusTrabajoMembresia(playerid);
+        ObtenerTrabajosActivosTexto(playerid, trabajosActivos, sizeof(trabajosActivos));
 
-        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d\n\n{66CCFF}Mecanico: {FFFFFF}Nivel %d/%d | Reparaciones %d/%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo, MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
+        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Trabajos activos: {FFFFFF}%s\n{FFD166}Bonus por trabajo: {00FF00}$%d\n\n{66CCFF}Mecanico: {FFFFFF}Nivel %d/%d | Reparaciones %d/%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, trabajosActivos, bonusTrabajo, MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -2417,81 +2587,10 @@ public OnPlayerCommandText(playerid, cmdtext[])
     }
 
     if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
-        if(TrabajandoCamionero[playerid] == 0 && TrabajandoPizzero[playerid] == 0 && TrabajandoBasurero[playerid] == 0 && !MineroTrabajando[playerid] && !LenadorTrabajando[playerid] && MecanicoNivel[playerid] <= 0 && MedicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
-        if(TrabajandoCamionero[playerid] > 0) {
-            CanceladoTrabajo(playerid);
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de camionero.");
-        }
-        if(TrabajandoPizzero[playerid] > 0) {
-            CanceladoTrabajoPizzero(playerid);
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de pizzero.");
-        }
-        if(TrabajandoBasurero[playerid] > 0) {
-            FinalizarTrabajoBasurero(playerid);
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de basurero.");
-        }
-        if(MineroTrabajando[playerid]) {
-            MineroTrabajando[playerid] = false;
-            MineroGPSActivo[playerid] = false;
-            DisablePlayerCheckpoint(playerid);
-            if(MineroTimer[playerid] != -1) { KillTimer(MineroTimer[playerid]); MineroTimer[playerid] = -1; }
-            TogglePlayerControllable(playerid, true);
-            RemovePlayerAttachedObject(playerid, 8);
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de minero.");
-        }
-        if(LenadorTrabajando[playerid]) {
-            LenadorTrabajando[playerid] = false;
-            LenadorEntregando[playerid] = false;
-            LenadorMaderaRuta[playerid] = 0;
-            LenadorArbolIndex[playerid] = -1;
-            if(LenadorTimer[playerid] != -1) { KillTimer(LenadorTimer[playerid]); LenadorTimer[playerid] = -1; }
-            TogglePlayerControllable(playerid, true);
-            ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-            if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
-            if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO); SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE); LenadorTieneTronco[playerid] = false; }
-            DisablePlayerCheckpoint(playerid);
-            if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de talador.");
-        }
-        if(MecanicoNivel[playerid] > 0) {
-            if(MecanicoRepairTimer[playerid] != -1) { KillTimer(MecanicoRepairTimer[playerid]); MecanicoRepairTimer[playerid] = -1; }
-            if(MecanicoReparando[playerid]) {
-                ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-                TogglePlayerControllable(playerid, true);
-                new t = MecanicoRepairTarget[playerid];
-                if(IsPlayerConnected(t)) { TogglePlayerControllable(t, true); ClearAnimations(t, t_FORCE_SYNC:SYNC_ALL); SendClientMessage(t, 0xFFAA00FF, "Tu reparacion fue cancelada porque el mecanico abandono el trabajo."); }
-            }
-            MecanicoReparando[playerid] = false;
-            MecanicoRepairTarget[playerid] = -1;
-            MecanicoRepairType[playerid] = 0;
-            MecanicoRepairPrecio[playerid] = 0;
-            for(new i = 0; i < MAX_PLAYERS; i++) {
-                if(MecanicoSolicitudPendiente[i] == playerid) LimpiarSolicitudMecanico(i);
-            }
-            LimpiarSolicitudMecanico(playerid);
-            MecanicoNivel[playerid] = 0;
-            MecanicoReparaciones[playerid] = 0;
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de mecanico.");
-        }
-        if(MedicoNivel[playerid] > 0) {
-            if(MedicoTratamientoTimer[playerid] != -1) { KillTimer(MedicoTratamientoTimer[playerid]); MedicoTratamientoTimer[playerid] = -1; }
-            if(MedicoTratando[playerid]) {
-                new t2 = MedicoTratamientoTarget[playerid];
-                TogglePlayerControllable(playerid, true);
-                ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-                if(IsPlayerConnected(t2)) { TogglePlayerControllable(t2, true); SendClientMessage(t2, 0xFFAA00FF, "Tu tratamiento fue cancelado porque el medico abandono el trabajo."); }
-            }
-            MedicoTratando[playerid] = false;
-            MedicoTratamientoTarget[playerid] = -1;
-            MedicoTratamientoTipo[playerid] = 0;
-            MedicoTratamientoPrecio[playerid] = 0;
-            for(new i2 = 0; i2 < MAX_PLAYERS; i2++) if(MedicoSolicitudPendiente[i2] == playerid) LimpiarSolicitudMedico(i2);
-            LimpiarSolicitudMedico(playerid);
-            MedicoNivel[playerid] = 0;
-            MedicoTratamientos[playerid] = 0;
-            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de medico.");
-        }
-        return 1;
+        new lista[256];
+        new total = ConstruirListaTrabajosActivos(playerid, lista, sizeof(lista), true);
+        if(total <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
+        return ShowPlayerDialog(playerid, DIALOG_DEJARTRABAJO, DIALOG_STYLE_LIST, "Dejar trabajo", lista, "Dejar", "Cancelar");
     }
 
     if(!strcmp(cmd, "/tirarbasura", true) || (!strcmp(cmd, "/tirar", true) && !strcmp(strtok(cmdtext, idx), "basura", true))) {
@@ -2499,7 +2598,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(BasureroTieneBolsa[playerid]) return SendClientMessage(playerid, -1, "Primero sube la bolsa a la Rumpo con H.");
         if(BasureroRecolectado[playerid] <= 0) return SendClientMessage(playerid, -1, "No has recolectado bolsas aun.");
         BasureroEntregando[playerid] = 1;
-        SetPlayerCheckpoint(playerid, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
+        SetCheckpointTrabajo(playerid, CP_TRABAJO_BASURERO, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
         SendClientMessage(playerid, 0xFFAA00FF, "Entrega activada. Ve al vertedero para cobrar lo recolectado hasta ahora.");
         return 1;
     }
@@ -2509,7 +2608,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Primero carga los troncos en la Sadler con H.");
         if(LenadorMaderaRuta[playerid] <= 0) return SendClientMessage(playerid, -1, "No has subido troncos aun.");
         LenadorEntregando[playerid] = true;
-        SetPlayerCheckpoint(playerid, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
+        SetCheckpointTrabajo(playerid, CP_TRABAJO_LENADOR_ENTREGA, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
         SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Entrega activada. Lleva la camioneta al mismo CP del trabajo para cobrar por troncos.");
         return 1;
     }
@@ -3478,6 +3577,8 @@ public OnPlayerConnect(playerid) {
     AdminMembresiaTipoPendiente[playerid] = MEMBRESIA_NINGUNA;
     AdminMembresiaTargetPendiente[playerid] = -1;
     AdminPrecioVipDineroPendiente[playerid] = 0;
+    PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
+    DejarTrabajoOpcionesCount[playerid] = 0;
     format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
     GasRefuelTimer[playerid] = -1;
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
@@ -3581,6 +3682,7 @@ public OnPlayerConnect(playerid) {
 
 public OnPlayerSpawn(playerid) {
     if(!IsPlayerLoggedIn[playerid]) return Kick(playerid);
+    SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
     ExpirarMembresiaSiCorresponde(playerid);
     ActualizarBeneficiosMembresia(playerid);
     SetPlayerSkin(playerid, PlayerSkinGuardada[playerid]);
@@ -3650,6 +3752,13 @@ stock SpawnPlayerAfterAuth(playerid)
 public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(PlayerSancionado[playerid]) return SendClientMessage(playerid, 0xFF4444FF, "Estas sancionado: no puedes usar dialogos durante la sancion.");
+
+    if(dialogid == DIALOG_DEJARTRABAJO) {
+        if(!response) return 1;
+        if(listitem < 0 || listitem >= DejarTrabajoOpcionesCount[playerid]) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        DejarTrabajoEspecifico(playerid, eTrabajoTipo:DejarTrabajoOpciones[playerid][listitem]);
+        return 1;
+    }
 
     if(dialogid == DIALOG_DUDA_TEXTO) {
         if(!response) return 1;
@@ -6846,9 +6955,7 @@ public OnPlayerUpdate(playerid) {
             if(vehHealth >= 900.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0x6BF27DFF);
             else if(vehHealth >= 600.0) PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFFD166FF);
             else PlayerTextDrawColour(playerid, TextoVehiculoDL[playerid], 0xFF6B6BFF);
-            if(kmh >= 150) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF2020FF);
-            else if(kmh >= 120) PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFF7F7FFF);
-            else PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xD8FFFFFF);
+            PlayerTextDrawColour(playerid, TextoVelocimetro[playerid], 0xFFFFFFFF);
             if(GasVehiculo[vehid] <= 0) {
                 new engine, lights, alarm, doors, bonnet, boot, objective;
                 GetVehicleParamsEx(vehid, engine, lights, alarm, doors, bonnet, boot, objective);
@@ -6870,6 +6977,20 @@ forward RespawnAutomaticoJugador(playerid);
 public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
     #pragma unused killerid
     #pragma unused reason
+    TogglePlayerControllable(playerid, true);
+    ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+    SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, BIDON_ATTACH_SLOT)) RemovePlayerAttachedObject(playerid, BIDON_ATTACH_SLOT);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, 8)) RemovePlayerAttachedObject(playerid, 8);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9);
+    LenadorTieneTronco[playerid] = false;
+    BasureroBolsaVisible[playerid] = false;
+    BasureroTieneBolsa[playerid] = false;
+    BasureroDepositandoBolsa[playerid] = false;
+    if(MineroTimer[playerid] != -1) { KillTimer(MineroTimer[playerid]); MineroTimer[playerid] = -1; }
+    if(LenadorTimer[playerid] != -1) { KillTimer(LenadorTimer[playerid]); LenadorTimer[playerid] = -1; }
     OmitirArmasEnProximoSpawn[playerid] = true;
     for(new w = 0; w < MAX_WEAPON_ID_GM; w++) {
         PlayerArmaComprada[playerid][w] = false;
@@ -7316,14 +7437,14 @@ stock IniciarRutaBasurero(playerid) {
     BasureroDestino[playerid][0] = BasuraRuta[punto][0];
     BasureroDestino[playerid][1] = BasuraRuta[punto][1];
     BasureroDestino[playerid][2] = BasuraRuta[punto][2];
-    SetPlayerCheckpoint(playerid, BasureroDestino[playerid][0], BasureroDestino[playerid][1], BasureroDestino[playerid][2], 4.0);
+    SetCheckpointTrabajo(playerid, CP_TRABAJO_BASURERO, BasureroDestino[playerid][0], BasureroDestino[playerid][1], BasureroDestino[playerid][2], 4.0);
     TrabajandoBasurero[playerid] = 1;
     ActualizarHUDRecolectaBasurero(playerid);
     return 1;
 }
 
 stock FinalizarTrabajoBasurero(playerid) {
-    DisablePlayerCheckpoint(playerid);
+    LimpiarCheckpointTrabajo(playerid);
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
 
@@ -9488,8 +9609,8 @@ stock GetArbolDisponibleMasCercano(playerid, ignorar = -1) {
 
 stock SetCheckpointArbolMasCercano(playerid) {
     new a = GetArbolDisponibleMasCercano(playerid);
-    if(a == -1) { DisablePlayerCheckpoint(playerid); return 0; }
-    SetPlayerCheckpoint(playerid, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ], 4.5);
+    if(a == -1) { LimpiarCheckpointTrabajo(playerid); return 0; }
+    SetCheckpointTrabajo(playerid, CP_TRABAJO_LENADOR_ARBOL, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ], 4.5);
     return 1;
 }
 
@@ -10293,10 +10414,10 @@ stock GetMinaDisponibleMasCercana(playerid, ignorar = -1) {
 stock SetCheckpointMinaMasCercana(playerid) {
     new mina = GetMinaDisponibleMasCercana(playerid);
     if(mina == -1) {
-        DisablePlayerCheckpoint(playerid);
+        LimpiarCheckpointTrabajo(playerid);
         return 0;
     }
-    SetPlayerCheckpoint(playerid, MinaData[mina][minaX], MinaData[mina][minaY], MinaData[mina][minaZ], 4.5);
+    SetCheckpointTrabajo(playerid, CP_TRABAJO_MINERO, MinaData[mina][minaX], MinaData[mina][minaY], MinaData[mina][minaZ], 4.5);
     return 1;
 }
 
