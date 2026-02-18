@@ -1829,6 +1829,9 @@ public OnPlayerEnterCheckpoint(playerid)
     }
 
     switch(PlayerCheckpointTrabajo[playerid]) {
+        case CP_TRABAJO_NINGUNO: {
+            return 1;
+        }
         case CP_TRABAJO_MINERO: {
             if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
                 LimpiarCheckpointTrabajo(playerid);
@@ -2087,43 +2090,43 @@ stock ConstruirListaTrabajosActivos(playerid, lista[], len, bool:conIndices = fa
     if(TrabajandoCamionero[playerid] > 0) {
         if(conIndices) format(line, sizeof(line), "%d) Camionero\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Camionero\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_CAMIONERO;
     }
     if(TrabajandoPizzero[playerid] > 0) {
         if(conIndices) format(line, sizeof(line), "%d) Pizzero\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Pizzero\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_PIZZERO;
     }
     if(TrabajandoBasurero[playerid] > 0) {
         if(conIndices) format(line, sizeof(line), "%d) Basurero\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Basurero\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_BASURERO;
     }
     if(MineroTrabajando[playerid]) {
         if(conIndices) format(line, sizeof(line), "%d) Minero\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Minero\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_MINERO;
     }
     if(LenadorTrabajando[playerid]) {
         if(conIndices) format(line, sizeof(line), "%d) Talador\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Talador\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_LENADOR;
     }
     if(MecanicoNivel[playerid] > 0) {
         if(conIndices) format(line, sizeof(line), "%d) Mecanico\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Mecanico\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_MECANICO;
     }
     if(MedicoNivel[playerid] > 0) {
         if(conIndices) format(line, sizeof(line), "%d) Medico\n", DejarTrabajoOpcionesCount[playerid] + 1);
         else format(line, sizeof(line), "Medico\n");
-        strcat(lista, line);
+        strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_MEDICO;
     }
 
@@ -5112,7 +5115,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(!FaccionData[f][facActiva]) continue;
             if(lista[0]) strcat(lista, "\n");
             format(line, sizeof(line), "[%d] %s", f, FaccionData[f][facNombre]);
-            strcat(lista, line);
+            strcat(lista, line, len);
         }
         if(!lista[0]) return SendClientMessage(playerid, -1, "No hay facciones registradas.");
         return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_LISTA, DIALOG_STYLE_LIST, "Admin - Selecciona faccion", lista, "Elegir", "Atras");
@@ -7825,8 +7828,8 @@ stock ActualizarTopDinero() {
         );
     }
 
-    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    if(PuntoLabel[ePuntoMovible:puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[ePuntoMovible:puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
