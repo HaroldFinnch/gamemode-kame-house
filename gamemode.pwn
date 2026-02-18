@@ -2852,8 +2852,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!EsStaff(playerid)) return SendClientMessage(playerid, 0xFF4444FF, "[SEERVER] Comando no encontrado en Kame House RP");
-
     if(!strcmp(cmd, "/crearparada", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
         new Float:p[3], File:h = fopen(PATH_RUTAS, io_append), line[64];
@@ -4134,7 +4132,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_MEDICO_CURAR_ID) {
         if(!response) { DeletePVar(playerid, "MedicoModoProte"); return 1; }
         if(MedicoNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de medico primero.");
-        new target = strval(inputtext);
+        new argIdx = 0;
+        new targetTxt[16];
+        format(targetTxt, sizeof(targetTxt), "%s", strtok(inputtext, argIdx));
+        if(!targetTxt[0]) return SendClientMessage(playerid, -1, "Debes ingresar un ID valido.");
+        for(new c = 0; targetTxt[c] != EOS; c++) {
+            if(targetTxt[c] < '0' || targetTxt[c] > '9') return SendClientMessage(playerid, -1, "El ID debe contener solo numeros.");
+        }
+        new target = strval(targetTxt);
         new tipo = GetPVarInt(playerid, "MedicoModoProte") == 1 ? 2 : 1;
         DeletePVar(playerid, "MedicoModoProte");
         if(!IsPlayerConnected(target) || target == playerid) return SendClientMessage(playerid, -1, "ID invalido.");
