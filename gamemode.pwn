@@ -5143,7 +5143,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(!FaccionData[f][facActiva]) continue;
             if(lista[0]) strcat(lista, "\n");
             format(line, sizeof(line), "[%d] %s", f, FaccionData[f][facNombre]);
-            strcat(lista, line, len);
+            strcat(lista, line, sizeof(lista));
         }
         if(!lista[0]) return SendClientMessage(playerid, -1, "No hay facciones registradas.");
         return ShowPlayerDialog(playerid, DIALOG_ADMIN_FACCIONES_LISTA, DIALOG_STYLE_LIST, "Admin - Selecciona faccion", lista, "Elegir", "Atras");
@@ -7537,12 +7537,10 @@ stock FinalizarTrabajoBasurero(playerid) {
         if(bonusMembresia > 0) pago += bonusMembresia;
         KH_GivePlayerMoney(playerid, pago);
 
-        new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
-
         new msg[200];
         format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Pago base:$%d | Recoleccion:$%d | Nivel:$%d | Bonus membresia:$%d | Total:$%d", pagoBase, pagoRecolecta, pagoNivel, bonusMembresia, pago);
         SendClientMessage(playerid, 0x66FF66FF, msg);
-        reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
+        new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
         format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", BasureroRecorridos[playerid], reqBas, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         if(BasureroFloresEncontradas[playerid] > 0) {
@@ -7856,8 +7854,9 @@ stock ActualizarTopDinero() {
         );
     }
 
-    if(PuntoLabel[ePuntoMovible:puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[ePuntoMovible:puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    new Text3D:topDineroLabel = PuntoLabel[puntoTopDinero];
+    if(topDineroLabel != Text3D:-1) {
+        Update3DTextLabelText(topDineroLabel, 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
