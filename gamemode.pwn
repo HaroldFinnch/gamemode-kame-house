@@ -3100,7 +3100,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/prenda", true)) {
         PrendaEditIndex[playerid] = -1;
-        ShowPrendaUsuarioMenu(playerid);
+        ShowPrendasMenu(playerid);
         return 1;
     }
 
@@ -9909,7 +9909,10 @@ stock ShowPrendaUsuarioMenu(playerid) {
         strcat(list, line);
         count++;
     }
-    if(count == 0) return SendClientMessage(playerid, -1, "No tienes prendas compradas para editar.");
+    if(count == 0) {
+        SendClientMessage(playerid, -1, "No tienes prendas compradas para editar. Te abrimos la tienda de prendas.");
+        return ShowPrendasMenu(playerid);
+    }
     return ShowPlayerDialog(playerid, DIALOG_PRENDA_USUARIO_MENU, DIALOG_STYLE_LIST, "Mis prendas", list, "Editar", "Cerrar");
 }
 
