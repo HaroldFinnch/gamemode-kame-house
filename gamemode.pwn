@@ -208,6 +208,8 @@
 #define DIALOG_MEDICO_CURAR_ID 172
 #define DIALOG_MEDICO_SOLICITUD 173
 #define DIALOG_DEJARTRABAJO 174
+#define DIALOG_ID_BUSCAR 175
+#define DIALOG_ID_INFO 176
 #define DIALOG_ADMIN_NIVELES_MENU 153
 #define DIALOG_ADMIN_SET_NIVEL_ID 154
 #define DIALOG_ADMIN_SET_NIVEL_VALOR 155
@@ -340,7 +342,7 @@
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 12
+#define CUENTA_DATA_VERSION 13
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -369,6 +371,8 @@ new PlayerBankMoney[MAX_PLAYERS];
 new BankTransferTarget[MAX_PLAYERS] = {-1, ...};
 new PlayerTiempoJugadoMin[MAX_PLAYERS];
 new PlayerCorreo[MAX_PLAYERS][64];
+new PlayerFechaRegistro[MAX_PLAYERS][16];
+new PlayerPinPerfil[MAX_PLAYERS];
 new bool:AdminModoDios[MAX_PLAYERS];
 new PlayerDiamantes[MAX_PLAYERS];
 new PlayerMembresiaTipo[MAX_PLAYERS];
@@ -999,6 +1003,9 @@ stock LimpiarCheckpointTrabajo(playerid, bool:desactivar = true);
 stock DejarTrabajoEspecifico(playerid, eTrabajoTipo:tipo);
 stock ConstruirListaTrabajosActivos(playerid, lista[], len, bool:conIndices = false);
 stock ObtenerTrabajosActivosTexto(playerid, dest[], len);
+stock GetPrendaAttachSlot(idx);
+stock GenerarFechaActualTexto(dest[], len);
+stock FormatearInfoJugadorPublica(targetid, dest[], len, bool:enChat = false);
 public FinalizarRecolectaBasura(playerid) {
     if(!IsPlayerConnected(playerid) || TrabajandoBasurero[playerid] == 0) return 1;
     TogglePlayerControllable(playerid, true);
@@ -1615,7 +1622,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMecanico][0], PuntoPos[puntoMecanico][1], PuntoPos[puntoMecanico][2])) {
         if(MecanicoNivel[playerid] <= 0) {
-            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
             MecanicoNivel[playerid] = 1;
             MecanicoReparaciones[playerid] = 0;
             SendClientMessage(playerid, 0x66CCFFFF, "[Mecanico] Trabajo activado. Usa /reparar para ofrecer servicio.");
@@ -1628,7 +1635,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMedico][0], PuntoPos[puntoMedico][1], PuntoPos[puntoMedico][2])) {
         if(MedicoNivel[playerid] <= 0) {
-            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
             MedicoNivel[playerid] = 1;
             MedicoTratamientos[playerid] = 0;
             SendClientMessage(playerid, 0x66FF99FF, "[Medico] Trabajo activado. Usa /curar para atender pacientes.");
@@ -1642,7 +1649,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Sistema de minero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
         if(MineroTrabajando[playerid]) return SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ya tienes este trabajo activo.");
-        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
         MineroTrabajando[playerid] = true;
         MineroGPSActivo[playerid] = true;
         SetCheckpointMinaMasCercana(playerid);
@@ -1653,7 +1660,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2])) {
         if(LenadorTrabajando[playerid]) return SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Ya tienes este trabajo activo.");
-        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
         LenadorTrabajando[playerid] = true;
         LenadorEntregando[playerid] = false;
         LenadorMaderaRuta[playerid] = 0;
@@ -1780,7 +1787,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2]))
     {
         if(TrabajandoCamionero[playerid] > 0) return SendClientMessage(playerid, 0xFFD700FF, "[Camionero] Ya tienes este trabajo activo.");
-        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
 
         CrearVehiculoTrabajoUnico(playerid, 498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 0, 0, CamioneroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, CamioneroVehiculo[playerid], 0);
@@ -1796,7 +1803,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2]))
     {
         if(TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, 0xFF8C00FF, "[Pizzero] Ya tienes este trabajo activo.");
-        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
 
         CrearVehiculoTrabajoUnico(playerid, 448, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, PizzeroVehiculo[playerid]);
         PutPlayerInVehicle(playerid, PizzeroVehiculo[playerid], 0);
@@ -1810,7 +1817,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2]))
     {
         if(TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ya tienes este trabajo activo.");
-        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+        if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
         if(TotalRutasBasura <= 0) return SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de basura cargadas.");
 
         CrearVehiculoTrabajoUnico(playerid, 440, PuntoPos[puntoBasurero][0] + 4.0, PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2] + 1.0, 0.0, 0, 0, BasureroVehiculo[playerid]);
@@ -2173,6 +2180,39 @@ stock ObtenerTrabajosActivosTexto(playerid, dest[], len) {
     return 1;
 }
 
+stock GetPrendaAttachSlot(idx) {
+    if(idx < 0 || idx >= MAX_PRENDAS) return -1;
+    return 20 + idx;
+}
+
+stock GenerarFechaActualTexto(dest[], len) {
+    new y, m, d;
+    getdate(y, m, d);
+    format(dest, len, "%02d/%02d/%04d", d, m, y);
+    return 1;
+}
+
+stock FormatearInfoJugadorPublica(targetid, dest[], len, bool:enChat = false) {
+    if(!IsPlayerConnected(targetid)) return format(dest, len, "Jugador desconectado.");
+
+    new nombre[MAX_PLAYER_NAME], membresiaTexto[24], faccionTexto[40], pinTexto[16], fechaTexto[20];
+    GetPlayerName(targetid, nombre, sizeof(nombre));
+    GetMembresiaNombre(PlayerMembresiaTipo[targetid], membresiaTexto, sizeof(membresiaTexto));
+
+    if(PlayerFaccionId[targetid] != -1 && FaccionData[PlayerFaccionId[targetid]][facActiva]) format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[targetid]][facNombre]);
+    else format(faccionTexto, sizeof(faccionTexto), "Ninguna");
+
+    if(PlayerPinPerfil[targetid] > 0) format(pinTexto, sizeof(pinTexto), "%04d", PlayerPinPerfil[targetid]);
+    else format(pinTexto, sizeof(pinTexto), "N/A");
+
+    if(!strlen(PlayerFechaRegistro[targetid])) format(fechaTexto, sizeof(fechaTexto), "N/A");
+    else format(fechaTexto, sizeof(fechaTexto), "%s", PlayerFechaRegistro[targetid]);
+
+    if(enChat) format(dest, len, "[ID %d] Nombre:%s | Membresia:%s | Faccion:%s | Nivel PJ:%d | PIN:%s | Registro:%s", targetid, nombre, membresiaTexto, faccionTexto, GetNivelPJ(targetid), pinTexto, fechaTexto);
+    else format(dest, len, "{66CCFF}ID: {FFFFFF}%d\n{66CCFF}Nombre: {FFFFFF}%s\n{66CCFF}Membresia: {FFFFFF}%s\n{66CCFF}Faccion: {FFFFFF}%s\n{66CCFF}Nivel PJ: {FFFFFF}%d\n{66CCFF}PIN: {FFFFFF}%s\n{66CCFF}Se unio: {FFFFFF}%s", targetid, nombre, membresiaTexto, faccionTexto, GetNivelPJ(targetid), pinTexto, fechaTexto);
+    return 1;
+}
+
 forward FinalizarEntregaPizza(playerid);
 forward ActualizarCultivo(playerid);
 public FinalizarDescarga(playerid) {
@@ -2497,7 +2537,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new horas = faltanMin / 60;
         new mins = faltanMin % 60;
 
-        new body[1400], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8], trabajosActivos[200];
+        new body[1200], pagoHora = nivelActual * 500, faccionTexto[32], membresiaTexto[24], vigenciaTexto[48], faccionColorHex[8];
         if(PlayerFaccionId[playerid] != -1) {
             format(faccionTexto, sizeof(faccionTexto), "%s", FaccionData[PlayerFaccionId[playerid]][facNombre]);
             ConvertirColorAHexRGB(FaccionData[PlayerFaccionId[playerid]][facColor], faccionColorHex, sizeof(faccionColorHex));
@@ -2520,9 +2560,8 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new limitePrendas = GetLimitePrendasJugador(playerid);
         new limiteTrabajos = GetLimiteTrabajosJugador(playerid);
         new bonusTrabajo = GetBonusTrabajoMembresia(playerid);
-        ObtenerTrabajosActivosTexto(playerid, trabajosActivos, sizeof(trabajosActivos));
 
-        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Trabajos activos: {FFFFFF}%s\n{FFD166}Bonus por trabajo: {00FF00}$%d\n\n{66CCFF}Mecanico: {FFFFFF}Nivel %d/%d | Reparaciones %d/%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, trabajosActivos, bonusTrabajo, MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
+        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d\n\n{66CCFF}Mecanico: {FFFFFF}Nivel %d/%d | Reparaciones %d/%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo, MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -2654,7 +2693,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if(!strcmp(cmd, "/dejartrabajo", true) || !strcmp(cmd, "/cancelartrabajo", true)) {
+    if(!strcmp(cmd, "/trabajos", true)) {
         new lista[256];
         new total = ConstruirListaTrabajosActivos(playerid, lista, sizeof(lista), true);
         if(total <= 0) return SendClientMessage(playerid, -1, "No tienes un trabajo activo.");
@@ -2696,6 +2735,19 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return ShowPlayerDialog(playerid, DIALOG_MEDICO_CURAR_ID, DIALOG_STYLE_INPUT, "{66FF99}Trabajo De Medico Kame House", "Ingresa el ID del jugador al que deseas rellenar chaleco:", "Enviar", "Cancelar");
     }
     if(!strcmp(cmd, "/gps", true)) return SendClientMessage(playerid, -1, "El GPS ahora solo se usa desde /telefono.");
+
+    if(!strcmp(cmd, "/id", true)) {
+        return ShowPlayerDialog(playerid, DIALOG_ID_BUSCAR, DIALOG_STYLE_INPUT, "Consulta de jugador", "Ingresa el ID del jugador a consultar:", "Ver", "Cancelar");
+    }
+
+    if(!strcmp(cmd, "/idd", true)) {
+        if(!cmdtext[idx]) return SendClientMessage(playerid, -1, "Uso: /idd [ID]");
+        new target = strval(cmdtext[idx]);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "ID invalido o jugador desconectado.");
+        new infoLinea[256];
+        FormatearInfoJugadorPublica(target, infoLinea, sizeof(infoLinea), true);
+        return SendClientMessage(playerid, 0x66CCFFFF, infoLinea);
+    }
 
     if(!strcmp(cmd, "/ayuda", true)) {
         ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nSistemas\nMembresias\nRol y reglas", "Ver", "Cerrar");
@@ -3646,6 +3698,8 @@ public OnPlayerConnect(playerid) {
     PlayerCheckpointTrabajo[playerid] = CP_TRABAJO_NINGUNO;
     DejarTrabajoOpcionesCount[playerid] = 0;
     format(PlayerCorreo[playerid], sizeof(PlayerCorreo[]), "");
+    format(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]), "");
+    PlayerPinPerfil[playerid] = 0;
     GasRefuelTimer[playerid] = -1;
     GasRefuelVeh[playerid] = INVALID_VEHICLE_ID;
     GasRefuelCost[playerid] = 0;
@@ -3735,7 +3789,8 @@ public OnPlayerConnect(playerid) {
         PlayerPrendaScaleX[playerid][pi] = 0.0; PlayerPrendaScaleY[playerid][pi] = 0.0; PlayerPrendaScaleZ[playerid][pi] = 0.0;
         PlayerPrendaModelo[playerid][pi] = 0;
         format(PlayerPrendaNombre[playerid][pi], 32, "");
-        RemovePlayerAttachedObject(playerid, pi);
+        new slotPrenda = GetPrendaAttachSlot(pi);
+        if(slotPrenda != -1 && IsPlayerAttachedObjectSlotUsed(playerid, slotPrenda)) RemovePlayerAttachedObject(playerid, slotPrenda);
     }
 
     new path[64];
@@ -3778,7 +3833,8 @@ public OnPlayerSpawn(playerid) {
     }
     SetCameraBehindPlayer(playerid);
     for(new pi = 0; pi < MAX_PRENDAS; pi++) {
-        RemovePlayerAttachedObject(playerid, pi);
+        new slotPrenda = GetPrendaAttachSlot(pi);
+        if(slotPrenda != -1 && IsPlayerAttachedObjectSlotUsed(playerid, slotPrenda)) RemovePlayerAttachedObject(playerid, slotPrenda);
         if(PlayerPrendaComprada[playerid][pi] && PlayerPrendaActiva[playerid][pi]) AplicarPrendaJugador(playerid, pi);
     }
     ActualizarLabelJugadorFaccion(playerid, true);
@@ -3824,6 +3880,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem < 0 || listitem >= DejarTrabajoOpcionesCount[playerid]) return SendClientMessage(playerid, -1, "Seleccion invalida.");
         DejarTrabajoEspecifico(playerid, eTrabajoTipo:DejarTrabajoOpciones[playerid][listitem]);
         return 1;
+    }
+
+    if(dialogid == DIALOG_ID_BUSCAR) {
+        if(!response) return 1;
+        new target = strval(inputtext);
+        if(!IsPlayerConnected(target)) return SendClientMessage(playerid, -1, "ID invalido o jugador desconectado.");
+        new info[512];
+        FormatearInfoJugadorPublica(target, info, sizeof(info), false);
+        return ShowPlayerDialog(playerid, DIALOG_ID_INFO, DIALOG_STYLE_MSGBOX, "Informacion de jugador", info, "Cerrar", "");
     }
 
     if(dialogid == DIALOG_DUDA_TEXTO) {
@@ -3982,8 +4047,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: /mina, H en mina, H en horno, /inventario (/inv), /dejartrabajo.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y subelas a la Rumpo con H (cada bolsa subida cuenta para skill).\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: /mina, H en mina, H en horno, /inventario (/inv), /trabajos.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /trabajos.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y subelas a la Rumpo con H (cada bolsa subida cuenta para skill).\n- Comandos: H en bolsa/camion, /tirarbasura, /trabajos.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /trabajos.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /trabajos.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /fc para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.
+
+{66FFFF}Identificacion:{FFFFFF} /id (panel) y /idd [ID] (chat) para ver datos publicos de jugadores.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
@@ -4875,7 +4942,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
             return ShowPrendaUsuarioEditar(playerid, idxp);
         }
-        new bones[] = {2,1,1,3,4,5,6,7,8,9,10};
+        new bones[] = {1,2,3,4,5,6,7,8,9,10,11};
         if(listitem < 0 || listitem >= sizeof(bones)) return 1;
         if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) {
             PrendasData[idxp][prendaBone] = bones[listitem];
@@ -4908,7 +4975,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) {
             PrendaMoveIndex[playerid] = idxp;
             AplicarPrendaJugador(playerid, idxp);
-            EditAttachedObject(playerid, idxp);
+            EditAttachedObject(playerid, GetPrendaAttachSlot(idxp));
             return 1;
         }
         if(listitem == 1) {
@@ -5859,7 +5926,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return 1;
         if(listitem == 0) {
             if(ArmeroNivel[playerid] > 0) return SendClientMessage(playerid, 0x66CCFFFF, "[Armero] Ya tienes este trabajo activo.");
-            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /trabajos para liberar un cupo.");
             ArmeroNivel[playerid] = 1;
             ArmeroExp[playerid] = 0;
             SendClientMessage(playerid, 0x66CCFFFF, "[Armero] Trabajo activado. Usa /armero para craftear armas y municion.");
@@ -6291,6 +6358,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(line, 128, "%s\n%d\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n2494.24\n-1671.19\n13.33", PlayerPassword[playerid], DINERO_INICIAL);
             fwrite(h, line); fclose(h);
             IsPlayerLoggedIn[playerid] = true;
+            GenerarFechaActualTexto(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]));
+            PlayerPinPerfil[playerid] = random(9000) + 1000;
             KH_GivePlayerMoney(playerid, DINERO_INICIAL, false);
             ActualizarNivelPJ(playerid);
             GuardarCuenta(playerid);
@@ -6472,6 +6541,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             }
                         }
 
+                        format(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]), "");
+                        PlayerPinPerfil[playerid] = 0;
+                        if(dataVersion >= 13) {
+                            if(fread(h, line)) { LimpiarLinea(line); format(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]), "%s", line); }
+                            if(fread(h, line)) PlayerPinPerfil[playerid] = strval(line);
+                        }
+                        if(!strlen(PlayerFechaRegistro[playerid])) GenerarFechaActualTexto(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]));
+                        if(PlayerPinPerfil[playerid] <= 0) PlayerPinPerfil[playerid] = random(9000) + 1000;
+
                         if(fread(h, line)) {
                             LimpiarLinea(line);
                             if(strcmp(line, CUENTA_SECCION_PRENDAS, false) == 0) {
@@ -6574,6 +6652,12 @@ public GuardarCuenta(playerid) {
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", PlayerCorreo[playerid]);
+            fwrite(h, line);
+
+            format(line, sizeof(line), "\n%s", PlayerFechaRegistro[playerid]);
+            fwrite(h, line);
+
+            format(line, sizeof(line), "\n%d", PlayerPinPerfil[playerid]);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", CUENTA_SECCION_PRENDAS);
@@ -8001,7 +8085,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /skill /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /dejartroncos /plantar /reparar /curar /prote /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /skill /pj /inventario /comer /consumir /telefono /id /idd.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /trabajos /tirarbasura /dejartroncos /plantar /reparar /curar /prote /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -9847,14 +9931,17 @@ stock AplicarPrendaJugador(playerid, idx) {
     new Float:scY = PlayerPrendaScaleY[playerid][idx] > 0.0 ? PlayerPrendaScaleY[playerid][idx] : PrendasData[idx][prendaScaleY];
     new Float:scZ = PlayerPrendaScaleZ[playerid][idx] > 0.0 ? PlayerPrendaScaleZ[playerid][idx] : PrendasData[idx][prendaScaleZ];
     new model = PlayerPrendaModelo[playerid][idx] > 0 ? PlayerPrendaModelo[playerid][idx] : PrendasData[idx][prendaModelo];
-    SetPlayerAttachedObject(playerid, idx, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
+    new slot = GetPrendaAttachSlot(idx);
+    if(slot < 0) return 0;
+    SetPlayerAttachedObject(playerid, slot, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
     return 1;
 }
 
 stock QuitarPrendaJugador(playerid, idx) {
     if(idx < 0 || idx >= MAX_PRENDAS) return 0;
     PlayerPrendaActiva[playerid][idx] = 0;
-    if(IsPlayerAttachedObjectSlotUsed(playerid, idx)) RemovePlayerAttachedObject(playerid, idx);
+    new slot = GetPrendaAttachSlot(idx);
+    if(slot != -1 && IsPlayerAttachedObjectSlotUsed(playerid, slot)) RemovePlayerAttachedObject(playerid, slot);
     return 1;
 }
 
@@ -9930,28 +10017,30 @@ stock ShowPrendaUsuarioEditar(playerid, idx) {
 public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, modelid, boneid, Float:fOffsetX, Float:fOffsetY, Float:fOffsetZ, Float:fRotX, Float:fRotY, Float:fRotZ, Float:fScaleX, Float:fScaleY, Float:fScaleZ) {
     #pragma unused modelid
     #pragma unused boneid
-    if(response == EDIT_RESPONSE_FINAL && PrendaMoveIndex[playerid] == index && index >= 0 && index < MAX_PRENDAS) {
-        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] == index && !PlayerPrendaComprada[playerid][index]) {
-            PrendasData[index][prendaOffX] = fOffsetX;
-            PrendasData[index][prendaOffY] = fOffsetY;
-            PrendasData[index][prendaOffZ] = fOffsetZ;
-            PrendasData[index][prendaRotX] = fRotX;
-            PrendasData[index][prendaRotY] = fRotY;
-            PrendasData[index][prendaRotZ] = fRotZ;
-            PrendasData[index][prendaScaleX] = fScaleX;
-            PrendasData[index][prendaScaleY] = fScaleY;
-            PrendasData[index][prendaScaleZ] = fScaleZ;
+    new idxPrenda = PrendaMoveIndex[playerid];
+    new slotPrenda = GetPrendaAttachSlot(idxPrenda);
+    if(response == EDIT_RESPONSE_FINAL && idxPrenda >= 0 && idxPrenda < MAX_PRENDAS && slotPrenda == index) {
+        if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] == idxPrenda && !PlayerPrendaComprada[playerid][idxPrenda]) {
+            PrendasData[idxPrenda][prendaOffX] = fOffsetX;
+            PrendasData[idxPrenda][prendaOffY] = fOffsetY;
+            PrendasData[idxPrenda][prendaOffZ] = fOffsetZ;
+            PrendasData[idxPrenda][prendaRotX] = fRotX;
+            PrendasData[idxPrenda][prendaRotY] = fRotY;
+            PrendasData[idxPrenda][prendaRotZ] = fRotZ;
+            PrendasData[idxPrenda][prendaScaleX] = fScaleX;
+            PrendasData[idxPrenda][prendaScaleY] = fScaleY;
+            PrendasData[idxPrenda][prendaScaleZ] = fScaleZ;
             GuardarPrendasConfig();
         } else {
-            PlayerPrendaOffX[playerid][index] = fOffsetX;
-            PlayerPrendaOffY[playerid][index] = fOffsetY;
-            PlayerPrendaOffZ[playerid][index] = fOffsetZ;
-            PlayerPrendaRotX[playerid][index] = fRotX;
-            PlayerPrendaRotY[playerid][index] = fRotY;
-            PlayerPrendaRotZ[playerid][index] = fRotZ;
-            PlayerPrendaScaleX[playerid][index] = fScaleX;
-            PlayerPrendaScaleY[playerid][index] = fScaleY;
-            PlayerPrendaScaleZ[playerid][index] = fScaleZ;
+            PlayerPrendaOffX[playerid][idxPrenda] = fOffsetX;
+            PlayerPrendaOffY[playerid][idxPrenda] = fOffsetY;
+            PlayerPrendaOffZ[playerid][idxPrenda] = fOffsetZ;
+            PlayerPrendaRotX[playerid][idxPrenda] = fRotX;
+            PlayerPrendaRotY[playerid][idxPrenda] = fRotY;
+            PlayerPrendaRotZ[playerid][idxPrenda] = fRotZ;
+            PlayerPrendaScaleX[playerid][idxPrenda] = fScaleX;
+            PlayerPrendaScaleY[playerid][idxPrenda] = fScaleY;
+            PlayerPrendaScaleZ[playerid][idxPrenda] = fScaleZ;
         }
         GuardarCuenta(playerid);
         SendClientMessage(playerid, 0x00FF00FF, "Posicion de prenda guardada.");
