@@ -788,6 +788,7 @@ enum eArbolData {
     Float:arbolY,
     Float:arbolZ,
     bool:arbolTalado,
+    bool:arbolTroncoDisponible,
     arbolObj,
     Text3D:arbolLabel
 }
@@ -1658,20 +1659,24 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             return 1;
         }
 
-        if(ArbolCooldownTick[a] > 0) {
-            new restanteAr = ArbolCooldownTick[a] - GetTickCount();
-            if(restanteAr < 0) restanteAr = 0;
-            new msgArbol[112];
-            format(msgArbol, sizeof(msgArbol), "[Talador] Arbol en Espera: %d min %02d s", (restanteAr + 59999) / 60000, (restanteAr / 1000) % 60);
-            return SendClientMessage(playerid, 0xFFAA00FF, msgArbol);
+        if(!ArbolData[a][arbolTroncoDisponible]) {
+            if(ArbolCooldownTick[a] > 0) {
+                new restanteAr = ArbolCooldownTick[a] - GetTickCount();
+                if(restanteAr < 0) restanteAr = 0;
+                new msgArbol[112];
+                format(msgArbol, sizeof(msgArbol), "[Talador] Arbol en Espera: %d min %02d s", (restanteAr + 59999) / 60000, (restanteAr / 1000) % 60);
+                return SendClientMessage(playerid, 0xFFAA00FF, msgArbol);
+            }
+            return SendClientMessage(playerid, 0xFFAA00FF, "[Talador] Este arbol aun no tiene troncos disponibles.");
         }
 
         if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Ya llevas troncos en la mano. Cargalos en la Sadler con H.");
         LenadorTieneTronco[playerid] = true;
-        ArbolCooldownTick[a] = GetTickCount() + COOLDOWN_ARBOL_MS;
-        SetPlayerAttachedObject(playerid, 9, 1463, 6, 0.11, 0.05, 0.03, 0.0, 0.0, 0.0, 0.75, 0.75, 0.75);
+        ArbolData[a][arbolTroncoDisponible] = false;
+        SetPlayerAttachedObject(playerid, 9, 1463, 1, 0.20, 0.09, -0.05, 0.0, 92.0, 0.0, 0.78, 0.78, 0.78);
+        ApplyAnimation(playerid, "CARRY", "crry_prtial", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         SendClientMessage(playerid, 0xB87333FF, "[Talador] Recogiste los troncos. Cargalos en la Sadler con H.");
-        EnviarEntornoAccion(playerid, "carga un tronco pesado sobre su hombro.");
+        EnviarEntornoAccion(playerid, "carga un tronco pesado con ambas manos.");
         return 1;
     }
 
@@ -2865,6 +2870,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         ArbolData[TotalArboles][arbolActivo] = true; ArbolData[TotalArboles][arbolX] = x; ArbolData[TotalArboles][arbolY] = y; ArbolData[TotalArboles][arbolZ] = z;
         ArbolData[TotalArboles][arbolTalado] = false;
+        ArbolData[TotalArboles][arbolTroncoDisponible] = false;
         ArbolData[TotalArboles][arbolObj] = CreateObject(MODELO_ARBOL_ACTIVO, x, y, z - 1.0, 0.0, 0.0, 0.0);
         ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel("{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 14.0, 0);
         TotalArboles++; GuardarArboles();
@@ -4214,14 +4220,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(GetPlayerMoney(playerid) < PRECIO_MAZO) return SendClientMessage(playerid, -1, "No tienes dinero para el mazo.");
             KH_GivePlayerMoney(playerid, -PRECIO_MAZO);
             PlayerTieneMazo[playerid] = true;
-            MazoDurabilidad[playerid] = 95 + random(26);
+            MazoDurabilidad[playerid] = 110 + random(31);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un mazo para minar.");
         }
         if(listitem == 3) {
             if(GetPlayerMoney(playerid) < PRECIO_HACHA) return SendClientMessage(playerid, -1, "No tienes dinero para el hacha.");
             KH_GivePlayerMoney(playerid, -PRECIO_HACHA);
             PlayerTieneHacha[playerid] = true;
-            HachaDurabilidad[playerid] = 90 + random(31);
+            HachaDurabilidad[playerid] = 105 + random(31);
             return SendClientMessage(playerid, 0x66FF66FF, "Compraste un hacha para talador.");
         }
         if(listitem == 4) {
@@ -7657,8 +7663,8 @@ stock ActualizarTopDinero() {
         );
     }
 
-    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    if(PuntoLabel[_:puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[_:puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
@@ -8695,7 +8701,7 @@ public FinalizarMinado(playerid) {
     InvPiedra[playerid] += piedra;
     InvCobre[playerid] += cobre;
     InvHierroMineral[playerid] += hierro;
-    new desgaste = 1 + random(2);
+    new desgaste = 1;
     if(MazoDurabilidad[playerid] > 0) MazoDurabilidad[playerid] -= desgaste;
     MineroDuracionActual[playerid] = 0;
     if(MazoDurabilidad[playerid] <= 0) { PlayerTieneMazo[playerid] = false; MazoDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu mazo se rompio."); }
@@ -8726,8 +8732,10 @@ public FinalizarTalaArbol(playerid) {
         ArbolData[a][arbolTalado] = true;
         if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
         ArbolData[a][arbolObj] = CreateObject(MODELO_ARBOL_TALADO, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
-        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: 5 min 00 s");
-        new desgaste = 1 + random(2);
+        ArbolData[a][arbolTroncoDisponible] = true;
+        ArbolCooldownTick[a] = GetTickCount() + COOLDOWN_ARBOL_MS;
+        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol talado\n{FFFFFF}Recoge troncos con H");
+        new desgaste = 1;
         if(HachaDurabilidad[playerid] > 0) HachaDurabilidad[playerid] -= desgaste;
         if(HachaDurabilidad[playerid] <= 0) { PlayerTieneHacha[playerid] = false; HachaDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu hacha se rompio."); }
         TaladorTroncosTalados[playerid]++;
@@ -8835,6 +8843,7 @@ stock RestaurarArbolModeloInicial(arbolidx) {
     if(arbolidx < 0 || arbolidx >= TotalArboles || !ArbolData[arbolidx][arbolActivo]) return 0;
     ArbolCooldownTick[arbolidx] = 0;
     ArbolData[arbolidx][arbolTalado] = false;
+    ArbolData[arbolidx][arbolTroncoDisponible] = false;
     if(ArbolData[arbolidx][arbolObj] != 0) DestroyObject(ArbolData[arbolidx][arbolObj]);
     ArbolData[arbolidx][arbolObj] = CreateObject(MODELO_ARBOL_ACTIVO, ArbolData[arbolidx][arbolX], ArbolData[arbolidx][arbolY], ArbolData[arbolidx][arbolZ] - 1.0, 0.0, 0.0, 0.0);
     if(ArbolData[arbolidx][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[arbolidx][arbolLabel], 0x8B5A2BFF, "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar");
@@ -8863,23 +8872,28 @@ stock ActualizarTextosMinasArboles() {
 
     for(new a = 0; a < TotalArboles; a++) {
         if(!ArbolData[a][arbolActivo] || ArbolData[a][arbolLabel] == Text3D:-1) continue;
-        if(ArbolData[a][arbolTalado] && ArbolCooldownTick[a] > 0) {
-            if(ArbolCooldownTick[a] <= now) {
+        if(ArbolData[a][arbolTalado]) {
+            if(ArbolCooldownTick[a] > 0 && ArbolCooldownTick[a] <= now) {
                 RestaurarArbolModeloInicial(a);
-            } else {
+                continue;
+            }
+            if(ArbolCooldownTick[a] > now) {
                 restante = ArbolCooldownTick[a] - now;
                 mins = (restante + 59999) / 60000;
                 segs = (restante / 1000) % 60;
-                format(txt, sizeof(txt), "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
+                if(ArbolData[a][arbolTroncoDisponible]) format(txt, sizeof(txt), "{B87333}Arbol talado\n{FFFFFF}Troncos listos (H)\nRegenera: %d min %02d s", mins, segs);
+                else format(txt, sizeof(txt), "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
                 Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, txt);
+            } else {
+                Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol talado\n{FFFFFF}Recoge troncos con H");
             }
         } else {
-            if(ArbolData[a][arbolTalado]) RestaurarArbolModeloInicial(a);
-            else Update3DTextLabelText(ArbolData[a][arbolLabel], 0x8B5A2BFF, "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar");
+            Update3DTextLabelText(ArbolData[a][arbolLabel], 0x8B5A2BFF, "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar");
         }
     }
     return 1;
 }
+
 
 stock GetHornoMasCercano(playerid) {
     new Float:px, Float:py, Float:pz;
@@ -9298,6 +9312,8 @@ stock CargarArboles() {
         ArbolData[TotalArboles][arbolY] = y;
         ArbolData[TotalArboles][arbolZ] = z;
         ArbolData[TotalArboles][arbolTalado] = (talado != 0);
+        ArbolData[TotalArboles][arbolTroncoDisponible] = false;
+        ArbolCooldownTick[TotalArboles] = (talado != 0) ? (GetTickCount() + COOLDOWN_ARBOL_MS) : 0;
         ArbolData[TotalArboles][arbolObj] = CreateObject(ArbolData[TotalArboles][arbolTalado] ? MODELO_ARBOL_TALADO : MODELO_ARBOL_ACTIVO, x, y, z - 1.0, 0.0, 0.0, 0.0);
         ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel(ArbolData[TotalArboles][arbolTalado] ? "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: 5 min 00 s" : "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 12.0, 0);
         TotalArboles++;
