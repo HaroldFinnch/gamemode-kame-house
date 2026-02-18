@@ -397,7 +397,7 @@ enum eTrabajoTipo {
     TRABAJO_MEDICO
 };
 
-new PlayerCheckpointTrabajo[MAX_PLAYERS];
+new eCheckpointTrabajo:PlayerCheckpointTrabajo[MAX_PLAYERS];
 new DejarTrabajoOpciones[MAX_PLAYERS][8];
 new DejarTrabajoOpcionesCount[MAX_PLAYERS];
 
@@ -1985,7 +1985,7 @@ public ClearPlayerAnimLock(playerid) {
 
 stock SetCheckpointTrabajo(playerid, eCheckpointTrabajo:tipo, Float:x, Float:y, Float:z, Float:size) {
     SetPlayerCheckpoint(playerid, x, y, z, size);
-    PlayerCheckpointTrabajo[playerid] = _:tipo;
+    PlayerCheckpointTrabajo[playerid] = tipo;
     return 1;
 }
 
@@ -2083,15 +2083,50 @@ stock ConstruirListaTrabajosActivos(playerid, lista[], len, bool:conIndices = fa
     format(lista, len, "");
     DejarTrabajoOpcionesCount[playerid] = 0;
     new line[72];
-    #define ADD_TRABAJO(_cond,_id,_txt) if(_cond) { if(conIndices) format(line, sizeof(line), "%d) %s\n", DejarTrabajoOpcionesCount[playerid] + 1, _txt); else format(line, sizeof(line), "%s\n", _txt); strcat(lista, line); DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = _id; }
-    ADD_TRABAJO(TrabajandoCamionero[playerid] > 0, TRABAJO_CAMIONERO, "Camionero")
-    ADD_TRABAJO(TrabajandoPizzero[playerid] > 0, TRABAJO_PIZZERO, "Pizzero")
-    ADD_TRABAJO(TrabajandoBasurero[playerid] > 0, TRABAJO_BASURERO, "Basurero")
-    ADD_TRABAJO(MineroTrabajando[playerid], TRABAJO_MINERO, "Minero")
-    ADD_TRABAJO(LenadorTrabajando[playerid], TRABAJO_LENADOR, "Talador")
-    ADD_TRABAJO(MecanicoNivel[playerid] > 0, TRABAJO_MECANICO, "Mecanico")
-    ADD_TRABAJO(MedicoNivel[playerid] > 0, TRABAJO_MEDICO, "Medico")
-    #undef ADD_TRABAJO
+
+    if(TrabajandoCamionero[playerid] > 0) {
+        if(conIndices) format(line, sizeof(line), "%d) Camionero\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Camionero\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_CAMIONERO;
+    }
+    if(TrabajandoPizzero[playerid] > 0) {
+        if(conIndices) format(line, sizeof(line), "%d) Pizzero\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Pizzero\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_PIZZERO;
+    }
+    if(TrabajandoBasurero[playerid] > 0) {
+        if(conIndices) format(line, sizeof(line), "%d) Basurero\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Basurero\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_BASURERO;
+    }
+    if(MineroTrabajando[playerid]) {
+        if(conIndices) format(line, sizeof(line), "%d) Minero\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Minero\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_MINERO;
+    }
+    if(LenadorTrabajando[playerid]) {
+        if(conIndices) format(line, sizeof(line), "%d) Talador\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Talador\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_LENADOR;
+    }
+    if(MecanicoNivel[playerid] > 0) {
+        if(conIndices) format(line, sizeof(line), "%d) Mecanico\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Mecanico\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_MECANICO;
+    }
+    if(MedicoNivel[playerid] > 0) {
+        if(conIndices) format(line, sizeof(line), "%d) Medico\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Medico\n");
+        strcat(lista, line);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_MEDICO;
+    }
+
     if(strlen(lista) > 0 && lista[strlen(lista) - 1] == '\n') lista[strlen(lista) - 1] = '\0';
     return DejarTrabajoOpcionesCount[playerid];
 }
@@ -2375,14 +2410,16 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new reqCam = GetRequisitoNivel(RequisitosCamionero, CamioneroNivel[playerid]);
         new reqPiz = GetRequisitoNivel(RequisitosPizzero, PizzeroNivel[playerid]);
         new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
-        new reqMin = GetRequisitoNivel(RequisitosMinero, MineroNivel[playerid]);
+        new mineroNivel = 1;
+        new mineroExtracciones = 0;
+        new reqMin = 1;
         new reqArm = GetRequisitoNivel(RequisitosArmero, ArmeroNivel[playerid]);
         new reqMec = GetRequisitoNivel(RequisitosMecanico, MecanicoNivel[playerid]);
         new reqTal = GetRequisitoNivel(RequisitosTalador, TaladorNivel[playerid]);
         new reqMed = GetRequisitoNivel(RequisitosMedico, MedicoNivel[playerid]);
         format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{AAAAAA}Minero{FFFFFF} Nivel: {AAAAAA}%d/%d\n{AAAAAA}Extracciones:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/%d\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
             CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], reqCam,
-            MineroNivel[playerid], NIVEL_MAX_TRABAJO, MineroExtracciones[playerid], reqMin,
+            mineroNivel, NIVEL_MAX_TRABAJO, mineroExtracciones, reqMin,
             PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], reqPiz,
             BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], reqBas,
             ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid], reqArm,
@@ -7788,8 +7825,8 @@ stock ActualizarTopDinero() {
         );
     }
 
-    if(PuntoLabel[_:puntoTopDinero] != Text3D:-1) {
-        Update3DTextLabelText(PuntoLabel[_:puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
+    if(PuntoLabel[puntoTopDinero] != Text3D:-1) {
+        Update3DTextLabelText(PuntoLabel[puntoTopDinero], 0xFFD700FF, TopDineroTextoLabel);
     }
     return 1;
 }
