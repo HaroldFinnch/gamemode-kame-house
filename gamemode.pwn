@@ -7854,7 +7854,7 @@ stock ActualizarTopDinero() {
         );
     }
 
-    new Text3D:topDineroLabel = PuntoLabel[puntoTopDinero];
+    new Text3D:topDineroLabel = Text3D:PuntoLabel[puntoTopDinero];
     if(topDineroLabel != Text3D:-1) {
         Update3DTextLabelText(topDineroLabel, 0xFFD700FF, TopDineroTextoLabel);
     }
