@@ -391,6 +391,7 @@ enum eTrabajoTipo {
     TRABAJO_CAMIONERO = 1,
     TRABAJO_PIZZERO,
     TRABAJO_BASURERO,
+    TRABAJO_ARMERO,
     TRABAJO_MINERO,
     TRABAJO_LENADOR,
     TRABAJO_MECANICO,
@@ -398,7 +399,7 @@ enum eTrabajoTipo {
 };
 
 new eCheckpointTrabajo:PlayerCheckpointTrabajo[MAX_PLAYERS];
-new DejarTrabajoOpciones[MAX_PLAYERS][8];
+new DejarTrabajoOpciones[MAX_PLAYERS][9];
 new DejarTrabajoOpcionesCount[MAX_PLAYERS];
 
 // Variables Camionero
@@ -1511,6 +1512,16 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             format(avisof, sizeof(avisof), "[Basurero] Encontraste %d flor(es) revisando la basura de esta bolsa.", halladas);
             SendClientMessage(playerid, 0xFF66CCFF, avisof);
         }
+        BasureroRecorridos[playerid]++;
+        new reqBasBolsa = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
+        if(BasureroRecorridos[playerid] >= reqBasBolsa) {
+            BasureroRecorridos[playerid] = 0;
+            if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) {
+                BasureroNivel[playerid]++;
+                PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
+            }
+        }
+
         if(BasureroRecolectado[playerid] >= TotalRutasBasura) {
             BasureroEntregando[playerid] = 1;
             SetCheckpointTrabajo(playerid, CP_TRABAJO_BASURERO, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 6.0);
@@ -1630,6 +1641,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 
     // Sistema de minero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoMinero][0], PuntoPos[puntoMinero][1], PuntoPos[puntoMinero][2])) {
+        if(MineroTrabajando[playerid]) return SendClientMessage(playerid, 0x33CCFFFF, "[Minero] Ya tienes este trabajo activo.");
         if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
         MineroTrabajando[playerid] = true;
         MineroGPSActivo[playerid] = true;
@@ -1640,6 +1652,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     }
 
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2])) {
+        if(LenadorTrabajando[playerid]) return SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Ya tienes este trabajo activo.");
         if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
         LenadorTrabajando[playerid] = true;
         LenadorEntregando[playerid] = false;
@@ -1766,6 +1779,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
 // Inicio de trabajo camionero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoCamionero][0], PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2]))
     {
+        if(TrabajandoCamionero[playerid] > 0) return SendClientMessage(playerid, 0xFFD700FF, "[Camionero] Ya tienes este trabajo activo.");
         if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
 
         CrearVehiculoTrabajoUnico(playerid, 498, PuntoPos[puntoCamionero][0] + 3.0, PuntoPos[puntoCamionero][1], PuntoPos[puntoCamionero][2] + 1.0, 0.0, 0, 0, CamioneroVehiculo[playerid]);
@@ -1781,6 +1795,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo pizzero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPizzeria][0], PuntoPos[puntoPizzeria][1], PuntoPos[puntoPizzeria][2]))
     {
+        if(TrabajandoPizzero[playerid] > 0) return SendClientMessage(playerid, 0xFF8C00FF, "[Pizzero] Ya tienes este trabajo activo.");
         if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
 
         CrearVehiculoTrabajoUnico(playerid, 448, POS_PIZZA_SPAWN_X, POS_PIZZA_SPAWN_Y, POS_PIZZA_SPAWN_Z, POS_PIZZA_SPAWN_A, 3, 3, PizzeroVehiculo[playerid]);
@@ -1794,6 +1809,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     // Inicio de trabajo basurero
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2]))
     {
+        if(TrabajandoBasurero[playerid] > 0) return SendClientMessage(playerid, 0x66FF66FF, "[Basurero] Ya tienes este trabajo activo.");
         if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
         if(TotalRutasBasura <= 0) return SendClientMessage(playerid, 0xFF0000FF, "No hay rutas de basura cargadas.");
 
@@ -2015,6 +2031,12 @@ stock DejarTrabajoEspecifico(playerid, eTrabajoTipo:tipo) {
             FinalizarTrabajoBasurero(playerid);
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de basurero.");
         }
+        case TRABAJO_ARMERO: {
+            if(ArmeroNivel[playerid] <= 0) return 0;
+            ArmeroNivel[playerid] = 0;
+            ArmeroExp[playerid] = 0;
+            SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de armero.");
+        }
         case TRABAJO_MINERO: {
             if(!MineroTrabajando[playerid]) return 0;
             MineroTrabajando[playerid] = false;
@@ -2104,6 +2126,12 @@ stock ConstruirListaTrabajosActivos(playerid, lista[], len, bool:conIndices = fa
         else format(line, sizeof(line), "Basurero\n");
         strcat(lista, line, len);
         DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_BASURERO;
+    }
+    if(ArmeroNivel[playerid] > 0) {
+        if(conIndices) format(line, sizeof(line), "%d) Armero\n", DejarTrabajoOpcionesCount[playerid] + 1);
+        else format(line, sizeof(line), "Armero\n");
+        strcat(lista, line, len);
+        DejarTrabajoOpciones[playerid][DejarTrabajoOpcionesCount[playerid]++] = TRABAJO_ARMERO;
     }
     if(MineroTrabajando[playerid]) {
         if(conIndices) format(line, sizeof(line), "%d) Minero\n", DejarTrabajoOpcionesCount[playerid] + 1);
@@ -2420,7 +2448,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new reqMec = GetRequisitoNivel(RequisitosMecanico, MecanicoNivel[playerid]);
         new reqTal = GetRequisitoNivel(RequisitosTalador, TaladorNivel[playerid]);
         new reqMed = GetRequisitoNivel(RequisitosMedico, MedicoNivel[playerid]);
-        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{AAAAAA}Minero{FFFFFF} Nivel: {AAAAAA}%d/%d\n{AAAAAA}Extracciones:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/%d\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
+        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{AAAAAA}Minero{FFFFFF} Nivel: {AAAAAA}%d/%d\n{AAAAAA}Extracciones:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Bolsas subidas:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/%d\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
             CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], reqCam,
             mineroNivel, NIVEL_MAX_TRABAJO, mineroExtracciones, reqMin,
             PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], reqPiz,
@@ -3956,7 +3984,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: /mina, H en mina, H en horno, /inventario (/inv), /dejartrabajo.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: /mina, H en mina, H en horno, /inventario (/inv), /dejartrabajo.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y subelas a la Rumpo con H (cada bolsa subida cuenta para skill).\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
@@ -5824,7 +5852,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_ARMERIA_CATEGORIA) {
         if(!response) return 1;
-        if(listitem == 0) { if(ArmeroNivel[playerid] < 1) ArmeroNivel[playerid] = 1; return SendClientMessage(playerid, 0x66CCFFFF, "Trabajo de armero activado."); }
+        if(listitem == 0) {
+            if(ArmeroNivel[playerid] > 0) return SendClientMessage(playerid, 0x66CCFFFF, "[Armero] Ya tienes este trabajo activo.");
+            if(ContarTrabajosActivos(playerid) >= GetLimiteTrabajosJugador(playerid)) return SendClientMessage(playerid, -1, "Ya alcanzaste tu limite de trabajos activos. Usa /dejartrabajo para liberar un cupo.");
+            ArmeroNivel[playerid] = 1;
+            ArmeroExp[playerid] = 0;
+            SendClientMessage(playerid, 0x66CCFFFF, "[Armero] Trabajo activado. Usa /armero para craftear armas y municion.");
+            EnviarEntornoAccion(playerid, "organiza sus herramientas y abre su mesa de armeria.");
+            return 1;
+        }
         if(listitem == 1) return ShowArmeriaArmasDisponibles(playerid);
         return 1;
     }
@@ -7155,7 +7191,7 @@ stock ExpirarMembresiaSiCorresponde(playerid) {
 }
 
 stock TieneTrabajoActivo(playerid) {
-    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || MineroTrabajando[playerid] || LenadorTrabajando[playerid] || MecanicoNivel[playerid] > 0 || MedicoNivel[playerid] > 0);
+    return (TrabajandoCamionero[playerid] > 0 || TrabajandoPizzero[playerid] > 0 || TrabajandoBasurero[playerid] > 0 || ArmeroNivel[playerid] > 0 || MineroTrabajando[playerid] || LenadorTrabajando[playerid] || MecanicoNivel[playerid] > 0 || MedicoNivel[playerid] > 0);
 }
 
 stock ContarTrabajosActivos(playerid) {
@@ -7163,6 +7199,7 @@ stock ContarTrabajosActivos(playerid) {
     if(TrabajandoCamionero[playerid] > 0) c++;
     if(TrabajandoPizzero[playerid] > 0) c++;
     if(TrabajandoBasurero[playerid] > 0) c++;
+    if(ArmeroNivel[playerid] > 0) c++;
     if(MineroTrabajando[playerid]) c++;
     if(LenadorTrabajando[playerid]) c++;
     if(MecanicoNivel[playerid] > 0) c++;
@@ -7500,16 +7537,7 @@ stock FinalizarTrabajoBasurero(playerid) {
         if(bonusMembresia > 0) pago += bonusMembresia;
         KH_GivePlayerMoney(playerid, pago);
 
-        BasureroRecorridos[playerid]++;
         new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
-        if(BasureroRecorridos[playerid] >= reqBas) {
-            BasureroRecorridos[playerid] = 0;
-            if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) {
-                BasureroNivel[playerid]++;
-                PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
-            }
-        }
-
 
         new msg[200];
         format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Pago base:$%d | Recoleccion:$%d | Nivel:$%d | Bonus membresia:$%d | Total:$%d", pagoBase, pagoRecolecta, pagoNivel, bonusMembresia, pago);
