@@ -42,6 +42,11 @@
 #define TIEMPO_CULTIVO_MAX   5
 #define COOLDOWN_MINA_MS     600000
 #define COOLDOWN_ARBOL_MS    300000
+#define MODELO_ARBOL_ACTIVO  837
+#define MODELO_ARBOL_TALADO  841
+#define MODELO_MINA_BASE     748
+#define MODELO_MINA_COOLDOWN 807
+#define ATTACH_SLOT_HACHA    7
 #define COSTO_KIT_REPARACION 1000
 #define PAGO_REPARAR_MOTOR 1500
 #define PORCENTAJE_PAGO_MECANICO 0.90
@@ -855,6 +860,13 @@ enum ePrepiezaPoint {
 new PrepiezaPoints[MAX_PREPIEZA_POINTS][ePrepiezaPoint];
 new TotalPrepiezaPoints;
 new PrepiezaCooldownTick[MAX_PLAYERS][MAX_PREPIEZA_POINTS];
+new const RequisitosCamionero[10] = {20, 30, 35, 40, 50, 55, 60, 70, 75, 80};
+new const RequisitosBasurero[10] = {80, 90, 100, 120, 130, 140, 150, 160, 170, 180};
+new const RequisitosPizzero[10] = {50, 60, 70, 80, 90, 100, 120, 130, 140, 150};
+new const RequisitosTalador[10] = {70, 80, 90, 10, 110, 120, 130, 140, 150, 160};
+new const RequisitosMecanico[10] = {20, 30, 35, 40, 45, 50, 55, 60, 70, 90};
+new const RequisitosMedico[10] = {10, 20, 25, 30, 35, 40, 50, 55, 60, 80};
+new const RequisitosArmero[10] = {10, 20, 35, 50, 65, 80, 100, 100, 100, 100};
 new AdminMineralTipoPendiente[MAX_PLAYERS] = {-1, ...};
 new AdminMineralCantidadPendiente[MAX_PLAYERS];
 new AdminSkinTargetPendiente[MAX_PLAYERS] = {-1, ...};
@@ -934,6 +946,7 @@ stock ShowCrearCasaInteriorDialog(playerid);
 stock Float:GetDistanceBetweenPoints(Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2);
 stock CanceladoTrabajo(playerid);
 stock FormatTiempoRestante(ms, dest[], len);
+stock GetRequisitoNivel(const reqs[], nivel);
 stock LimpiarSolicitudMedico(playerid);
 stock ActualizarLabelHorno(hornoidx);
 stock ActualizarTextosMinasArboles();
@@ -1265,6 +1278,7 @@ public OnGameModeInit() {
     DisableInteriorEnterExits();
     EnableStuntBonusForAll(false);
     UsePlayerPedAnims();
+    ShowPlayerMarkers(PLAYER_MARKERS_MODE_OFF);
     fcreatedir(DIR_DATA);
     fcreatedir(DIR_USUARIOS);
     AddPlayerClass(SKIN_POR_DEFECTO, 2494.24, -1671.19, 13.33, 180.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
@@ -1494,7 +1508,13 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         else format(txtCarga, sizeof(txtCarga), "[Talador] Subiste 1 tronco a la camioneta. Total troncos cargados: %d.", LenadorMaderaRuta[playerid]);
         SendClientMessage(playerid, 0x66FF66FF, txtCarga);
         EnviarEntornoAccion(playerid, "carga un tronco en la caja de su camioneta.");
-        if(SetCheckpointArbolMasCercano(playerid)) SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Te marcamos el siguiente arbol.");
+        if(SetCheckpointArbolMasCercano(playerid)) {
+            SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Te marcamos el siguiente arbol.");
+        } else if(LenadorMaderaRuta[playerid] > 0) {
+            LenadorEntregando[playerid] = true;
+            SetPlayerCheckpoint(playerid, PuntoPos[puntoLenador][0], PuntoPos[puntoLenador][1], PuntoPos[puntoLenador][2], 6.0);
+            SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] No hay mas arboles disponibles. Regresa a entregar los troncos.");
+        }
         return 1;
     }
 
@@ -1606,7 +1626,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ])) continue;
         if(!MineroTrabajando[playerid]) return SendClientMessage(playerid, -1, "Debes tomar el trabajo de minero primero.");
         if(!PlayerTieneMazo[playerid] || MazoDurabilidad[playerid] <= 0) return SendClientMessage(playerid, -1, "Necesitas un mazo con durabilidad. Compralo en Tienda Kame House.");
-        if(GetTickCount() < MinaCooldownTick[m]) { new restanteM = MinaCooldownTick[m] - GetTickCount(); new msgcd[120]; format(msgcd, sizeof(msgcd), "[Minero] Mina en cooldown: %d min %02d s", (restanteM + 59999) / 60000, (restanteM / 1000) % 60); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
+        if(GetTickCount() < MinaCooldownTick[m]) { new restanteM = MinaCooldownTick[m] - GetTickCount(); new msgcd[120]; format(msgcd, sizeof(msgcd), "[Minero] Mina en Espera: %d min %02d s", (restanteM + 59999) / 60000, (restanteM / 1000) % 60); return SendClientMessage(playerid, 0xFFAA00FF, msgcd); }
         if(MineroTimer[playerid] != -1) return SendClientMessage(playerid, -1, "Ya estas minando.");
         new segs = 15 + random(6);
         MineroMinaIndex[playerid] = m;
@@ -1630,7 +1650,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(!ArbolData[a][arbolTalado]) {
             LenadorArbolIndex[playerid] = a;
             TogglePlayerControllable(playerid, false);
-            SetPlayerAttachedObject(playerid, 8, 19590, 6, 0.10, 0.03, 0.00, 0.0, 0.0, 0.0, 0.85, 0.85, 0.85);
+            SetPlayerAttachedObject(playerid, ATTACH_SLOT_HACHA, 19590, 6, 0.07, 0.02, -0.03, 0.0, 95.0, 8.0, 1.0, 1.0, 1.0);
             ApplyAnimation(playerid, "BASEBALL", "Bat_4", 4.1, true, false, false, false, 3000, t_FORCE_SYNC:SYNC_ALL);
             LenadorTimer[playerid] = SetTimerEx("FinalizarTalaArbol", 3000, false, "d", playerid);
             SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Talando arbol...");
@@ -1642,7 +1662,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
             new restanteAr = ArbolCooldownTick[a] - GetTickCount();
             if(restanteAr < 0) restanteAr = 0;
             new msgArbol[112];
-            format(msgArbol, sizeof(msgArbol), "[Talador] Arbol en cooldown: %d min %02d s", (restanteAr + 59999) / 60000, (restanteAr / 1000) % 60);
+            format(msgArbol, sizeof(msgArbol), "[Talador] Arbol en Espera: %d min %02d s", (restanteAr + 59999) / 60000, (restanteAr / 1000) % 60);
             return SendClientMessage(playerid, 0xFFAA00FF, msgArbol);
         }
 
@@ -1667,7 +1687,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     for(new c = 0; c < TotalCajas; c++) {
         if(!CajaDataLoot[c][cajaActiva]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.3, CajaDataLoot[c][cajaX], CajaDataLoot[c][cajaY], CajaDataLoot[c][cajaZ])) continue;
-        if(GetTickCount() < CajaCooldownTick[playerid][c]) { new leftCaja[24], msgCaja[120]; FormatTiempoRestante(CajaCooldownTick[playerid][c] - GetTickCount(), leftCaja, sizeof(leftCaja)); format(msgCaja, sizeof(msgCaja), "[Caja] Cooldown restante: %s", leftCaja); return SendClientMessage(playerid, 0xFFAA00FF, msgCaja); }
+        if(GetTickCount() < CajaCooldownTick[playerid][c]) { new leftCaja[24], msgCaja[120]; FormatTiempoRestante(CajaCooldownTick[playerid][c] - GetTickCount(), leftCaja, sizeof(leftCaja)); format(msgCaja, sizeof(msgCaja), "[Caja] Espera restante: %s", leftCaja); return SendClientMessage(playerid, 0xFFAA00FF, msgCaja); }
         TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, true, false, false, false, 10000, t_FORCE_SYNC:SYNC_ALL);
         SetTimerEx("FinalizarCajaBusqueda", 10000, false, "dd", playerid, c);
@@ -1762,6 +1782,18 @@ public OnPlayerEnterCheckpoint(playerid)
         return 1;
     }
 
+    if(MineroTrabajando[playerid] && MineroGPSActivo[playerid]) {
+        DisablePlayerCheckpoint(playerid);
+        SendClientMessage(playerid, 0x66CCFFFF, "[Minero] Llegaste a la mina marcada. Presiona H para minar.");
+        return 1;
+    }
+
+    if(LenadorTrabajando[playerid] && !LenadorEntregando[playerid]) {
+        DisablePlayerCheckpoint(playerid);
+        SendClientMessage(playerid, 0x8B5A2BFF, "[Talador] Llegaste al arbol marcado. Presiona H para talar.");
+        return 1;
+    }
+
     if(TrabajandoCamionero[playerid] >= 2 && GetPlayerVehicleID(playerid) != CamioneroVehiculo[playerid])
     {
         SendClientMessage(playerid, 0xFF0000FF, "TRABAJO CANCELADO: Debes estar en el vehiculo de la empresa.");
@@ -1828,11 +1860,12 @@ public OnPlayerEnterCheckpoint(playerid)
         if(GetPlayerVehicleID(playerid) != LenadorVehiculo[playerid]) return SendClientMessage(playerid, -1, "Debes usar la Sadler del trabajo para entregar.");
         DisablePlayerCheckpoint(playerid);
         new pagoBase = PAGO_POR_TRONCO_TALADOR * LenadorMaderaRuta[playerid];
+        new bonusNivel = TaladorNivel[playerid] * 50;
         new bonusMembresia = GetBonusTrabajoMembresia(playerid);
-        new totalPago = pagoBase + bonusMembresia;
+        new totalPago = pagoBase + bonusNivel + bonusMembresia;
         KH_GivePlayerMoney(playerid, totalPago);
         new msg[160];
-        format(msg, sizeof(msg), "[Talador] Entregaste %d tronco(s). Pago: $%d (+$%d bono).", LenadorMaderaRuta[playerid], totalPago, bonusMembresia);
+        format(msg, sizeof(msg), "[Talador] Entregaste %d tronco(s). Pago base:$%d | Nivel:$%d | Membresia:$%d | Total:$%d", LenadorMaderaRuta[playerid], pagoBase, bonusNivel, bonusMembresia, totalPago);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         EnviarEntornoAccion(playerid, "descarga los troncos y cobra por el lote entregado.");
         LenadorMaderaRuta[playerid] = 0;
@@ -1933,7 +1966,7 @@ stock FinalizarTrabajo(playerid) {
     new pagoDistancia = floatround(distancia * 0.35);
     if(pagoDistancia < 220) pagoDistancia = 220;
     if(pagoDistancia > 1700) pagoDistancia = 1700;
-    new pagoNivel = nivelCamionero * 180;
+    new pagoNivel = nivelCamionero * 100;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     if(pago > PAGO_MAX_CAMIONERO) pago = PAGO_MAX_CAMIONERO;
     new bonusMembresia = GetBonusTrabajoMembresia(playerid);
@@ -1941,7 +1974,8 @@ stock FinalizarTrabajo(playerid) {
     KH_GivePlayerMoney(playerid, pago);
 
     CamioneroViajes[playerid]++;
-    if(CamioneroViajes[playerid] >= PROGRESO_CAMIONERO_POR_NIVEL) {
+    new reqCam = GetRequisitoNivel(RequisitosCamionero, CamioneroNivel[playerid]);
+    if(CamioneroViajes[playerid] >= reqCam) {
         CamioneroViajes[playerid] = 0;
         if(CamioneroNivel[playerid] < NIVEL_MAX_TRABAJO) CamioneroNivel[playerid]++;
         new levelmsg[96];
@@ -1958,7 +1992,8 @@ stock FinalizarTrabajo(playerid) {
     new str[160];
     format(str, sizeof(str), "{FFD700}[Camionero]{FFFFFF} Pago base:$%d | Nivel:$%d | Distancia:$%d | Bonus membresia:$%d | Total:$%d", pagoBase, pagoNivel, pagoDistancia, bonusMembresia, pago);
     SendClientMessage(playerid, 0x00FF00FF, str);
-    format(str, sizeof(str), "{FFD700}[Camionero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL, CamioneroNivel[playerid], NIVEL_MAX_TRABAJO);
+    reqCam = GetRequisitoNivel(RequisitosCamionero, CamioneroNivel[playerid]);
+    format(str, sizeof(str), "{FFD700}[Camionero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", CamioneroViajes[playerid], reqCam, CamioneroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, str);
     format(str, sizeof(str), "{FFD700}[Camionero]{FFFFFF} Pago recibido: {00FF00}$%d", pago);
     SendClientMessage(playerid, 0x00FF00FF, str);
@@ -2016,7 +2051,7 @@ public FinalizarEntregaPizza(playerid) {
     new pagoBase = PAGO_BASE_PIZZERO;
     new pagoDistancia = floatround(distancia * DISTANCIA_PAGO_PIZZA);
     if(pagoDistancia < 25) pagoDistancia = 25;
-    new pagoNivel = nivelPizzero * 40;
+    new pagoNivel = nivelPizzero * 50;
     new pago = pagoBase + pagoDistancia + pagoNivel;
     if(pago > 1000) pago = 1000;
     new bonusMembresia = GetBonusTrabajoMembresia(playerid);
@@ -2024,7 +2059,8 @@ public FinalizarEntregaPizza(playerid) {
     KH_GivePlayerMoney(playerid, pago);
 
     PizzeroEntregas[playerid]++;
-    if(PizzeroEntregas[playerid] >= PROGRESO_PIZZERO_POR_NIVEL) {
+    new reqPiz = GetRequisitoNivel(RequisitosPizzero, PizzeroNivel[playerid]);
+    if(PizzeroEntregas[playerid] >= reqPiz) {
         PizzeroEntregas[playerid] = 0;
         if(PizzeroNivel[playerid] < NIVEL_MAX_TRABAJO) PizzeroNivel[playerid]++;
         SendClientMessage(playerid, 0xFFFF00FF, "Subiste de nivel en el trabajo Pizzero.");
@@ -2034,7 +2070,8 @@ public FinalizarEntregaPizza(playerid) {
     new info[160];
     format(info, sizeof(info), "{FF4500}[Pizzero]{FFFFFF} Pago base:$%d | Nivel:$%d | Distancia:$%d | Bonus membresia:$%d | Total:$%d", pagoBase, pagoNivel, pagoDistancia, bonusMembresia, pago);
     SendClientMessage(playerid, 0x00FF00FF, info);
-    format(info, sizeof(info), "{FF4500}[Pizzero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO);
+    reqPiz = GetRequisitoNivel(RequisitosPizzero, PizzeroNivel[playerid]);
+    format(info, sizeof(info), "{FF4500}[Pizzero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", PizzeroEntregas[playerid], reqPiz, PizzeroNivel[playerid], NIVEL_MAX_TRABAJO);
     SendClientMessage(playerid, 0x00FF00FF, info);
     format(info, sizeof(info), "{FF4500}[Pizzero]{FFFFFF} Pago recibido: {00FF00}$%d", pago);
     SendClientMessage(playerid, 0x00FF00FF, info);
@@ -2157,16 +2194,23 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return ShowTelefonoMenu(playerid);
     }
 
-    if(!strcmp(cmd, "/skills", true)) {
+    if(!strcmp(cmd, "/skills", true) || !strcmp(cmd, "/skill", true)) {
         new str[640];
-        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/3\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
-            CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], PROGRESO_CAMIONERO_POR_NIVEL,
-            PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], PROGRESO_PIZZERO_POR_NIVEL,
-            BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL,
-            ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid],
-            MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL,
-            TaladorNivel[playerid], NIVEL_MAX_TRABAJO, TaladorTroncosTalados[playerid], PROGRESO_TALADOR_POR_NIVEL,
-            MedicoNivel[playerid], NIVEL_MAX_TRABAJO, MedicoTratamientos[playerid], PROGRESO_MEDICO_POR_NIVEL);
+        new reqCam = GetRequisitoNivel(RequisitosCamionero, CamioneroNivel[playerid]);
+        new reqPiz = GetRequisitoNivel(RequisitosPizzero, PizzeroNivel[playerid]);
+        new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
+        new reqArm = GetRequisitoNivel(RequisitosArmero, ArmeroNivel[playerid]);
+        new reqMec = GetRequisitoNivel(RequisitosMecanico, MecanicoNivel[playerid]);
+        new reqTal = GetRequisitoNivel(RequisitosTalador, TaladorNivel[playerid]);
+        new reqMed = GetRequisitoNivel(RequisitosMedico, MedicoNivel[playerid]);
+        format(str, sizeof(str), "{FFFF00}Camionero{FFFFFF} Nivel: {FFFF00}%d/%d\n{FFFF00}Viajes:{FFFFFF} %d/%d\n\n{FF8C00}Pizzero{FFFFFF} Nivel: {FF8C00}%d/%d\n{FF8C00}Entregas:{FFFFFF} %d/%d\n\n{00C853}Basurero{FFFFFF} Nivel: {00C853}%d/%d\n{00C853}Recorridos:{FFFFFF} %d/%d\n\n{99CCFF}Armero{FFFFFF} Nivel: {99CCFF}%d/%d\n{99CCFF}Progreso:{FFFFFF} %d/%d\n\n{66CCFF}Mecanico{FFFFFF} Nivel: {66CCFF}%d/%d\n{66CCFF}Reparaciones:{FFFFFF} %d/%d\n\n{8B4513}Talador{FFFFFF} Nivel: {8B4513}%d/%d\n{8B4513}Troncos talados:{FFFFFF} %d/%d\n\n{66FF99}Medico{FFFFFF} Nivel: {66FF99}%d/%d\n{66FF99}Tratamientos:{FFFFFF} %d/%d",
+            CamioneroNivel[playerid], NIVEL_MAX_TRABAJO, CamioneroViajes[playerid], reqCam,
+            PizzeroNivel[playerid], NIVEL_MAX_TRABAJO, PizzeroEntregas[playerid], reqPiz,
+            BasureroNivel[playerid], NIVEL_MAX_TRABAJO, BasureroRecorridos[playerid], reqBas,
+            ArmeroNivel[playerid], NIVEL_MAX_TRABAJO, ArmeroExp[playerid], reqArm,
+            MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], reqMec,
+            TaladorNivel[playerid], NIVEL_MAX_TRABAJO, TaladorTroncosTalados[playerid], reqTal,
+            MedicoNivel[playerid], NIVEL_MAX_TRABAJO, MedicoTratamientos[playerid], reqMed);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Mis Habilidades", str, "Aceptar", "");
         return 1;
     }
@@ -2391,7 +2435,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             if(LenadorTimer[playerid] != -1) { KillTimer(LenadorTimer[playerid]); LenadorTimer[playerid] = -1; }
             TogglePlayerControllable(playerid, true);
             ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-            if(IsPlayerAttachedObjectSlotUsed(playerid, 8)) RemovePlayerAttachedObject(playerid, 8);
+            if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
             if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9); LenadorTieneTronco[playerid] = false; }
             DisablePlayerCheckpoint(playerid);
             if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
@@ -2804,7 +2848,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(TotalMinas >= MAX_MINAS) return SendClientMessage(playerid, -1, "Limite de minas alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
-        MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        MinaData[TotalMinas][minaObj] = CreateObject(MODELO_MINA_BASE, x, y, z - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
         MinaData[TotalMinas][minaLabel] = Create3DTextLabel("{66CCFF}Mina disponible\n{FFFFFF}Usa H para minar", 0x66CCFFFF, x, y, z + 0.9, 14.0, 0);
         TotalMinas++; GuardarMinas();
@@ -2818,7 +2862,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         ArbolData[TotalArboles][arbolActivo] = true; ArbolData[TotalArboles][arbolX] = x; ArbolData[TotalArboles][arbolY] = y; ArbolData[TotalArboles][arbolZ] = z;
         ArbolData[TotalArboles][arbolTalado] = false;
-        ArbolData[TotalArboles][arbolObj] = CreateObject(629, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        ArbolData[TotalArboles][arbolObj] = CreateObject(MODELO_ARBOL_ACTIVO, x, y, z - 1.0, 0.0, 0.0, 0.0);
         ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel("{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 14.0, 0);
         TotalArboles++; GuardarArboles();
         return SendClientMessage(playerid, 0x00FF00FF, "Arbol de talador creado.");
@@ -3750,7 +3794,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: H en mina, H en horno, /inventario, /dejartrabajo.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /dejartrabajo.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y cargalas en la Rumpo con H.\n- Comandos: H en bolsa/camion, /tirarbasura, /dejartrabajo.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /dejartrabajo.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /dejartrabajo.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /f para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
@@ -4033,7 +4077,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             case 0: { CamioneroNivel[id] = nivel; if(CamioneroViajes[id] >= PROGRESO_CAMIONERO_POR_NIVEL) CamioneroViajes[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Camionero"); }
             case 1: { PizzeroNivel[id] = nivel; if(PizzeroEntregas[id] >= PROGRESO_PIZZERO_POR_NIVEL) PizzeroEntregas[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Pizzero"); }
             case 2: { BasureroNivel[id] = nivel; if(BasureroRecorridos[id] >= PROGRESO_BASURERO_POR_NIVEL) BasureroRecorridos[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Basurero"); }
-            case 3: { ArmeroNivel[id] = nivel; if(ArmeroNivel[id] <= 0) ArmeroNivel[id] = 1; if(ArmeroExp[id] > 2) ArmeroExp[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Armero"); }
+            case 3: { ArmeroNivel[id] = nivel; if(ArmeroNivel[id] <= 0) ArmeroNivel[id] = 1; if(ArmeroExp[id] >= GetRequisitoNivel(RequisitosArmero, ArmeroNivel[id])) ArmeroExp[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Armero"); }
             case 4: { MecanicoNivel[id] = nivel; if(MecanicoReparaciones[id] >= PROGRESO_MECANICO_POR_NIVEL) MecanicoReparaciones[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Mecanico"); }
             case 5: { TaladorNivel[id] = nivel; if(TaladorTroncosTalados[id] >= PROGRESO_TALADOR_POR_NIVEL) TaladorTroncosTalados[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Talador"); }
             case 6: { MedicoNivel[id] = nivel; if(MedicoTratamientos[id] >= PROGRESO_MEDICO_POR_NIVEL) MedicoTratamientos[id] = 0; format(nombreTrabajo, sizeof(nombreTrabajo), "Medico"); }
@@ -4823,7 +4867,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAmmoInventario[playerid][weaponid] < 9999) PlayerAmmoInventario[playerid][weaponid] = 9999;
         GivePlayerWeapon(playerid, WEAPON:weaponid, PlayerAmmoInventario[playerid][weaponid]);
         ArmeroExp[playerid]++;
-        if(ArmeroExp[playerid] >= 3 && ArmeroNivel[playerid] < NIVEL_MAX_TRABAJO) { ArmeroExp[playerid] = 0; ArmeroNivel[playerid]++; }
+        new reqArm = GetRequisitoNivel(RequisitosArmero, ArmeroNivel[playerid]);
+        if(ArmeroExp[playerid] >= reqArm && ArmeroNivel[playerid] < NIVEL_MAX_TRABAJO) {
+            ArmeroExp[playerid] = 0;
+            ArmeroNivel[playerid]++;
+            new armLvlMsg[96];
+            format(armLvlMsg, sizeof(armLvlMsg), "Subiste al nivel %d de armero.", ArmeroNivel[playerid]);
+            SendClientMessage(playerid, 0xFFFF00FF, armLvlMsg);
+            PlayerPlaySound(playerid, 1058, 0.0, 0.0, 0.0);
+        }
         SendClientMessage(playerid, 0x66FF66FF, "Arma creada con exito y equipada. Subes armero creando armas.");
         return 1;
     }
@@ -6800,6 +6852,8 @@ public OnPlayerUpdate(playerid) {
 }
 
 
+forward RespawnAutomaticoJugador(playerid);
+
 public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
     #pragma unused killerid
     #pragma unused reason
@@ -6809,7 +6863,14 @@ public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
         PlayerAmmoInventario[playerid][w] = 0;
     }
     ResetPlayerWeapons(playerid);
-    SetSpawnInfo(playerid, 255, PlayerSkinGuardada[playerid], 2494.24, -1671.19, 13.33, 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
+    SetSpawnInfo(playerid, 255, PlayerSkinGuardada[playerid], PuntoPos[puntoMedico][0], PuntoPos[puntoMedico][1], PuntoPos[puntoMedico][2], 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
+    SetTimerEx("RespawnAutomaticoJugador", 1200, false, "d", playerid);
+    return 1;
+}
+
+public RespawnAutomaticoJugador(playerid) {
+    if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 0;
+    if(GetPlayerState(playerid) == PLAYER_STATE_WASTED) SpawnPlayer(playerid);
     return 1;
 }
 
@@ -7258,7 +7319,7 @@ stock FinalizarTrabajoBasurero(playerid) {
         if(nivel > NIVEL_MAX_TRABAJO) nivel = NIVEL_MAX_TRABAJO;
         new pagoBase = PAGO_BASE_BASURERO;
         new pagoRecolecta = BasureroRecolectado[playerid] * 180;
-        new pagoNivel = nivel * 150;
+        new pagoNivel = nivel * 100;
         new pago = pagoBase + pagoRecolecta + pagoNivel;
         if(pago > PAGO_MAX_BASURERO) pago = PAGO_MAX_BASURERO;
         new bonusMembresia = GetBonusTrabajoMembresia(playerid);
@@ -7266,7 +7327,8 @@ stock FinalizarTrabajoBasurero(playerid) {
         KH_GivePlayerMoney(playerid, pago);
 
         BasureroRecorridos[playerid]++;
-        if(BasureroRecorridos[playerid] >= PROGRESO_BASURERO_POR_NIVEL) {
+        new reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
+        if(BasureroRecorridos[playerid] >= reqBas) {
             BasureroRecorridos[playerid] = 0;
             if(BasureroNivel[playerid] < NIVEL_MAX_TRABAJO) {
                 BasureroNivel[playerid]++;
@@ -7278,7 +7340,8 @@ stock FinalizarTrabajoBasurero(playerid) {
         new msg[200];
         format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Pago base:$%d | Recoleccion:$%d | Nivel:$%d | Bonus membresia:$%d | Total:$%d", pagoBase, pagoRecolecta, pagoNivel, bonusMembresia, pago);
         SendClientMessage(playerid, 0x66FF66FF, msg);
-        format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", BasureroRecorridos[playerid], PROGRESO_BASURERO_POR_NIVEL, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
+        reqBas = GetRequisitoNivel(RequisitosBasurero, BasureroNivel[playerid]);
+        format(msg, sizeof(msg), "{66FF66}[Basurero]{FFFFFF} Progreso: %d/%d | Nivel: %d/%d", BasureroRecorridos[playerid], reqBas, BasureroNivel[playerid], NIVEL_MAX_TRABAJO);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         if(BasureroFloresEncontradas[playerid] > 0) {
             format(msg, sizeof(msg), "{FF66CC}[Basurero]{FFFFFF} Encontraste {FF66CC}%d flor(es){FFFFFF} en este recorrido.", BasureroFloresEncontradas[playerid]);
@@ -7732,7 +7795,7 @@ stock FormatTiempoRestante(ms, dest[], len) { if(ms < 0) ms = 0; new total = ms 
 
 stock ShowAyudaDialog(playerid) {
     new texto[1024];
-    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /dejartroncos /plantar /reparar /curar /prote /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
+    format(texto, sizeof(texto), "{33CCFF}Chat y rol:{FFFFFF} /g /m /d para hablar, /duda para consultas.\n{66FF99}Personaje:{FFFFFF} /skills /skill /pj /inventario /comer /consumir /telefono.\n{FFD166}Navegacion y trabajos:{FFFFFF} GPS en /telefono, /dejartrabajo /cancelartrabajo /tirarbasura /dejartroncos /plantar /reparar /curar /prote /reparardl /usarkit.\n{66CCFF}Trabajo mecanico:{FFFFFF} toma el trabajo en el punto de empleo y ofrece reparaciones por /reparar.\n{FF99CC}Propiedades y vehiculos:{FFFFFF} /comprar /abrircasa /salir /maletero /llave /compartirllave /encender /apagar /tuning.\n{AAAAAA}Economia:{FFFFFF} /saldo /bidon ($400, +25 gasolina) /usarbidon y operaciones del banco con la tecla H.\n{66FFFF}Membresias:{FFFFFF} revisa la seccion dedicada en /ayuda (Normal/VIP/Diamante).\n\n{AAAAAA}Nota:{FFFFFF} En /ayuda solo se muestran funciones utiles para jugadores.");
     ShowPlayerDialog(playerid, DIALOG_AYUDA, DIALOG_STYLE_MSGBOX, "Ayuda del servidor", texto, "Cerrar", "");
     return 1;
 }
@@ -8652,7 +8715,7 @@ public FinalizarTalaArbol(playerid) {
     if(!IsPlayerConnected(playerid)) return 1;
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
-    if(IsPlayerAttachedObjectSlotUsed(playerid, 8)) RemovePlayerAttachedObject(playerid, 8);
+    if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
     LenadorTimer[playerid] = -1;
     new a = LenadorArbolIndex[playerid];
     LenadorArbolIndex[playerid] = -1;
@@ -8660,13 +8723,14 @@ public FinalizarTalaArbol(playerid) {
     if(!ArbolData[a][arbolTalado]) {
         ArbolData[a][arbolTalado] = true;
         if(ArbolData[a][arbolObj] != 0) DestroyObject(ArbolData[a][arbolObj]);
-        ArbolData[a][arbolObj] = CreateObject(841, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
-        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol en cooldown\n{FFFFFF}Disponible en: 5 min 00 s");
+        ArbolData[a][arbolObj] = CreateObject(MODELO_ARBOL_TALADO, ArbolData[a][arbolX], ArbolData[a][arbolY], ArbolData[a][arbolZ] - 1.0, 0.0, 0.0, 0.0);
+        if(ArbolData[a][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: 5 min 00 s");
         new desgaste = 4 + random(4);
         if(HachaDurabilidad[playerid] > 0) HachaDurabilidad[playerid] -= desgaste;
         if(HachaDurabilidad[playerid] <= 0) { PlayerTieneHacha[playerid] = false; HachaDurabilidad[playerid] = 0; SendClientMessage(playerid, 0xFF0000FF, "Tu hacha se rompio."); }
         TaladorTroncosTalados[playerid]++;
-        if(TaladorTroncosTalados[playerid] >= PROGRESO_TALADOR_POR_NIVEL) {
+        new reqTal = GetRequisitoNivel(RequisitosTalador, TaladorNivel[playerid]);
+        if(TaladorTroncosTalados[playerid] >= reqTal) {
             TaladorTroncosTalados[playerid] = 0;
             if(TaladorNivel[playerid] < NIVEL_MAX_TRABAJO) {
                 TaladorNivel[playerid]++;
@@ -8757,13 +8821,20 @@ stock ActualizarLabelHorno(hornoidx) {
     Update3DTextLabelText(HornoData[hornoidx][hornoLabel], 0xFFAA00FF, txt);
     return 1;
 }
+stock GetRequisitoNivel(const reqs[], nivel) {
+    if(nivel < 1) nivel = 1;
+    if(nivel > NIVEL_MAX_TRABAJO) nivel = NIVEL_MAX_TRABAJO;
+    return reqs[nivel - 1];
+}
+
+
 
 stock RestaurarArbolModeloInicial(arbolidx) {
     if(arbolidx < 0 || arbolidx >= TotalArboles || !ArbolData[arbolidx][arbolActivo]) return 0;
     ArbolCooldownTick[arbolidx] = 0;
     ArbolData[arbolidx][arbolTalado] = false;
     if(ArbolData[arbolidx][arbolObj] != 0) DestroyObject(ArbolData[arbolidx][arbolObj]);
-    ArbolData[arbolidx][arbolObj] = CreateObject(629, ArbolData[arbolidx][arbolX], ArbolData[arbolidx][arbolY], ArbolData[arbolidx][arbolZ] - 1.0, 0.0, 0.0, 0.0);
+    ArbolData[arbolidx][arbolObj] = CreateObject(MODELO_ARBOL_ACTIVO, ArbolData[arbolidx][arbolX], ArbolData[arbolidx][arbolY], ArbolData[arbolidx][arbolZ] - 1.0, 0.0, 0.0, 0.0);
     if(ArbolData[arbolidx][arbolLabel] != Text3D:-1) Update3DTextLabelText(ArbolData[arbolidx][arbolLabel], 0x8B5A2BFF, "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar");
     return 1;
 }
@@ -8778,11 +8849,13 @@ stock ActualizarTextosMinasArboles() {
             restante = MinaCooldownTick[m] - now;
             mins = (restante + 59999) / 60000;
             segs = (restante / 1000) % 60;
-            format(txt, sizeof(txt), "{FFAA00}Mina en cooldown\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
+            format(txt, sizeof(txt), "{FFAA00}Mina en Espera\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
             Update3DTextLabelText(MinaData[m][minaLabel], 0xFFAA00FF, txt);
+            if(MinaData[m][minaObj] != 0) { DestroyObject(MinaData[m][minaObj]); MinaData[m][minaObj] = CreateObject(MODELO_MINA_COOLDOWN, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ] - 1.0, 0.0, 0.0, 0.0); }
         } else {
             if(MinaCooldownTick[m] != 0) MinaCooldownTick[m] = 0;
             Update3DTextLabelText(MinaData[m][minaLabel], 0x66CCFFFF, "{66CCFF}Mina disponible\n{FFFFFF}Usa H para minar");
+            if(MinaData[m][minaObj] != 0) { DestroyObject(MinaData[m][minaObj]); MinaData[m][minaObj] = CreateObject(MODELO_MINA_BASE, MinaData[m][minaX], MinaData[m][minaY], MinaData[m][minaZ] - 1.0, 0.0, 0.0, 0.0); AplicarTexturaMinaEstatica(MinaData[m][minaObj]); }
         }
     }
 
@@ -8795,7 +8868,7 @@ stock ActualizarTextosMinasArboles() {
                 restante = ArbolCooldownTick[a] - now;
                 mins = (restante + 59999) / 60000;
                 segs = (restante / 1000) % 60;
-                format(txt, sizeof(txt), "{B87333}Arbol en cooldown\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
+                format(txt, sizeof(txt), "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: %d min %02d s", mins, segs);
                 Update3DTextLabelText(ArbolData[a][arbolLabel], 0xB87333FF, txt);
             }
         } else {
@@ -9048,7 +9121,8 @@ public FinalizarReparacionMecanico(playerid) {
 
     KH_GivePlayerMoney(targetid, -costo);
     new pagoMecanico = floatround(float(costo) * PORCENTAJE_PAGO_MECANICO, floatround_floor);
-    KH_GivePlayerMoney(playerid, pagoMecanico);
+    new bonusNivelMec = MecanicoNivel[playerid] * 500;
+    KH_GivePlayerMoney(playerid, pagoMecanico + bonusNivelMec);
 
     new Float:actualHealth;
     GetVehicleHealth(veh, actualHealth);
@@ -9065,7 +9139,7 @@ public FinalizarReparacionMecanico(playerid) {
         SetVehicleHealth(veh, 1000.0);
         VehHealthData[veh] = 1000.0;
         SendClientMessage(targetid, 0x66FF66FF, "Reparacion premium finalizada (motor + carroceria).");
-        SendClientMessage(playerid, 0x66FF66FF, "Reparacion premium realizada. Recibiste tu pago.");
+        new txtPagoMec[128]; format(txtPagoMec, sizeof(txtPagoMec), "Reparacion premium realizada. Pago base:$%d + bono nivel:$%d.", pagoMecanico, bonusNivelMec); SendClientMessage(playerid, 0x66FF66FF, txtPagoMec);
     } else {
         if(actualHealth < DL_REPARACION_INTERMEDIA) SetVehicleHealth(veh, DL_REPARACION_INTERMEDIA);
         SendClientMessage(targetid, 0x66FF66FF, "Reparacion DL 1000 completada (solo damage level).");
@@ -9073,7 +9147,8 @@ public FinalizarReparacionMecanico(playerid) {
     }
 
     MecanicoReparaciones[playerid]++;
-    if(MecanicoReparaciones[playerid] >= PROGRESO_MECANICO_POR_NIVEL) {
+    new reqMec = GetRequisitoNivel(RequisitosMecanico, MecanicoNivel[playerid]);
+    if(MecanicoReparaciones[playerid] >= reqMec) {
         MecanicoReparaciones[playerid] = 0;
         if(MecanicoNivel[playerid] < NIVEL_MAX_TRABAJO) {
             MecanicoNivel[playerid]++;
@@ -9140,7 +9215,8 @@ public FinalizarTratamientoMedico(playerid) {
 
     KH_GivePlayerMoney(targetid, -precio);
     new pagoMedico = floatround(float(precio) * PORCENTAJE_PAGO_MECANICO, floatround_floor);
-    KH_GivePlayerMoney(playerid, pagoMedico);
+    new bonusNivelMed = MedicoNivel[playerid] * 500;
+    KH_GivePlayerMoney(playerid, pagoMedico + bonusNivelMed);
 
     if(tipo == 1) {
         SetPlayerHealth(targetid, 100.0);
@@ -9149,11 +9225,12 @@ public FinalizarTratamientoMedico(playerid) {
         SetPlayerArmour(targetid, 100.0);
         SendClientMessage(targetid, 0x66FF99FF, "[Medico] Tratamiento de chaleco aplicado.");
     }
-    SendClientMessage(playerid, 0x66FF99FF, "[Medico] Tratamiento completado. Recibiste tu pago.");
+    new txtPagoMed[128]; format(txtPagoMed, sizeof(txtPagoMed), "[Medico] Tratamiento completado. Pago base:$%d + bono nivel:$%d.", pagoMedico, bonusNivelMed); SendClientMessage(playerid, 0x66FF99FF, txtPagoMed);
     EnviarEntornoAccion(playerid, "finaliza el tratamiento y guarda sus insumos medicos.");
 
     MedicoTratamientos[playerid]++;
-    if(MedicoTratamientos[playerid] >= PROGRESO_MEDICO_POR_NIVEL) {
+    new reqMed = GetRequisitoNivel(RequisitosMedico, MedicoNivel[playerid]);
+    if(MedicoTratamientos[playerid] >= reqMed) {
         MedicoTratamientos[playerid] = 0;
         if(MedicoNivel[playerid] < NIVEL_MAX_TRABAJO) {
             MedicoNivel[playerid]++;
@@ -9181,7 +9258,7 @@ stock CargarMinas() {
     while(fread(h, line) && TotalMinas < MAX_MINAS) {
         new idx, Float:x = floatstr(strtok(line, idx)), Float:y = floatstr(strtok(line, idx)), Float:z = floatstr(strtok(line, idx));
         MinaData[TotalMinas][minaActiva] = true; MinaData[TotalMinas][minaX] = x; MinaData[TotalMinas][minaY] = y; MinaData[TotalMinas][minaZ] = z;
-        MinaData[TotalMinas][minaObj] = CreateObject(748, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        MinaData[TotalMinas][minaObj] = CreateObject(MODELO_MINA_BASE, x, y, z - 1.0, 0.0, 0.0, 0.0);
         AplicarTexturaMinaEstatica(MinaData[TotalMinas][minaObj]);
         MinaData[TotalMinas][minaLabel] = Create3DTextLabel("{66CCFF}Mina disponible\n{FFFFFF}Usa H para minar", 0x66CCFFFF, x, y, z + 0.9, 14.0, 0);
         TotalMinas++;
@@ -9219,8 +9296,8 @@ stock CargarArboles() {
         ArbolData[TotalArboles][arbolY] = y;
         ArbolData[TotalArboles][arbolZ] = z;
         ArbolData[TotalArboles][arbolTalado] = (talado != 0);
-        ArbolData[TotalArboles][arbolObj] = CreateObject(ArbolData[TotalArboles][arbolTalado] ? 841 : 629, x, y, z - 1.0, 0.0, 0.0, 0.0);
-        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel(ArbolData[TotalArboles][arbolTalado] ? "{B87333}Arbol en cooldown\n{FFFFFF}Disponible en: 5 min 00 s" : "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 12.0, 0);
+        ArbolData[TotalArboles][arbolObj] = CreateObject(ArbolData[TotalArboles][arbolTalado] ? MODELO_ARBOL_TALADO : MODELO_ARBOL_ACTIVO, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        ArbolData[TotalArboles][arbolLabel] = Create3DTextLabel(ArbolData[TotalArboles][arbolTalado] ? "{B87333}Arbol en Espera\n{FFFFFF}Disponible en: 5 min 00 s" : "{8B5A2B}Arbol disponible\n{FFFFFF}Usa H para talar", 0x8B5A2BFF, x, y, z + 1.2, 12.0, 0);
         TotalArboles++;
     }
     fclose(h);
