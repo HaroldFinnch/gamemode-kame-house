@@ -58,6 +58,7 @@
 #define PROGRESO_MECANICO_POR_NIVEL 5
 #define MECANICO_DIST_SOLICITUD 4.0
 #define BIDON_ATTACH_SLOT 6
+#define ATTACH_SLOT_TRONCO 9
 
 #define SEMILLA_HIERBA_PRECIO 45
 #define SEMILLA_FLOR_PRECIO   65
@@ -1499,7 +1500,8 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         TogglePlayerControllable(playerid, false);
         ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, false, false, false, false, 1200, t_FORCE_SYNC:SYNC_ALL);
         SetTimerEx("ClearPlayerAnimLock", 1200, false, "d", playerid);
-        if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9);
+        if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO);
+        SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
         LenadorTieneTronco[playerid] = false;
         LenadorMaderaRuta[playerid]++;
         new madera = 0;
@@ -1673,7 +1675,9 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(LenadorTieneTronco[playerid]) return SendClientMessage(playerid, -1, "Ya llevas troncos en la mano. Cargalos en la Sadler con H.");
         LenadorTieneTronco[playerid] = true;
         ArbolData[a][arbolTroncoDisponible] = false;
-        SetPlayerAttachedObject(playerid, 9, 1463, 1, 0.20, 0.09, -0.05, 0.0, 92.0, 0.0, 0.78, 0.78, 0.78);
+        SetPlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO, 1463, 6, 0.11, 0.05, -0.04, 8.0, 95.0, 4.0, 0.52, 0.52, 0.52);
+        TogglePlayerControllable(playerid, true);
+        SetPlayerSpecialAction(playerid, SPECIAL_ACTION_CARRY);
         ApplyAnimation(playerid, "CARRY", "crry_prtial", 4.1, true, false, false, false, 0, t_FORCE_SYNC:SYNC_ALL);
         SendClientMessage(playerid, 0xB87333FF, "[Talador] Recogiste los troncos. Cargalos en la Sadler con H.");
         EnviarEntornoAccion(playerid, "carga un tronco pesado con ambas manos.");
@@ -2444,7 +2448,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             TogglePlayerControllable(playerid, true);
             ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
             if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
-            if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, 9)) RemovePlayerAttachedObject(playerid, 9); LenadorTieneTronco[playerid] = false; }
+            if(LenadorTieneTronco[playerid]) { if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO); SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE); LenadorTieneTronco[playerid] = false; }
             DisablePlayerCheckpoint(playerid);
             if(LenadorVehiculo[playerid] != INVALID_VEHICLE_ID && IsValidVehicle(LenadorVehiculo[playerid])) { DestroyVehicle(LenadorVehiculo[playerid]); LenadorVehiculo[playerid] = INVALID_VEHICLE_ID; }
             SendClientMessage(playerid, 0xFF0000FF, "Dejaste el trabajo de talador.");
