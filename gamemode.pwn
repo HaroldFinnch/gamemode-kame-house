@@ -594,7 +594,6 @@ enum eTerritorioData {
     terZona
 }
 new TerritorioData[MAX_TERRITORIOS][eTerritorioData];
-new TerritorioCrearPendiente[MAX_PLAYERS] = {-1, ...};
 new TerritorioConquistaActiva[MAX_FACCIONES] = {-1, ...};
 
 static const FaccionColoresNombre[MAX_COLORES_FACCION][] = {
