@@ -123,6 +123,8 @@
 #define PATH_FACCIONES "facciones.txt"
 #define PATH_FACCIONES_BAK "facciones.bak"
 #define PATH_FACCIONES_LEGACY "scriptfiles/kame_house/facciones.txt"
+#define PATH_TERRITORIOS "kame_house/territorios.txt"
+#define PATH_TERRITORIOS_LEGACY "territorios.txt"
 #define PATH_PRENDAS "kame_house/prendas_config.txt"
 #define PATH_PRENDAS_LEGACY "prendas_config.txt"
 #define PATH_EDITMAP "kame_house/editmap.txt"
@@ -206,6 +208,8 @@
 #define DIALOG_MECANICO_SOLICITUD 152
 #define DIALOG_MECANICO_REPARAR_PRECIO 170
 #define DIALOG_MEDICO_CURAR_ID 172
+#define DIALOG_TERRITORIO_CREAR_MENU 190
+#define DIALOG_TERRITORIO_CREAR_NOMBRE 191
 #define DIALOG_MEDICO_SOLICITUD 173
 #define DIALOG_DEJARTRABAJO 174
 #define DIALOG_ID_BUSCAR 175
@@ -293,8 +297,9 @@
 #define RANGO_MOD 2
 
 #define FACCION_RANGO_MIEMBRO 1
-#define FACCION_RANGO_RECLUTA 2
-#define FACCION_RANGO_OWNER 3
+#define FACCION_RANGO_RECLUTADOR 2
+#define FACCION_RANGO_SOCIO 3
+#define FACCION_RANGO_LIDER 4
 
 #define MODELO_HIERBA_OBJ 15038
 #define MODELO_FLOR_OBJ 2253
@@ -338,6 +343,10 @@
 #define MAX_MIEMBROS_FACCION 10
 #define MAX_COLORES_FACCION 10
 #define MAX_REPORTES 20
+#define MAX_TERRITORIOS 64
+#define TERRITORIO_RADIO 150.0
+#define TERRITORIO_CONQUISTA_MS 300000
+#define TERRITORIO_DURACION_MS 43200000
 
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
@@ -568,6 +577,25 @@ new bool:FaccionCrearCompraColor[MAX_PLAYERS];
 new FaccionAdminSeleccion[MAX_PLAYERS] = {-1, ...};
 new Text3D:FaccionCPLabel = Text3D:-1;
 new FaccionCPPickup = 0;
+
+enum eTerritorioData {
+    bool:terActivo,
+    terNombre[32],
+    Float:terX,
+    Float:terY,
+    Float:terZ,
+    Float:terRadio,
+    terOwnerFid,
+    terConquistaFid,
+    terConquistaInicioTick,
+    terConquistaFinTick,
+    terConquistaRequisito,
+    terControlExpiraTick,
+    terZona
+}
+new TerritorioData[MAX_TERRITORIOS][eTerritorioData];
+new TerritorioCrearPendiente[MAX_PLAYERS] = {-1, ...};
+new TerritorioConquistaActiva[MAX_FACCIONES] = {-1, ...};
 
 static const FaccionColoresNombre[MAX_COLORES_FACCION][] = {
     "Rojo", "Azul", "Verde", "Amarillo", "Morado", "Naranja", "Cian", "Rosa", "Blanco", "Negro"
@@ -947,6 +975,7 @@ forward ExpirarSolicitudMedico(playerid);
 forward TeleportVehiculoLlamado(playerid);
 forward OcultarAnuncioJugador(playerid);
 forward OcultarDineroCambioJugador(playerid);
+forward TickTerritorios();
 stock CargarMinas();
 stock GuardarMinas();
 stock CargarArboles();
@@ -1171,6 +1200,15 @@ stock GuardarFacciones();
 stock CargarFaccionesDesdeArchivo(const path[]);
 stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
+stock CargarTerritorios();
+stock GuardarTerritorios();
+stock CrearTerritorio(Float:x, Float:y, Float:z, const nombre[]);
+stock EliminarTerritorio(idx);
+stock GetTerritorioMasCercano(playerid, Float:maxDist = 25.0);
+stock GetMiembrosFaccionEnTerritorio(fid, tid);
+stock IniciarConquistaTerritorio(playerid, tid);
+stock ColorTerritorioSegunOwner(tid);
+stock MostrarMenuCrearTerritorio(playerid);
 stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false);
 stock EliminarFaccion(fid);
 stock strtok_sep(const string[], &index, separator = ' ') {
@@ -1208,6 +1246,161 @@ stock bool:AgregarMiembroFaccion(fid, playerid, rango);
 stock RemoverMiembroFaccion(fid, playerid);
 stock ActualizarMiembrosFaccion(fid);
 stock GuardarNombreJugadorEnFaccion(playerid, fid, miembroSlot = -1);
+
+stock ColorTerritorioSegunOwner(tid) {
+    if(tid < 0 || tid >= MAX_TERRITORIOS || !TerritorioData[tid][terActivo]) return 0xFFFFFFFF;
+    if(TerritorioData[tid][terOwnerFid] == -1) return 0xFFFFFFFF;
+    return FaccionData[TerritorioData[tid][terOwnerFid]][facColor];
+}
+
+stock CrearTerritorio(Float:x, Float:y, Float:z, const nombre[]) {
+    for(new i=0; i<MAX_TERRITORIOS; i++) {
+        if(TerritorioData[i][terActivo]) continue;
+        TerritorioData[i][terActivo] = true;
+        format(TerritorioData[i][terNombre], 32, "%s", nombre);
+        TerritorioData[i][terX] = x;
+        TerritorioData[i][terY] = y;
+        TerritorioData[i][terZ] = z;
+        TerritorioData[i][terRadio] = TERRITORIO_RADIO;
+        TerritorioData[i][terOwnerFid] = -1;
+        TerritorioData[i][terConquistaFid] = -1;
+        TerritorioData[i][terConquistaInicioTick] = 0;
+        TerritorioData[i][terConquistaFinTick] = 0;
+        TerritorioData[i][terConquistaRequisito] = 2;
+        TerritorioData[i][terControlExpiraTick] = 0;
+        TerritorioData[i][terZona] = GangZoneCreate(x - TERRITORIO_RADIO, y - TERRITORIO_RADIO, x + TERRITORIO_RADIO, y + TERRITORIO_RADIO);
+        GangZoneShowForAll(TerritorioData[i][terZona], 0xFFFFFFFF);
+        return i;
+    }
+    return -1;
+}
+
+stock EliminarTerritorio(idx) {
+    if(idx < 0 || idx >= MAX_TERRITORIOS || !TerritorioData[idx][terActivo]) return 0;
+    if(TerritorioData[idx][terZona] != -1) GangZoneDestroy(TerritorioData[idx][terZona]);
+    TerritorioData[idx][terActivo] = false;
+    TerritorioData[idx][terNombre][0] = EOS;
+    return 1;
+}
+
+stock GetTerritorioMasCercano(playerid, Float:maxDist = 25.0) {
+    new Float:px, Float:py, Float:pz;
+    GetPlayerPos(playerid, px, py, pz);
+    new tid = -1; new Float:best = maxDist;
+    for(new i=0; i<MAX_TERRITORIOS; i++) {
+        if(!TerritorioData[i][terActivo]) continue;
+        new Float:d = GetDistanceBetweenPoints(px, py, pz, TerritorioData[i][terX], TerritorioData[i][terY], TerritorioData[i][terZ]);
+        if(d < best) { best = d; tid = i; }
+    }
+    return tid;
+}
+
+stock GetMiembrosFaccionEnTerritorio(fid, tid) {
+    if(fid < 0 || tid < 0 || tid >= MAX_TERRITORIOS || !TerritorioData[tid][terActivo]) return 0;
+    new total = 0;
+    for(new i=0; i<MAX_PLAYERS; i++) {
+        if(!IsPlayerConnected(i) || !IsPlayerLoggedIn[i]) continue;
+        if(PlayerFaccionId[i] != fid) continue;
+        if(IsPlayerInRangeOfPoint(i, TerritorioData[tid][terRadio], TerritorioData[tid][terX], TerritorioData[tid][terY], TerritorioData[tid][terZ])) total++;
+    }
+    return total;
+}
+
+stock IniciarConquistaTerritorio(playerid, tid) {
+    if(tid < 0 || tid >= MAX_TERRITORIOS || !TerritorioData[tid][terActivo]) return SendClientMessage(playerid, -1, "Territorio invalido.");
+    new fid = PlayerFaccionId[playerid];
+    if(fid == -1) return SendClientMessage(playerid, -1, "Debes tener faccion.");
+    if(TerritorioConquistaActiva[fid] != -1) return SendClientMessage(playerid, -1, "Tu faccion ya esta conquistando otro territorio.");
+    if(TerritorioData[tid][terConquistaFid] != -1) return SendClientMessage(playerid, -1, "Este territorio ya tiene conquista activa.");
+    if(GetMiembrosFaccionEnTerritorio(fid, tid) < 2) return SendClientMessage(playerid, -1, "Minimo 2 miembros de tu faccion dentro del territorio.");
+    TerritorioData[tid][terConquistaFid] = fid;
+    TerritorioData[tid][terConquistaInicioTick] = GetTickCount();
+    TerritorioData[tid][terConquistaFinTick] = GetTickCount() + TERRITORIO_CONQUISTA_MS;
+    TerritorioConquistaActiva[fid] = tid;
+    new msg[160];
+    format(msg, sizeof(msg), "[Territorios] %s inicio la conquista de %s (5 min).", FaccionData[fid][facNombre], TerritorioData[tid][terNombre]);
+    SendClientMessageToAll(0xFFD166FF, msg);
+    return 1;
+}
+
+public TickTerritorios() {
+    new now = GetTickCount();
+    for(new t=0; t<MAX_TERRITORIOS; t++) {
+        if(!TerritorioData[t][terActivo]) continue;
+        if(TerritorioData[t][terConquistaFid] != -1 && now >= TerritorioData[t][terConquistaFinTick]) {
+            new fid = TerritorioData[t][terConquistaFid];
+            if(GetMiembrosFaccionEnTerritorio(fid, t) >= 2) {
+                TerritorioData[t][terOwnerFid] = fid;
+                TerritorioData[t][terControlExpiraTick] = now + TERRITORIO_DURACION_MS;
+                GangZoneShowForAll(TerritorioData[t][terZona], ColorTerritorioSegunOwner(t));
+                new okmsg[180];
+                format(okmsg, sizeof(okmsg), "[Territorios] %s conquisto %s por 12 horas.", FaccionData[fid][facNombre], TerritorioData[t][terNombre]);
+                SendClientMessageToAll(0x66FF66FF, okmsg);
+                GuardarTerritorios();
+            } else SendClientMessageToAll(0xFFAA00FF, "[Territorios] Conquista cancelada: no habia 2 miembros en la zona al finalizar.");
+            TerritorioConquistaActiva[fid] = -1;
+            TerritorioData[t][terConquistaFid] = -1;
+            TerritorioData[t][terConquistaInicioTick] = 0;
+            TerritorioData[t][terConquistaFinTick] = 0;
+        }
+        if(TerritorioData[t][terOwnerFid] != -1 && now >= TerritorioData[t][terControlExpiraTick]) {
+            TerritorioData[t][terOwnerFid] = -1;
+            GangZoneShowForAll(TerritorioData[t][terZona], 0xFFFFFFFF);
+            GuardarTerritorios();
+        }
+    }
+    return 1;
+}
+
+stock GuardarTerritorios() {
+    new File:h = fopen(PATH_TERRITORIOS, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_TERRITORIOS, io_write); }
+    if(!h) return 0;
+    new line[256];
+    for(new i=0; i<MAX_TERRITORIOS; i++) {
+        if(!TerritorioData[i][terActivo]) continue;
+        format(line, sizeof(line), "%d|%s|%f|%f|%f|%f|%d|%d\n", i, TerritorioData[i][terNombre], TerritorioData[i][terX], TerritorioData[i][terY], TerritorioData[i][terZ], TerritorioData[i][terRadio], TerritorioData[i][terOwnerFid], TerritorioData[i][terControlExpiraTick]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarTerritorios() {
+    for(new i=0; i<MAX_TERRITORIOS; i++) {
+        TerritorioData[i][terActivo] = false;
+        TerritorioData[i][terZona] = -1;
+    }
+    new File:h = fopen(PATH_TERRITORIOS, io_read), line[256];
+    if(!h) return 1;
+    while(fread(h, line)) {
+        LimpiarLinea(line);
+        if(!line[0]) continue;
+        new idx = 0, tid = strval(strtok_sep(line, idx, '|'));
+        if(tid < 0 || tid >= MAX_TERRITORIOS) continue;
+        TerritorioData[tid][terActivo] = true;
+        format(TerritorioData[tid][terNombre], 32, "%s", strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terX] = floatstr(strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terY] = floatstr(strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terZ] = floatstr(strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terRadio] = floatstr(strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terOwnerFid] = strval(strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terControlExpiraTick] = strval(strtok_sep(line, idx, '|'));
+        TerritorioData[tid][terConquistaFid] = -1;
+        TerritorioData[tid][terConquistaInicioTick] = 0;
+        TerritorioData[tid][terConquistaFinTick] = 0;
+        TerritorioData[tid][terConquistaRequisito] = 2;
+        TerritorioData[tid][terZona] = GangZoneCreate(TerritorioData[tid][terX] - TerritorioData[tid][terRadio], TerritorioData[tid][terY] - TerritorioData[tid][terRadio], TerritorioData[tid][terX] + TerritorioData[tid][terRadio], TerritorioData[tid][terY] + TerritorioData[tid][terRadio]);
+        GangZoneShowForAll(TerritorioData[tid][terZona], ColorTerritorioSegunOwner(tid));
+    }
+    fclose(h);
+    return 1;
+}
+
+stock MostrarMenuCrearTerritorio(playerid) {
+    return ShowPlayerDialog(playerid, DIALOG_TERRITORIO_CREAR_MENU, DIALOG_STYLE_LIST, "Admin territorios", "Crear territorio (150m)", "Seleccionar", "Cerrar");
+}
+
 stock GuardarEditMap();
 stock CargarEditMap();
 stock GuardarVentagas();
@@ -1386,6 +1579,7 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_ARMERIA_LEGACY, PATH_ARMERIA);
     MigrarArchivoLegacy(PATH_TIENDA_VIRTUAL_LEGACY, PATH_TIENDA_VIRTUAL);
     MigrarArchivoLegacy(PATH_FACCIONES_LEGACY, PATH_FACCIONES);
+    MigrarArchivoLegacy(PATH_TERRITORIOS_LEGACY, PATH_TERRITORIOS);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
     CargarVentaSkinsConfig();
@@ -1463,8 +1657,10 @@ public OnGameModeInit() {
     SetTimer("ActualizarTopDineroTimer", 60000, true);
     SetTimer("CheckInactiveVehicles", 10000, true);
     SetTimer("ActualizarTextosHornos", 1000, true);
+    SetTimer("TickTerritorios", 1000, true);
 
     InicializarSistemaFacciones();
+    CargarTerritorios();
     return 1;
 }
 
@@ -2182,7 +2378,8 @@ stock ObtenerTrabajosActivosTexto(playerid, dest[], len) {
 
 stock GetPrendaAttachSlot(idx) {
     if(idx < 0 || idx >= MAX_PRENDAS) return -1;
-    return 20 + idx;
+    if(idx >= 6) return -1;
+    return idx;
 }
 
 stock GenerarFechaActualTexto(dest[], len) {
@@ -2454,8 +2651,29 @@ public OnPlayerCommandText(playerid, cmdtext[])
 
     if(!strcmp(cmd, "/faccion", true)) {
         if(PlayerFaccionId[playerid] == -1) return SendClientMessage(playerid, -1, "No perteneces a ninguna faccion.");
-        if(PlayerFaccionRango[playerid] == FACCION_RANGO_MIEMBRO) return SendClientMessage(playerid, -1, "Solo owner/recluta pueden gestionar la faccion.");
+        if(PlayerFaccionRango[playerid] == FACCION_RANGO_MIEMBRO) return SendClientMessage(playerid, -1, "Como miembro solo puedes ver informacion con /pj.");
         return MostrarPanelFaccionOwner(playerid);
+    }
+
+    if(!strcmp(cmd, "/crearterri", true)) {
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "Solo administracion puede crear territorios.");
+        return MostrarMenuCrearTerritorio(playerid);
+    }
+
+    if(!strcmp(cmd, "/eliminarterri", true)) {
+        if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "Solo administracion puede eliminar territorios.");
+        new tid = GetTerritorioMasCercano(playerid, 25.0);
+        if(tid == -1) return SendClientMessage(playerid, -1, "No hay territorio cercano.");
+        EliminarTerritorio(tid);
+        GuardarTerritorios();
+        return SendClientMessage(playerid, 0x66FF66FF, "Territorio eliminado.");
+    }
+
+    if(!strcmp(cmd, "/conquitar", true)) {
+        if(PlayerFaccionId[playerid] == -1) return SendClientMessage(playerid, -1, "Debes pertenecer a una faccion.");
+        new tid = GetTerritorioMasCercano(playerid, TERRITORIO_RADIO + 10.0);
+        if(tid == -1) return SendClientMessage(playerid, -1, "No estas en un territorio valido.");
+        return IniciarConquistaTerritorio(playerid, tid);
     }
 
     if(!strcmp(cmd, "/duda", true)) {
@@ -2561,7 +2779,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         new limiteTrabajos = GetLimiteTrabajosJugador(playerid);
         new bonusTrabajo = GetBonusTrabajoMembresia(playerid);
 
-        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d\n\n{66CCFF}Mecanico: {FFFFFF}Nivel %d/%d | Reparaciones %d/%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo, MecanicoNivel[playerid], NIVEL_MAX_TRABAJO, MecanicoReparaciones[playerid], PROGRESO_MECANICO_POR_NIVEL);
+        format(body, sizeof(body), "{3399FF}Nivel PJ: {FFFFFF}%d\n{33CCFF}Tiempo jugado: {FFFFFF}%d horas\n{33CCFF}Prox nivel en: {FFFFFF}%dh %dm\n{33CCFF}Pago por hora: {00FF00}$%d\n{33CCFF}Faccion: {%s}%s\n\n{66FFFF}Membresia: {FFFFFF}%s\n{66FFFF}Vigencia: {FFFFFF}%s\n{66FFFF}Diamantes: {FFFFFF}%d\n\n{FFD166}Vehiculos: {FFFFFF}%d/%d\n{FFD166}Plantas en casa: {FFFFFF}%d\n{FFD166}Maletero: {FFFFFF}%d espacios\n{FFD166}Prendas visibles: {FFFFFF}%d\n{FFD166}Trabajos simultaneos: {FFFFFF}%d\n{FFD166}Bonus por trabajo: {00FF00}$%d", nivelActual, PlayerTiempoJugadoMin[playerid] / 60, horas, mins, pagoHora, faccionColorHex, faccionTexto, membresiaTexto, vigenciaTexto, PlayerDiamantes[playerid], ContarAutosJugador(playerid), limiteVeh, GetLimitePlantasJugador(playerid), limiteMaletero, limitePrendas, limiteTrabajos, bonusTrabajo);
         ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "{FFD700}Progreso del personaje", body, "Cerrar", "");
         return 1;
     }
@@ -3109,7 +3327,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(TotalHornos >= MAX_HORNOS) return SendClientMessage(playerid, -1, "Limite de hornos alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         HornoData[TotalHornos][hornoActivo] = true; HornoData[TotalHornos][hornoX] = x; HornoData[TotalHornos][hornoY] = y; HornoData[TotalHornos][hornoZ] = z;
-        HornoData[TotalHornos][hornoObj] = CreateObject(19831, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoObj] = CreateObject(11725, x, y, z - 1.0, 0.0, 0.0, 0.0);
         HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0); HornoData[TotalHornos][hornoListoRetiro] = false; HornoData[TotalHornos][hornoEnUso] = false; HornoData[TotalHornos][hornoOwner] = INVALID_PLAYER_ID;
         TotalHornos++; GuardarHornos();
         return SendClientMessage(playerid, 0x00FF00FF, "Horno creado.");
@@ -3924,6 +4142,23 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     }
 
 
+    if(dialogid == DIALOG_TERRITORIO_CREAR_MENU) {
+        if(!response) return 1;
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_TERRITORIO_CREAR_NOMBRE, DIALOG_STYLE_INPUT, "Crear territorio", "Nombre del territorio:", "Crear", "Cancelar");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_TERRITORIO_CREAR_NOMBRE) {
+        if(!response) return 1;
+        if(strlen(inputtext) < 3 || strlen(inputtext) > 31) return SendClientMessage(playerid, -1, "Nombre invalido (3-31). ");
+        new Float:x, Float:y, Float:z;
+        GetPlayerPos(playerid, x, y, z);
+        if(CrearTerritorio(x, y, z, inputtext) == -1) return SendClientMessage(playerid, -1, "No hay slots de territorios.");
+        GuardarTerritorios();
+        return SendClientMessage(playerid, 0x66FF66FF, "Territorio creado correctamente.");
+    }
+
+
     if(dialogid == DIALOG_FACCION_MENU) {
         if(!response) return 1;
         if(listitem == 0) {
@@ -3932,7 +4167,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return ShowPlayerDialog(playerid, DIALOG_FACCION_CREAR_NOMBRE, DIALOG_STYLE_INPUT, "Crear Faccion", "Escribe nombre de la faccion (maximo 16 caracteres):", "Siguiente", "Cancelar");
         }
         if(listitem == 1) {
-            if(PlayerFaccionId[playerid] == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER) return SendClientMessage(playerid, -1, "Solo el owner de faccion puede comprar color.");
+            if(PlayerFaccionId[playerid] == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_LIDER) return SendClientMessage(playerid, -1, "Solo el lider de faccion puede comprar color.");
             if(GetPlayerMoney(playerid) < COSTO_COMPRAR_COLOR_FACCION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente ($200000).");
             new lista[256]; lista[0]=EOS;
             for(new c=0;c<MAX_COLORES_FACCION;c++) { if(c>0) strcat(lista, "\n"); strcat(lista, FaccionColoresNombre[c]); }
@@ -3982,7 +4217,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         FaccionData[fid][facColor] = (FaccionCrearCompraColor[playerid] && FaccionCrearColorPendiente[playerid] != -1) ? FaccionColoresValor[FaccionCrearColorPendiente[playerid]] : 0x95A5A6FF;
         GuardarNombreJugadorEnFaccion(playerid, fid);
         for(new m=0;m<MAX_MIEMBROS_FACCION;m++){ FaccionData[fid][facMiembros][m] = -1; FaccionData[fid][facRangos][m]=0; FaccionMiembroNombre[fid][m][0] = EOS; }
-        AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_OWNER);
+        AgregarMiembroFaccion(fid, playerid, FACCION_RANGO_LIDER);
         DeletePVar(playerid, "FaccionNombreTmp");
         GuardarFacciones();
         ActualizarLabelJugadorFaccion(playerid, true);
@@ -3993,7 +4228,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_FACCION_COMPRAR_COLOR_LISTA) {
         if(!response) return 1;
         new fid = PlayerFaccionId[playerid];
-        if(fid == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER) return 1;
+        if(fid == -1 || PlayerFaccionRango[playerid] != FACCION_RANGO_LIDER) return 1;
         if(listitem < 0 || listitem >= MAX_COLORES_FACCION) return 1;
         if(GetPlayerMoney(playerid) < COSTO_COMPRAR_COLOR_FACCION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
         KH_GivePlayerMoney(playerid, -COSTO_COMPRAR_COLOR_FACCION);
@@ -5152,10 +5387,16 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(info, sizeof(info), "Faccion: %s\nMiembros: %d/%d\nOwner ID: %d", FaccionData[fid][facNombre], miembros, MAX_MIEMBROS_FACCION, FaccionData[fid][facOwner]);
             return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Info Faccion", info, "Cerrar", "");
         }
-        if(PlayerFaccionRango[playerid] != FACCION_RANGO_OWNER && PlayerFaccionRango[playerid] != FACCION_RANGO_RECLUTA) return SendClientMessage(playerid, -1, "No tienes permisos en la faccion.");
+        if(PlayerFaccionRango[playerid] < FACCION_RANGO_RECLUTADOR) return SendClientMessage(playerid, -1, "No tienes permisos en la faccion.");
         if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_FACCION_INVITAR_ID, DIALOG_STYLE_INPUT, "Faccion - Invitar", "ID del jugador a invitar:", "Invitar", "Atras");
-        if(listitem == 2 && PlayerFaccionRango[playerid] == FACCION_RANGO_OWNER) return ShowPlayerDialog(playerid, DIALOG_FACCION_EDITAR_RANGO, DIALOG_STYLE_INPUT, "Faccion - Editar rango", "ID del miembro:\n(Alterna Miembro/Recluta)", "Editar", "Atras");
-        if(listitem == 3 && PlayerFaccionRango[playerid] == FACCION_RANGO_OWNER) return ShowPlayerDialog(playerid, DIALOG_FACCION_EDITAR_RANGO+1, DIALOG_STYLE_INPUT, "Faccion - Expulsar", "ID del miembro a expulsar:", "Expulsar", "Atras");
+        if(listitem == 2 && PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) return ShowPlayerDialog(playerid, DIALOG_FACCION_EDITAR_RANGO, DIALOG_STYLE_INPUT, "Faccion - Editar rango", "ID del miembro:\n(Alterna Miembro/Recluta)", "Editar", "Atras");
+        if(listitem == 3 && PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) return ShowPlayerDialog(playerid, DIALOG_FACCION_EDITAR_RANGO+1, DIALOG_STYLE_INPUT, "Faccion - Expulsar", "ID del miembro a expulsar:", "Expulsar", "Atras");
+        if(listitem == 4 && PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) {
+            if(GetPlayerMoney(playerid) < COSTO_COMPRAR_COLOR_FACCION) return SendClientMessage(playerid, -1, "No tienes dinero suficiente ($200000).");
+            new listaColor[256]; listaColor[0]=EOS;
+            for(new c=0;c<MAX_COLORES_FACCION;c++) { if(c>0) strcat(listaColor, "\n"); strcat(listaColor, FaccionColoresNombre[c]); }
+            return ShowPlayerDialog(playerid, DIALOG_FACCION_COMPRAR_COLOR_LISTA, DIALOG_STYLE_LIST, "Cambiar color faccion", listaColor, "Comprar", "Atras");
+        }
         return 1;
     }
 
@@ -5188,10 +5429,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
 
     if(dialogid == DIALOG_FACCION_EDITAR_RANGO) {
         if(!response) return MostrarPanelFaccionOwner(playerid);
-        new target = strval(inputtext), fid = PlayerFaccionId[playerid];
+        new idxEdit = 0;
+        new target = strval(strtok(inputtext, idxEdit));
+        new rangoNuevo = strval(strtok(inputtext, idxEdit));
+        new fid = PlayerFaccionId[playerid];
         if(fid == -1 || target == playerid || !IsPlayerConnected(target) || PlayerFaccionId[target] != fid) return SendClientMessage(playerid, -1, "Jugador invalido.");
-        PlayerFaccionRango[target] = (PlayerFaccionRango[target] == FACCION_RANGO_RECLUTA) ? FACCION_RANGO_MIEMBRO : FACCION_RANGO_RECLUTA;
-        for(new i=0;i<MAX_MIEMBROS_FACCION;i++) if(FaccionData[fid][facMiembros][i] == target) FaccionData[fid][facRangos][i] = PlayerFaccionRango[target];
+        if(rangoNuevo < FACCION_RANGO_MIEMBRO || rangoNuevo > FACCION_RANGO_SOCIO) return SendClientMessage(playerid, -1, "Rango invalido.");
+        PlayerFaccionRango[target] = rangoNuevo;
+        for(new i=0;i<MAX_MIEMBROS_FACCION;i++) if(FaccionData[fid][facMiembros][i] == target) FaccionData[fid][facRangos][i] = rangoNuevo;
         GuardarFacciones();
         SendClientMessage(playerid, 0x66FF66FF, "Rango actualizado.");
         return 1;
@@ -6614,7 +6859,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                             FaccionData[f][facMiembros][m] = playerid;
                             PlayerFaccionId[playerid] = f;
                             PlayerFaccionRango[playerid] = FaccionData[f][facRangos][m];
-                            if(PlayerFaccionRango[playerid] == FACCION_RANGO_OWNER) FaccionData[f][facOwner] = playerid;
+                            if(PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) FaccionData[f][facOwner] = playerid;
                             GuardarNombreJugadorEnFaccion(playerid, f, m);
                             break;
                         }
@@ -6754,9 +6999,15 @@ public SubirTiempoJugado() {
             PlayerTiempoJugadoMin[i]++;
             if(PlayerTiempoJugadoMin[i] % 60 == 0) {
                 new pago = GetNivelPJ(i) * 500;
-                KH_GivePlayerMoney(i, pago);
-                new paymsg[128];
-                format(paymsg, sizeof(paymsg), "Pago horario recibido por nivel PJ: $%d", pago);
+                new bonusTerritorios = 0;
+                if(PlayerFaccionId[i] != -1) {
+                    for(new t=0;t<MAX_TERRITORIOS;t++) {
+                        if(TerritorioData[t][terActivo] && TerritorioData[t][terOwnerFid] == PlayerFaccionId[i] && TerritorioData[t][terControlExpiraTick] > GetTickCount()) bonusTerritorios += 2500;
+                    }
+                }
+                KH_GivePlayerMoney(i, pago + bonusTerritorios);
+                new paymsg[160];
+                format(paymsg, sizeof(paymsg), "Pago horario nivel PJ: $%d | Bonus territorios: $%d", pago, bonusTerritorios);
                 SendClientMessage(i, 0x00FF00FF, paymsg);
             }
             if(PlayerTiempoJugadoMin[i] % 1440 == 0) {
@@ -9664,7 +9915,7 @@ stock CargarHornos() {
         HornoData[TotalHornos][hornoX] = x;
         HornoData[TotalHornos][hornoY] = y;
         HornoData[TotalHornos][hornoZ] = z;
-        HornoData[TotalHornos][hornoObj] = CreateObject(19831, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoObj] = CreateObject(11725, x, y, z - 1.0, 0.0, 0.0, 0.0);
         HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
         HornoData[TotalHornos][hornoListoRetiro] = false;
         HornoData[TotalHornos][hornoEnUso] = false;
@@ -10895,7 +11146,10 @@ stock MostrarMenuFaccionesCP(playerid) {
 stock MostrarPanelFaccionOwner(playerid) {
     new fid = PlayerFaccionId[playerid];
     if(fid == -1) return SendClientMessage(playerid, -1, "No perteneces a ninguna faccion.");
-    return ShowPlayerDialog(playerid, DIALOG_FACCION_OWNER_MENU, DIALOG_STYLE_LIST, "Panel Faccion", "Informacion\nAnadir miembro\nEditar rango\nEliminar miembro", "Abrir", "Cerrar");
+    new menu[192];
+    if(PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) format(menu, sizeof(menu), "Informacion\nReclutar miembro\nEditar rango\nExpulsar miembro\nCambiar color");
+    else format(menu, sizeof(menu), "Informacion\nReclutar miembro");
+    return ShowPlayerDialog(playerid, DIALOG_FACCION_OWNER_MENU, DIALOG_STYLE_LIST, "Panel Faccion", menu, "Abrir", "Cerrar");
 }
 
 stock ActualizarLabelJugadorFaccion(playerid, bool:forzar = false) {
@@ -10978,6 +11232,8 @@ stock CargarFaccionesDesdeArchivo(const path[]) {
         for(new m=0;m<MAX_MIEMBROS_FACCION;m++) {
             FaccionData[fid][facMiembros][m] = strval(strtok_sep(line, idx, '|' ));
             FaccionData[fid][facRangos][m] = strval(strtok_sep(line, idx, '|' ));
+            if(FaccionData[fid][facMiembros][m] == FaccionData[fid][facOwner]) FaccionData[fid][facRangos][m] = FACCION_RANGO_LIDER;
+            if(FaccionData[fid][facRangos][m] < FACCION_RANGO_MIEMBRO || FaccionData[fid][facRangos][m] > FACCION_RANGO_LIDER) FaccionData[fid][facRangos][m] = FACCION_RANGO_MIEMBRO;
             format(FaccionMiembroNombre[fid][m], MAX_PLAYER_NAME, "%s", strtok_sep(line, idx, '|' ));
         }
 
