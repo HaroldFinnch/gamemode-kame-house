@@ -210,6 +210,8 @@
 #define DIALOG_MEDICO_CURAR_ID 172
 #define DIALOG_TERRITORIO_CREAR_MENU 190
 #define DIALOG_TERRITORIO_CREAR_NOMBRE 191
+#define DIALOG_TIENDA_VIRTUAL_ESPECIALES 192
+#define DIALOG_ADMIN_PRECIO_PATINES 193
 #define DIALOG_MEDICO_SOLICITUD 173
 #define DIALOG_DEJARTRABAJO 174
 #define DIALOG_ID_BUSCAR 175
@@ -347,12 +349,13 @@
 #define TERRITORIO_RADIO 150.0
 #define TERRITORIO_CONQUISTA_MS 300000
 #define TERRITORIO_DURACION_MS 18000000
+#define TERRITORIO_COOLDOWN_MS 300000
 #define TERRITORIO_ALPHA 0x66
 
 #define MAX_AUTOS_NORMALES_JUGADOR 5
 #define MAX_VEHICULOS_TOTALES_JUGADOR 5
 #define SANCION_VW_BASE 20000
-#define CUENTA_DATA_VERSION 13
+#define CUENTA_DATA_VERSION 14
 #define CUENTA_SECCION_PRENDAS "PRENDAS_BEGIN"
 #define CUENTA_SECCION_VEHICULOS "VEHICULOS_BEGIN"
 #define CUENTA_SECCION_ARMAS "ARMAS_BEGIN"
@@ -592,6 +595,7 @@ enum eTerritorioData {
     terConquistaFinTick,
     terConquistaRequisito,
     terControlExpiraTick,
+    terCooldownExpiraTick,
     terPagoHora,
     terZona
 }
@@ -665,6 +669,7 @@ enum ePuntoMovible {
 new PrecioMembresiaVIPDinero = PRECIO_MEMBRESIA_VIP;
 new PrecioMembresiaVIPDiamantes = 1;
 new PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
+new PrecioPatinesKame = 15000;
 new Float:PuntoPos[totalPuntosMovibles][3];
 new PuntoPickup[totalPuntosMovibles] = {0, ...};
 new Text3D:PuntoLabel[totalPuntosMovibles] = {Text3D:-1, ...};
@@ -832,6 +837,8 @@ new Float:GasPos[MAX_GAS_POINTS][3];
 new GasPickup[MAX_GAS_POINTS];
 new Text3D:GasLabel[MAX_GAS_POINTS] = {Text3D:-1, ...};
 new bool:TiendaVirtualHabilitada = true;
+new bool:PlayerTienePatinesKame[MAX_PLAYERS];
+new bool:PatinesKameActivo[MAX_PLAYERS];
 
 enum eMinaData {
     bool:minaActiva,
@@ -1297,6 +1304,7 @@ stock CrearTerritorio(Float:x, Float:y, Float:z, const nombre[], tipo = 0) {
         TerritorioData[i][terConquistaFinTick] = 0;
         TerritorioData[i][terConquistaRequisito] = 2;
         TerritorioData[i][terControlExpiraTick] = 0;
+        TerritorioData[i][terCooldownExpiraTick] = 0;
         TerritorioData[i][terPagoHora] = GetTipoTerritorioPago(tipo);
         TerritorioData[i][terZona] = GangZoneCreate(x - TerritorioData[i][terRadio], y - TerritorioData[i][terRadio], x + TerritorioData[i][terRadio], y + TerritorioData[i][terRadio]);
         GangZoneShowForAll(TerritorioData[i][terZona], 0xFFFFFF66);
@@ -1344,13 +1352,14 @@ stock IniciarConquistaTerritorio(playerid, tid) {
     if(TerritorioData[tid][terConquistaFid] != -1) return SendClientMessage(playerid, -1, "Este territorio ya tiene conquista activa.");
     if(TerritorioData[tid][terOwnerFid] == fid && TerritorioData[tid][terControlExpiraTick] > GetTickCount()) return SendClientMessage(playerid, -1, "Tu faccion ya controla este territorio.");
     if(TerritorioData[tid][terOwnerFid] != -1 && TerritorioData[tid][terControlExpiraTick] > GetTickCount()) return SendClientMessage(playerid, -1, "Territorio bloqueado: aun esta protegido por 5 horas.");
+    if(TerritorioData[tid][terCooldownExpiraTick] > GetTickCount()) return SendClientMessage(playerid, -1, "Territorio en cooldown: espera 5 minutos para volver a conquistar.");
     if(GetMiembrosFaccionEnTerritorio(fid, tid) < 2) return SendClientMessage(playerid, -1, "Minimo 2 miembros de tu faccion dentro del territorio.");
     TerritorioData[tid][terConquistaFid] = fid;
     TerritorioData[tid][terConquistaInicioTick] = GetTickCount();
     TerritorioData[tid][terConquistaFinTick] = GetTickCount() + TERRITORIO_CONQUISTA_MS;
     TerritorioConquistaActiva[fid] = tid;
     new msg[160];
-    format(msg, sizeof(msg), "[Territorios] %s inicio la conquista de %s (5 min).", FaccionData[fid][facNombre], TerritorioData[tid][terNombre]);
+    format(msg, sizeof(msg), "[Conquista] La faccion %s inicio la conquista de %s. Duracion: 5 minutos.", FaccionData[fid][facNombre], TerritorioData[tid][terNombre]);
     SendClientMessageToAll(0xFFD166FF, msg);
     return 1;
 }
@@ -1366,14 +1375,34 @@ public TickTerritorios() {
                 TerritorioData[t][terControlExpiraTick] = now + TERRITORIO_DURACION_MS;
                 GangZoneShowForAll(TerritorioData[t][terZona], ColorTerritorioSegunOwner(t));
                 new okmsg[180];
-                format(okmsg, sizeof(okmsg), "[Territorios] %s conquisto %s por 5 horas.", FaccionData[fid][facNombre], TerritorioData[t][terNombre]);
+                format(okmsg, sizeof(okmsg), "[Conquista] La faccion %s conquisto %s. Control durante 5 horas.", FaccionData[fid][facNombre], TerritorioData[t][terNombre]);
                 SendClientMessageToAll(0x66FF66FF, okmsg);
+                for(new p = 0; p < MAX_PLAYERS; p++) {
+                    if(!IsPlayerConnected(p) || !IsPlayerLoggedIn[p]) continue;
+                    if(PlayerFaccionId[p] != fid) continue;
+                    KH_GivePlayerMoney(p, 10000);
+                    new hierro = random(11), cobre = random(11), piedra = random(11), carbon = random(11);
+                    InvHierroMineral[p] += hierro;
+                    InvCobre[p] += cobre;
+                    InvPiedra[p] += piedra;
+                    InvCarbon[p] += carbon;
+                    new recompensa[196];
+                    format(recompensa, sizeof(recompensa), "[Conquista] Recompensa: +$10000 | Hierro:%d Cobre:%d Piedra:%d Carbon:%d.", hierro, cobre, piedra, carbon);
+                    SendClientMessage(p, 0x99FF99FF, recompensa);
+                }
                 GuardarTerritorios();
-            } else SendClientMessageToAll(0xFFAA00FF, "[Territorios] Conquista cancelada: no habia 2 miembros en la zona al finalizar.");
+            } else {
+                new fallo[196];
+                format(fallo, sizeof(fallo), "[Conquista] La faccion %s no logro conquistar %s: faltaron miembros en la zona.", FaccionData[fid][facNombre], TerritorioData[t][terNombre]);
+                SendClientMessageToAll(0xFFAA00FF, fallo);
+                TerritorioData[t][terCooldownExpiraTick] = now + TERRITORIO_COOLDOWN_MS;
+            }
             TerritorioConquistaActiva[fid] = -1;
             TerritorioData[t][terConquistaFid] = -1;
             TerritorioData[t][terConquistaInicioTick] = 0;
             TerritorioData[t][terConquistaFinTick] = 0;
+            if(TerritorioData[t][terCooldownExpiraTick] < now + TERRITORIO_COOLDOWN_MS) TerritorioData[t][terCooldownExpiraTick] = now + TERRITORIO_COOLDOWN_MS;
+            GuardarTerritorios();
         }
         if(TerritorioData[t][terOwnerFid] != -1 && now >= TerritorioData[t][terControlExpiraTick]) {
             TerritorioData[t][terOwnerFid] = -1;
@@ -1447,7 +1476,7 @@ stock GuardarTerritorios() {
     new line[256];
     for(new i=0; i<MAX_TERRITORIOS; i++) {
         if(!TerritorioData[i][terActivo]) continue;
-        format(line, sizeof(line), "%d|%s|%f|%f|%f|%f|%d|%d|%d\n", i, TerritorioData[i][terNombre], TerritorioData[i][terX], TerritorioData[i][terY], TerritorioData[i][terZ], TerritorioData[i][terRadio], TerritorioData[i][terOwnerFid], TerritorioData[i][terControlExpiraTick], TerritorioData[i][terPagoHora]);
+        format(line, sizeof(line), "%d|%s|%f|%f|%f|%f|%d|%d|%d|%d\n", i, TerritorioData[i][terNombre], TerritorioData[i][terX], TerritorioData[i][terY], TerritorioData[i][terZ], TerritorioData[i][terRadio], TerritorioData[i][terOwnerFid], TerritorioData[i][terControlExpiraTick], TerritorioData[i][terCooldownExpiraTick], TerritorioData[i][terPagoHora]);
         fwrite(h, line);
     }
     fclose(h);
@@ -1458,6 +1487,7 @@ stock CargarTerritorios() {
     for(new i=0; i<MAX_TERRITORIOS; i++) {
         TerritorioData[i][terActivo] = false;
         TerritorioData[i][terZona] = -1;
+        TerritorioData[i][terCooldownExpiraTick] = 0;
     }
     new File:h = fopen(PATH_TERRITORIOS, io_read), line[256];
     if(!h) return 1;
@@ -1474,8 +1504,18 @@ stock CargarTerritorios() {
         TerritorioData[tid][terRadio] = floatstr(strtok_sep(line, idx, '|'));
         TerritorioData[tid][terOwnerFid] = strval(strtok_sep(line, idx, '|'));
         TerritorioData[tid][terControlExpiraTick] = strval(strtok_sep(line, idx, '|'));
-        new pagoTerr = strval(strtok_sep(line, idx, '|'));
-        TerritorioData[tid][terPagoHora] = pagoTerr > 0 ? pagoTerr : 2500;
+        new posible[32], posible2[32];
+        format(posible, sizeof(posible), "%s", strtok_sep(line, idx, '|'));
+        format(posible2, sizeof(posible2), "%s", strtok_sep(line, idx, '|'));
+        if(posible2[0] == EOS) {
+            TerritorioData[tid][terCooldownExpiraTick] = 0;
+            new pagoTerrLegacy = strval(posible);
+            TerritorioData[tid][terPagoHora] = pagoTerrLegacy > 0 ? pagoTerrLegacy : 2500;
+        } else {
+            TerritorioData[tid][terCooldownExpiraTick] = strval(posible);
+            new pagoTerr = strval(posible2);
+            TerritorioData[tid][terPagoHora] = pagoTerr > 0 ? pagoTerr : 2500;
+        }
         TerritorioData[tid][terConquistaFid] = -1;
         TerritorioData[tid][terConquistaInicioTick] = 0;
         TerritorioData[tid][terConquistaFinTick] = 0;
@@ -2765,6 +2805,14 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return IniciarConquistaTerritorio(playerid, tid);
     }
 
+
+    if(!strcmp(cmd, "/partinar", true) || !strcmp(cmd, "/patinar", true)) {
+        if(!PlayerTienePatinesKame[playerid]) return SendClientMessage(playerid, -1, "No tienes Patines Kame. Compralos en la tienda virtual.");
+        if(IsPlayerInAnyVehicle(playerid)) return SendClientMessage(playerid, -1, "Baja del vehiculo para patinar.");
+        PatinesKameActivo[playerid] = !PatinesKameActivo[playerid];
+        return SendClientMessage(playerid, 0x66CCFFFF, PatinesKameActivo[playerid] ? "Patines Kame activados." : "Patines Kame desactivados.");
+    }
+
     if(!strcmp(cmd, "/duda", true)) {
         return ShowPlayerDialog(playerid, DIALOG_DUDA_TEXTO, DIALOG_STYLE_INPUT, "Sistema de Dudas", "Escribe tu duda para enviarla a todos:", "Enviar", "Cancelar");
     }
@@ -4033,6 +4081,8 @@ public OnPlayerConnect(playerid) {
     AdminSetNivelTarget[playerid] = -1;
     AdminSetTrabajoTipo[playerid] = -1;
     PlayerTieneTelefono[playerid] = false;
+    PlayerTienePatinesKame[playerid] = false;
+    PatinesKameActivo[playerid] = false;
     TelefonoMensajeDestino[playerid] = -1;
     CalcValor1Pendiente[playerid] = 0.0;
     CalcOperacionPendiente[playerid] = 0;
@@ -4125,6 +4175,7 @@ public OnPlayerConnect(playerid) {
 public OnPlayerSpawn(playerid) {
     if(!IsPlayerLoggedIn[playerid]) return Kick(playerid);
     SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
+    PatinesKameActivo[playerid] = false;
     ExpirarMembresiaSiCorresponde(playerid);
     ActualizarBeneficiosMembresia(playerid);
     SetPlayerSkin(playerid, PlayerSkinGuardada[playerid]);
@@ -4901,6 +4952,24 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             format(msgd, sizeof(msgd), "Tienes %d diamante(s).", PlayerDiamantes[playerid]);
             return SendClientMessage(playerid, 0x66CCFFFF, msgd);
         }
+        if(listitem == 3) {
+            new esp[128];
+            format(esp, sizeof(esp), "Patines Kame - $%d %s", PrecioPatinesKame, PlayerTienePatinesKame[playerid] ? "(Comprado)" : "");
+            return ShowPlayerDialog(playerid, DIALOG_TIENDA_VIRTUAL_ESPECIALES, DIALOG_STYLE_LIST, "Items Especiales Kame House", esp, "Comprar", "Atras");
+        }
+        return 1;
+    }
+
+
+    if(dialogid == DIALOG_TIENDA_VIRTUAL_ESPECIALES) {
+        if(!response) return ShowTiendaVirtualMenu(playerid);
+        if(listitem != 0) return 1;
+        if(PlayerTienePatinesKame[playerid]) return SendClientMessage(playerid, -1, "Ya compraste Patines Kame.");
+        if(GetPlayerMoney(playerid) < PrecioPatinesKame) return SendClientMessage(playerid, -1, "No tienes dinero suficiente para Patines Kame.");
+        KH_GivePlayerMoney(playerid, -PrecioPatinesKame);
+        PlayerTienePatinesKame[playerid] = true;
+        GuardarCuenta(playerid);
+        SendClientMessage(playerid, 0x66FF66FF, "Compraste Patines Kame. Usa /partinar para activarlos.");
         return 1;
     }
 
@@ -5933,7 +6002,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(PlayerAdmin[playerid] < 1) return 1;
         if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_VIP_DINERO, DIALOG_STYLE_INPUT, "Admin - Precio VIP", "Ingresa el precio en dinero para VIP:", "Siguiente", "Atras");
         if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_DIAMANTE, DIALOG_STYLE_INPUT, "Admin - Precio Diamante", "Ingresa el precio por diamante:", "Guardar", "Atras");
-        if(listitem == 2) {
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIO_PATINES, DIALOG_STYLE_INPUT, "Admin - Precio Patines Kame", "Ingresa el precio de Patines Kame:", "Guardar", "Atras");
+        if(listitem == 3) {
             TiendaVirtualHabilitada = !TiendaVirtualHabilitada;
             GuardarTiendaVirtualConfig();
             SendClientMessage(playerid, 0x66FF66FF, TiendaVirtualHabilitada ? "Tienda virtual habilitada." : "Tienda virtual deshabilitada.");
@@ -5975,6 +6045,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         format(aviso, sizeof(aviso), "Precio de diamante actualizado: $%d por unidad.", PrecioDiamanteTienda);
         SendClientMessage(playerid, 0x66FF66FF, aviso);
         GuardarTiendaVirtualConfig();
+        return MostrarMenuAdminPreciosMembresia(playerid);
+    }
+
+
+    if(dialogid == DIALOG_ADMIN_PRECIO_PATINES) {
+        if(!response) return MostrarMenuAdminPreciosMembresia(playerid);
+        if(PlayerAdmin[playerid] < 1) return 1;
+        new nuevoPrecioPatines = strval(inputtext);
+        if(nuevoPrecioPatines <= 0) return SendClientMessage(playerid, -1, "Precio invalido. Debe ser mayor a 0.");
+        PrecioPatinesKame = nuevoPrecioPatines;
+        GuardarTiendaVirtualConfig();
+        SendClientMessage(playerid, 0x66FF66FF, "Precio de Patines Kame actualizado.");
         return MostrarMenuAdminPreciosMembresia(playerid);
     }
 
@@ -6834,6 +6916,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         fread(h, line); BasureroRecorridos[playerid] = strval(line);
                         fread(h, line); BidonGasolina[playerid] = strval(line);
                         PlayerTieneTelefono[playerid] = false;
+    PlayerTienePatinesKame[playerid] = false;
+    PatinesKameActivo[playerid] = false;
                         if(dataVersion >= 3) {
                             if(fread(h, line)) PlayerTieneTelefono[playerid] = strval(line) != 0;
                         }
@@ -6898,6 +6982,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         if(dataVersion >= 13) {
                             if(fread(h, line)) { LimpiarLinea(line); format(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]), "%s", line); }
                             if(fread(h, line)) PlayerPinPerfil[playerid] = strval(line);
+                            if(dataVersion >= 14) {
+                                if(fread(h, line)) PlayerTienePatinesKame[playerid] = strval(line) != 0;
+                            }
                         }
                         if(!strlen(PlayerFechaRegistro[playerid])) GenerarFechaActualTexto(PlayerFechaRegistro[playerid], sizeof(PlayerFechaRegistro[]));
                         if(PlayerPinPerfil[playerid] <= 0) PlayerPinPerfil[playerid] = random(9000) + 1000;
@@ -7010,6 +7097,9 @@ public GuardarCuenta(playerid) {
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%d", PlayerPinPerfil[playerid]);
+            fwrite(h, line);
+
+            format(line, sizeof(line), "\n%d", PlayerTienePatinesKame[playerid] ? 1 : 0);
             fwrite(h, line);
 
             format(line, sizeof(line), "\n%s", CUENTA_SECCION_PRENDAS);
@@ -7460,6 +7550,19 @@ public OnPlayerUpdate(playerid) {
             }
         }
     }
+
+    if(PatinesKameActivo[playerid] && !IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_ONFOOT) {
+        new keys, ud, lr;
+        GetPlayerKeys(playerid, keys, ud, lr);
+        if(ud > 0) {
+            new Float:ang, Float:vx, Float:vy, Float:vz;
+            GetPlayerFacingAngle(playerid, ang);
+            GetPlayerVelocity(playerid, vx, vy, vz);
+            vx += floatsin(-ang, degrees) * 0.02;
+            vy += floatcos(-ang, degrees) * 0.02;
+            SetPlayerVelocity(playerid, vx, vy, vz);
+        }
+    }
     if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
         new vehid = GetPlayerVehicleID(playerid);
         if(vehid != INVALID_VEHICLE_ID) {
@@ -7504,6 +7607,7 @@ public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
+    PatinesKameActivo[playerid] = false;
     if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
     if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO);
     if(IsPlayerAttachedObjectSlotUsed(playerid, BIDON_ATTACH_SLOT)) RemovePlayerAttachedObject(playerid, BIDON_ATTACH_SLOT);
@@ -7521,7 +7625,11 @@ public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
         PlayerAmmoInventario[playerid][w] = 0;
     }
     ResetPlayerWeapons(playerid);
+    SetPVarFloat(playerid, "SpawnX", PuntoPos[puntoMedico][0]);
+    SetPVarFloat(playerid, "SpawnY", PuntoPos[puntoMedico][1]);
+    SetPVarFloat(playerid, "SpawnZ", PuntoPos[puntoMedico][2]);
     SetSpawnInfo(playerid, 255, PlayerSkinGuardada[playerid], PuntoPos[puntoMedico][0], PuntoPos[puntoMedico][1], PuntoPos[puntoMedico][2], 0.0, WEAPON_NONE, 0, WEAPON_NONE, 0, WEAPON_NONE, 0);
+    SendClientMessage(playerid, 0x66FF99FF, "Fuiste trasladado al CP del trabajo de medico para reaparecer.");
     SetTimerEx("RespawnAutomaticoJugador", 1200, false, "d", playerid);
     return 1;
 }
@@ -7657,7 +7765,7 @@ stock ContarTrabajosActivos(playerid) {
 
 stock ShowTiendaVirtualMenu(playerid) {
     new body[256];
-    format(body, sizeof(body), "Comprar membresia VIP ($%d + %d Diamante(s))\nComprar diamantes ($%d c/u)\nVer mis diamantes", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
+    format(body, sizeof(body), "Comprar membresia VIP ($%d + %d Diamante(s))\nComprar diamantes ($%d c/u)\nVer mis diamantes\nItems Especiales Kame House", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda);
     ShowPlayerDialog(playerid, DIALOG_TIENDA_VIRTUAL_MENU, DIALOG_STYLE_LIST, "Tienda Virtual Kame House", body, "Elegir", "Cerrar");
     return 1;
 }
@@ -7674,8 +7782,8 @@ stock MostrarMenuAdminMembresias(playerid) {
 stock MostrarMenuAdminPreciosMembresia(playerid) {
     if(PlayerAdmin[playerid] < 1) return 0;
     new cuerpo[256];
-    format(cuerpo, sizeof(cuerpo), "VIP - $%d + %d diamante(s)\nDiamante - $%d c/u\nTienda virtual: %s", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda, TiendaVirtualHabilitada ? "Habilitada" : "Deshabilitada");
-    return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU, DIALOG_STYLE_LIST, "Admin - Editar precios (Y)", "Editar precio VIP\nEditar precio diamante\nHabilitar/Deshabilitar tienda", "Editar", "Cerrar");
+    format(cuerpo, sizeof(cuerpo), "VIP - $%d + %d diamante(s)\nDiamante - $%d c/u\nPatines Kame - $%d\nTienda virtual: %s", PrecioMembresiaVIPDinero, PrecioMembresiaVIPDiamantes, PrecioDiamanteTienda, PrecioPatinesKame, TiendaVirtualHabilitada ? "Habilitada" : "Deshabilitada");
+    return ShowPlayerDialog(playerid, DIALOG_ADMIN_PRECIOS_MEMBRESIA_MENU, DIALOG_STYLE_LIST, "Admin - Editar precios (Y)", "Editar precio VIP\nEditar precio diamante\nEditar precio Patines Kame\nHabilitar/Deshabilitar tienda", "Editar", "Cerrar");
 }
 
 stock MostrarAnuncioJugador(playerid, const texto[]) {
@@ -10292,6 +10400,8 @@ stock AplicarPrendaJugador(playerid, idx) {
     new Float:scY = PlayerPrendaScaleY[playerid][idx] > 0.0 ? PlayerPrendaScaleY[playerid][idx] : PrendasData[idx][prendaScaleY];
     new Float:scZ = PlayerPrendaScaleZ[playerid][idx] > 0.0 ? PlayerPrendaScaleZ[playerid][idx] : PrendasData[idx][prendaScaleZ];
     new model = PlayerPrendaModelo[playerid][idx] > 0 ? PlayerPrendaModelo[playerid][idx] : PrendasData[idx][prendaModelo];
+    if(model <= 0) return 0;
+    if(bone < 1 || bone > 18) bone = 2;
     new slot = GetPrendaAttachSlot(idx);
     if(slot < 0) return 0;
     SetPlayerAttachedObject(playerid, slot, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
@@ -10848,6 +10958,7 @@ stock CargarTiendaVirtualConfig() {
     PrecioMembresiaVIPDinero = PRECIO_MEMBRESIA_VIP;
     PrecioMembresiaVIPDiamantes = 1;
     PrecioDiamanteTienda = PRECIO_DIAMANTE_TIENDA;
+    PrecioPatinesKame = 15000;
     TiendaVirtualHabilitada = true;
 
     fcreatedir(DIR_DATA);
@@ -10889,6 +11000,14 @@ stock CargarTiendaVirtualConfig() {
             continue;
         }
 
+        if(strfind(line, "PATINES_PRECIO=", true) == 0) {
+            new valor[16];
+            strmid(valor, line, 14, strlen(line), sizeof(valor));
+            new precioPatines = strval(valor);
+            if(precioPatines > 0) PrecioPatinesKame = precioPatines;
+            continue;
+        }
+
         new idx = 0;
         new vipDineroLegacy = strval(strtok(line, idx));
         new vipDiamantesLegacy = strval(strtok(line, idx));
@@ -10914,6 +11033,8 @@ stock GuardarTiendaVirtualConfig() {
     format(line, sizeof(line), "VIP_DIAMANTES=%d\n", PrecioMembresiaVIPDiamantes);
     fwrite(h, line);
     format(line, sizeof(line), "DIAMANTE_PRECIO=%d\n", PrecioDiamanteTienda);
+    fwrite(h, line);
+    format(line, sizeof(line), "PATINES_PRECIO=%d\n", PrecioPatinesKame);
     fwrite(h, line);
     format(line, sizeof(line), "TIENDA_HABILITADA=%d\n", TiendaVirtualHabilitada ? 1 : 0);
     fwrite(h, line);
