@@ -1284,9 +1284,9 @@ stock GetTipoTerritorioRadio(tipo) {
 stock GetTipoTerritorioPago(tipo) {
     switch(tipo) {
         case 1: return 1000;
-        case 2: return 3200;
+        case 2: return 2500;
     }
-    return 2500;
+    return 1800;
 }
 
 stock CrearTerritorio(Float:x, Float:y, Float:z, const nombre[], tipo = 0) {
@@ -1350,7 +1350,7 @@ stock IniciarConquistaTerritorio(playerid, tid) {
     if(fid == -1) return SendClientMessage(playerid, -1, "Debes tener faccion.");
     if(TerritorioConquistaActiva[fid] != -1) return SendClientMessage(playerid, -1, "Tu faccion ya esta conquistando otro territorio.");
     if(TerritorioData[tid][terConquistaFid] != -1) return SendClientMessage(playerid, -1, "Este territorio ya tiene conquista activa.");
-    if(TerritorioData[tid][terOwnerFid] == fid && TerritorioData[tid][terControlExpiraTick] > GetTickCount()) return SendClientMessage(playerid, -1, "Tu faccion ya controla este territorio.");
+    if(TerritorioData[tid][terOwnerFid] == fid) return SendClientMessage(playerid, -1, "Tu faccion ya controla este territorio.");
     if(TerritorioData[tid][terOwnerFid] != -1 && TerritorioData[tid][terControlExpiraTick] > GetTickCount()) return SendClientMessage(playerid, -1, "Territorio bloqueado: aun esta protegido por 5 horas.");
     if(TerritorioData[tid][terCooldownExpiraTick] > GetTickCount()) return SendClientMessage(playerid, -1, "Territorio en cooldown: espera 5 minutos para volver a conquistar.");
     if(GetMiembrosFaccionEnTerritorio(fid, tid) < 2) return SendClientMessage(playerid, -1, "Minimo 2 miembros de tu faccion dentro del territorio.");
@@ -1401,12 +1401,6 @@ public TickTerritorios() {
             TerritorioData[t][terConquistaFid] = -1;
             TerritorioData[t][terConquistaInicioTick] = 0;
             TerritorioData[t][terConquistaFinTick] = 0;
-            if(TerritorioData[t][terCooldownExpiraTick] < now + TERRITORIO_COOLDOWN_MS) TerritorioData[t][terCooldownExpiraTick] = now + TERRITORIO_COOLDOWN_MS;
-            GuardarTerritorios();
-        }
-        if(TerritorioData[t][terOwnerFid] != -1 && now >= TerritorioData[t][terControlExpiraTick]) {
-            TerritorioData[t][terOwnerFid] = -1;
-            GangZoneShowForAll(TerritorioData[t][terZona], 0xFFFFFF66);
             GuardarTerritorios();
         }
     }
@@ -1452,8 +1446,6 @@ stock TickPagoTerritorios() {
     for(new t = 0; t < MAX_TERRITORIOS; t++) {
         if(!TerritorioData[t][terActivo]) continue;
         if(TerritorioData[t][terOwnerFid] == -1) continue;
-        if(TerritorioData[t][terControlExpiraTick] <= now) continue;
-
         new pago = TerritorioData[t][terPagoHora];
         if(pago <= 0) pago = 2500;
         new fid = TerritorioData[t][terOwnerFid];
@@ -1528,7 +1520,7 @@ stock CargarTerritorios() {
 }
 
 stock MostrarMenuCrearTerritorio(playerid) {
-    return ShowPlayerDialog(playerid, DIALOG_TERRITORIO_CREAR_MENU, DIALOG_STYLE_LIST, "Admin territorios", "Territorio 150m ($2500/h por 5h)\nTerritorio 50m ($1000/h por 5h)\nTerritorio 250m ($3200/h por 5h)", "Seleccionar", "Cerrar");
+    return ShowPlayerDialog(playerid, DIALOG_TERRITORIO_CREAR_MENU, DIALOG_STYLE_LIST, "Admin territorios", "Territorio 150m ($1800/h por 5h)\nTerritorio 50m ($1000/h por 5h)\nTerritorio 250m ($2500/h por 5h)", "Seleccionar", "Cerrar");
 }
 
 stock GuardarEditMap();
@@ -2798,7 +2790,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return SendClientMessage(playerid, 0x66FF66FF, "Territorio eliminado.");
     }
 
-    if(!strcmp(cmd, "/conquistar", true)) {
+    if(!strcmp(cmd, "/conquistar", true) || !strcmp(cmd, "/conquitar", true)) {
         if(PlayerFaccionId[playerid] == -1) return SendClientMessage(playerid, -1, "Debes pertenecer a una faccion.");
         new tid = GetTerritorioMasCercano(playerid, 260.0);
         if(tid == -1) return SendClientMessage(playerid, -1, "No estas en un territorio valido.");
@@ -6916,8 +6908,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                         fread(h, line); BasureroRecorridos[playerid] = strval(line);
                         fread(h, line); BidonGasolina[playerid] = strval(line);
                         PlayerTieneTelefono[playerid] = false;
-    PlayerTienePatinesKame[playerid] = false;
-    PatinesKameActivo[playerid] = false;
+                        PlayerTienePatinesKame[playerid] = false;
+                        PatinesKameActivo[playerid] = false;
                         if(dataVersion >= 3) {
                             if(fread(h, line)) PlayerTieneTelefono[playerid] = strval(line) != 0;
                         }
@@ -7199,7 +7191,7 @@ public SubirTiempoJugado() {
                 new bonusTerritorios = 0;
                 if(PlayerFaccionId[i] != -1) {
                     for(new t=0;t<MAX_TERRITORIOS;t++) {
-                        if(TerritorioData[t][terActivo] && TerritorioData[t][terOwnerFid] == PlayerFaccionId[i] && TerritorioData[t][terControlExpiraTick] > GetTickCount()) bonusTerritorios += TerritorioData[t][terPagoHora];
+                        if(TerritorioData[t][terActivo] && TerritorioData[t][terOwnerFid] == PlayerFaccionId[i]) bonusTerritorios += TerritorioData[t][terPagoHora];
                     }
                 }
                 KH_GivePlayerMoney(i, pago + bonusTerritorios);
@@ -7552,7 +7544,7 @@ public OnPlayerUpdate(playerid) {
     }
 
     if(PatinesKameActivo[playerid] && !IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_ONFOOT) {
-        new keys, ud, lr;
+        new t_KEY:keys, ud, lr;
         GetPlayerKeys(playerid, keys, ud, lr);
         if(ud > 0) {
             new Float:ang, Float:vx, Float:vy, Float:vz;
