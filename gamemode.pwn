@@ -820,6 +820,7 @@ new VehOwner[MAX_VEHICLES] = {-1, ...};
 new VehVentaPrecio[MAX_VEHICLES];
 new VehVentaDiamantes[MAX_VEHICLES];
 new VehVentaReponerTick[MAX_VEHICLES];
+new Float:VehVentaSpawnPos[MAX_VEHICLES][4];
 new Text3D:VehVentaLabel[MAX_VEHICLES] = {Text3D:-1, ...};
 new bool:VehLocked[MAX_VEHICLES];
 new VehSharedTo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
@@ -1178,12 +1179,16 @@ stock CargarPrendasConfig();
 stock GuardarPrendasConfig();
 stock CargarVentaAutosConfig();
 stock GuardarVentaAutosConfig();
+stock GuardarVentaAutosConfigEnRuta(const ruta[]);
 stock CargarVentaSkinsConfig();
 stock GuardarVentaSkinsConfig();
+stock GuardarVentaSkinsConfigEnRuta(const ruta[]);
 stock CargarVentaAdminAutos();
 stock GuardarVentaAdminAutos();
+stock GuardarVentaAdminAutosEnRuta(const ruta[]);
 stock CargarVentaAdminSkins();
 stock GuardarVentaAdminSkins();
+stock GuardarVentaAdminSkinsEnRuta(const ruta[]);
 stock ActualizarLabelVentaSkins();
 stock ShowVentaSkinsBuyMenu(playerid);
 stock ShowVentaSkinsAdminMenu(playerid);
@@ -5818,6 +5823,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new veh = CreateVehicle(modelo, x + 2.0, y, z, a, -1, -1, -1);
         if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo crear la venta.");
         VehOwner[veh] = -2; VehLocked[veh] = true; VehVentaPrecio[veh] = precio; VehVentaDiamantes[veh] = diam; VehModelData[veh] = modelo;
+        VehVentaSpawnPos[veh][0] = x + 2.0; VehVentaSpawnPos[veh][1] = y; VehVentaSpawnPos[veh][2] = z; VehVentaSpawnPos[veh][3] = a;
         new vn[32], txt[160];
         GetNombreVehiculoVanilla(modelo, vn, sizeof(vn));
         format(txt, sizeof(txt), "%s\n$%d | %d diamantes\nPresiona H para comprar", vn, precio, diam);
@@ -5875,6 +5881,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(best == INVALID_VEHICLE_ID || bestd > 12.0) return SendClientMessage(playerid, -1, "No hay venta de auto cercana.");
             if(VehVentaLabel[best] != Text3D:-1) { Delete3DTextLabel(VehVentaLabel[best]); VehVentaLabel[best] = Text3D:-1; }
             DestroyVehicle(best); VehOwner[best] = -1; VehVentaPrecio[best] = 0; VehVentaDiamantes[best] = 0; VehVentaReponerTick[best] = 0;
+            VehVentaSpawnPos[best][0] = 0.0; VehVentaSpawnPos[best][1] = 0.0; VehVentaSpawnPos[best][2] = 0.0; VehVentaSpawnPos[best][3] = 0.0;
             GuardarVentaAdminAutos();
             return SendClientMessage(playerid, 0x66FF66FF, "Venta de auto eliminada.");
         }
@@ -9184,6 +9191,23 @@ public CheckInactiveVehicles() {
     for(new v = 1; v < MAX_VEHICLES; v++) {
         if(!IsValidVehicle(v) || VehOculto[v]) continue;
 
+        if(VehOwner[v] == -2) {
+            new Float:sx = VehVentaSpawnPos[v][0], Float:sy = VehVentaSpawnPos[v][1], Float:sz = VehVentaSpawnPos[v][2], Float:sa = VehVentaSpawnPos[v][3];
+            if(sx == 0.0 && sy == 0.0 && sz == 0.0) {
+                GetVehiclePos(v, sx, sy, sz);
+                GetVehicleZAngle(v, sa);
+                VehVentaSpawnPos[v][0] = sx; VehVentaSpawnPos[v][1] = sy; VehVentaSpawnPos[v][2] = sz; VehVentaSpawnPos[v][3] = sa;
+            }
+            new Float:cx, Float:cy, Float:cz;
+            GetVehiclePos(v, cx, cy, cz);
+            if(GetDistanceBetweenPoints(cx, cy, cz, sx, sy, sz) > 1.25) {
+                SetVehiclePos(v, sx, sy, sz);
+                SetVehicleZAngle(v, sa);
+                SetVehicleVelocity(v, 0.0, 0.0, 0.0);
+            }
+            continue;
+        }
+
         new bool:ocupado;
         for(new p = 0; p < MAX_PLAYERS; p++) {
             if(IsPlayerConnected(p) && IsPlayerInVehicle(p, v)) { ocupado = true; break; }
@@ -11101,9 +11125,9 @@ stock ShowReglasDialog(playerid) {
     return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Kame House RP", reglasTexto, "Entendido", "Cerrar");
 }
 
-stock GuardarVentaAutosConfig() {
-    new File:h = fopen(PATH_VENTA_AUTOS, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_AUTOS, io_write); }
+stock GuardarVentaAutosConfigEnRuta(const ruta[]) {
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
 
     new line[96];
@@ -11114,6 +11138,12 @@ stock GuardarVentaAutosConfig() {
 
     fclose(h);
     return 1;
+}
+
+stock GuardarVentaAutosConfig() {
+    new okMain = GuardarVentaAutosConfigEnRuta(PATH_VENTA_AUTOS);
+    new okLegacy = GuardarVentaAutosConfigEnRuta(PATH_VENTA_AUTOS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock CargarVentaAutosConfig() {
@@ -11146,9 +11176,9 @@ stock CargarVentaAutosConfig() {
 }
 
 
-stock GuardarVentaSkinsConfig() {
-    new File:h = fopen(PATH_VENTA_SKINS, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_SKINS, io_write); }
+stock GuardarVentaSkinsConfigEnRuta(const ruta[]) {
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
     new line[96];
     format(line, sizeof(line), "POS %f %f %f\n", VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2]);
@@ -11159,6 +11189,12 @@ stock GuardarVentaSkinsConfig() {
     }
     fclose(h);
     return 1;
+}
+
+stock GuardarVentaSkinsConfig() {
+    new okMain = GuardarVentaSkinsConfigEnRuta(PATH_VENTA_SKINS);
+    new okLegacy = GuardarVentaSkinsConfigEnRuta(PATH_VENTA_SKINS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock CargarVentaSkinsConfig() {
@@ -11197,29 +11233,33 @@ stock CargarVentaSkinsConfig() {
     return 1;
 }
 
-stock GuardarVentaAdminAutos() {
-    new ok = 0;
+stock GuardarVentaAdminAutosEnRuta(const ruta[]) {
     new now = GetTickCount();
-    new rutas[2][48] = { PATH_VENTA_ADMIN_AUTOS, PATH_VENTA_ADMIN_AUTOS_LEGACY };
     new line[160];
-    for(new r = 0; r < sizeof(rutas); r++) {
-        new File:h = fopen(rutas[r], io_write);
-        if(!h) { fcreatedir(DIR_DATA); h = fopen(rutas[r], io_write); }
-        if(!h) continue;
-        for(new v = 1; v < MAX_VEHICLES; v++) {
-            if(VehOwner[v] != -2 || !IsValidVehicle(v)) continue;
-            new Float:x, Float:y, Float:z, Float:a;
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
+    if(!h) return 0;
+
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != -2 || !IsValidVehicle(v)) continue;
+        new Float:x = VehVentaSpawnPos[v][0], Float:y = VehVentaSpawnPos[v][1], Float:z = VehVentaSpawnPos[v][2], Float:a = VehVentaSpawnPos[v][3];
+        if(x == 0.0 && y == 0.0 && z == 0.0) {
             GetVehiclePos(v, x, y, z);
             GetVehicleZAngle(v, a);
-            new restante = VehVentaReponerTick[v] - now;
-            if(restante < 0) restante = 0;
-            format(line, sizeof(line), "%d %f %f %f %f %d %d %d\n", VehModelData[v], x, y, z, a, VehVentaPrecio[v], VehVentaDiamantes[v], restante);
-            fwrite(h, line);
         }
-        fclose(h);
-        ok = 1;
+        new restante = VehVentaReponerTick[v] - now;
+        if(restante < 0) restante = 0;
+        format(line, sizeof(line), "%d %f %f %f %f %d %d %d\n", VehModelData[v], x, y, z, a, VehVentaPrecio[v], VehVentaDiamantes[v], restante);
+        fwrite(h, line);
     }
-    return ok;
+    fclose(h);
+    return 1;
+}
+
+stock GuardarVentaAdminAutos() {
+    new okMain = GuardarVentaAdminAutosEnRuta(PATH_VENTA_ADMIN_AUTOS);
+    new okLegacy = GuardarVentaAdminAutosEnRuta(PATH_VENTA_ADMIN_AUTOS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock CargarVentaAdminAutos() {
@@ -11250,6 +11290,7 @@ stock CargarVentaAdminAutos() {
         VehVentaPrecio[veh] = precio;
         VehVentaDiamantes[veh] = diam;
         VehModelData[veh] = modelo;
+        VehVentaSpawnPos[veh][0] = x; VehVentaSpawnPos[veh][1] = y; VehVentaSpawnPos[veh][2] = z; VehVentaSpawnPos[veh][3] = a;
         VehOculto[veh] = false;
         VehLastUseTick[veh] = now;
         VehVentaReponerTick[veh] = now + (restante > 0 ? restante : 0);
@@ -11263,26 +11304,28 @@ stock CargarVentaAdminAutos() {
     return 1;
 }
 
-stock GuardarVentaAdminSkins() {
-    new ok = 0;
-    new rutas[2][48] = { PATH_VENTA_ADMIN_SKINS, PATH_VENTA_ADMIN_SKINS_LEGACY };
+stock GuardarVentaAdminSkinsEnRuta(const ruta[]) {
     new line[128];
-    for(new r = 0; r < sizeof(rutas); r++) {
-        new File:h = fopen(rutas[r], io_write);
-        if(!h) { fcreatedir(DIR_DATA); h = fopen(rutas[r], io_write); }
-        if(!h) continue;
-        for(new i = 0; i < MAX_SKINS_VENTA; i++) {
-            if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
-            new Float:x, Float:y, Float:z, Float:a;
-            GetActorPos(SkinVentaActor[i], x, y, z);
-            GetActorFacingAngle(SkinVentaActor[i], a);
-            format(line, sizeof(line), "%d %d %d %f %f %f %f\n", VentaSkinsData[i][vsSkin], SkinVentaPrecio[i], SkinVentaDiamantes[i], x, y, z, a);
-            fwrite(h, line);
-        }
-        fclose(h);
-        ok = 1;
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
+    if(!h) return 0;
+
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
+        new Float:x, Float:y, Float:z, Float:a;
+        GetActorPos(SkinVentaActor[i], x, y, z);
+        GetActorFacingAngle(SkinVentaActor[i], a);
+        format(line, sizeof(line), "%d %d %d %f %f %f %f\n", VentaSkinsData[i][vsSkin], SkinVentaPrecio[i], SkinVentaDiamantes[i], x, y, z, a);
+        fwrite(h, line);
     }
-    return ok;
+    fclose(h);
+    return 1;
+}
+
+stock GuardarVentaAdminSkins() {
+    new okMain = GuardarVentaAdminSkinsEnRuta(PATH_VENTA_ADMIN_SKINS);
+    new okLegacy = GuardarVentaAdminSkinsEnRuta(PATH_VENTA_ADMIN_SKINS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock CargarVentaAdminSkins() {
