@@ -137,6 +137,8 @@
 #define PATH_VENTA_SKINS_LEGACY "venta_skins_config.txt"
 #define PATH_VENTA_ADMIN_AUTOS "kame_house/venta_admin_autos.txt"
 #define PATH_VENTA_ADMIN_SKINS "kame_house/venta_admin_skins.txt"
+#define PATH_VENTA_ADMIN_AUTOS_LEGACY "venta_admin_autos.txt"
+#define PATH_VENTA_ADMIN_SKINS_LEGACY "venta_admin_skins.txt"
 #define PATH_ARMERIA "kame_house/armeria_config.txt"
 #define PATH_ARMERIA_LEGACY "armeria_config.txt"
 #define PATH_TIENDA_VIRTUAL "kame_house/tienda_virtual_config.txt"
@@ -1242,6 +1244,7 @@ stock MostrarMenuFaccionesCP(playerid);
 stock MostrarPanelFaccionOwner(playerid);
 stock CargarTerritorios();
 stock GuardarTerritorios();
+stock GuardarTerritoriosEnRuta(const ruta[]);
 stock CrearTerritorio(Float:x, Float:y, Float:z, const nombre[], tipo = 0);
 stock EliminarTerritorio(idx);
 stock GetTerritorioMasCercano(playerid, Float:maxDist = 25.0);
@@ -1491,9 +1494,9 @@ stock TickPagoTerritorios() {
     return 1;
 }
 
-stock GuardarTerritorios() {
-    new File:h = fopen(PATH_TERRITORIOS, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_TERRITORIOS, io_write); }
+stock GuardarTerritoriosEnRuta(const ruta[]) {
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
     new line[256];
     for(new i=0; i<MAX_TERRITORIOS; i++) {
@@ -1503,6 +1506,12 @@ stock GuardarTerritorios() {
     }
     fclose(h);
     return 1;
+}
+
+stock GuardarTerritorios() {
+    new okMain = GuardarTerritoriosEnRuta(PATH_TERRITORIOS);
+    new okLegacy = GuardarTerritoriosEnRuta(PATH_TERRITORIOS_LEGACY);
+    return okMain || okLegacy;
 }
 
 stock CargarTerritorios() {
@@ -11189,27 +11198,33 @@ stock CargarVentaSkinsConfig() {
 }
 
 stock GuardarVentaAdminAutos() {
-    new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_ADMIN_AUTOS, io_write); }
-    if(!h) return 0;
-
-    new line[160], now = GetTickCount();
-    for(new v = 1; v < MAX_VEHICLES; v++) {
-        if(VehOwner[v] != -2 || !IsValidVehicle(v)) continue;
-        new Float:x, Float:y, Float:z, Float:a;
-        GetVehiclePos(v, x, y, z);
-        GetVehicleZAngle(v, a);
-        new restante = VehVentaReponerTick[v] - now;
-        if(restante < 0) restante = 0;
-        format(line, sizeof(line), "%d %f %f %f %f %d %d %d\n", VehModelData[v], x, y, z, a, VehVentaPrecio[v], VehVentaDiamantes[v], restante);
-        fwrite(h, line);
+    new ok = 0;
+    new now = GetTickCount();
+    new rutas[2][48] = { PATH_VENTA_ADMIN_AUTOS, PATH_VENTA_ADMIN_AUTOS_LEGACY };
+    new line[160];
+    for(new r = 0; r < sizeof(rutas); r++) {
+        new File:h = fopen(rutas[r], io_write);
+        if(!h) { fcreatedir(DIR_DATA); h = fopen(rutas[r], io_write); }
+        if(!h) continue;
+        for(new v = 1; v < MAX_VEHICLES; v++) {
+            if(VehOwner[v] != -2 || !IsValidVehicle(v)) continue;
+            new Float:x, Float:y, Float:z, Float:a;
+            GetVehiclePos(v, x, y, z);
+            GetVehicleZAngle(v, a);
+            new restante = VehVentaReponerTick[v] - now;
+            if(restante < 0) restante = 0;
+            format(line, sizeof(line), "%d %f %f %f %f %d %d %d\n", VehModelData[v], x, y, z, a, VehVentaPrecio[v], VehVentaDiamantes[v], restante);
+            fwrite(h, line);
+        }
+        fclose(h);
+        ok = 1;
     }
-    fclose(h);
-    return 1;
+    return ok;
 }
 
 stock CargarVentaAdminAutos() {
     new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_read), line[160];
+    if(!h) h = fopen(PATH_VENTA_ADMIN_AUTOS_LEGACY, io_read);
     if(!h) return 1;
 
     new now = GetTickCount();
@@ -11249,21 +11264,25 @@ stock CargarVentaAdminAutos() {
 }
 
 stock GuardarVentaAdminSkins() {
-    new File:h = fopen(PATH_VENTA_ADMIN_SKINS, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_ADMIN_SKINS, io_write); }
-    if(!h) return 0;
-
+    new ok = 0;
+    new rutas[2][48] = { PATH_VENTA_ADMIN_SKINS, PATH_VENTA_ADMIN_SKINS_LEGACY };
     new line[128];
-    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
-        if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
-        new Float:x, Float:y, Float:z, Float:a;
-        GetActorPos(SkinVentaActor[i], x, y, z);
-        GetActorFacingAngle(SkinVentaActor[i], a);
-        format(line, sizeof(line), "%d %d %d %f %f %f %f\n", VentaSkinsData[i][vsSkin], SkinVentaPrecio[i], SkinVentaDiamantes[i], x, y, z, a);
-        fwrite(h, line);
+    for(new r = 0; r < sizeof(rutas); r++) {
+        new File:h = fopen(rutas[r], io_write);
+        if(!h) { fcreatedir(DIR_DATA); h = fopen(rutas[r], io_write); }
+        if(!h) continue;
+        for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+            if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
+            new Float:x, Float:y, Float:z, Float:a;
+            GetActorPos(SkinVentaActor[i], x, y, z);
+            GetActorFacingAngle(SkinVentaActor[i], a);
+            format(line, sizeof(line), "%d %d %d %f %f %f %f\n", VentaSkinsData[i][vsSkin], SkinVentaPrecio[i], SkinVentaDiamantes[i], x, y, z, a);
+            fwrite(h, line);
+        }
+        fclose(h);
+        ok = 1;
     }
-    fclose(h);
-    return 1;
+    return ok;
 }
 
 stock CargarVentaAdminSkins() {
@@ -11275,6 +11294,7 @@ stock CargarVentaAdminSkins() {
     }
 
     new File:h = fopen(PATH_VENTA_ADMIN_SKINS, io_read), line[128];
+    if(!h) h = fopen(PATH_VENTA_ADMIN_SKINS_LEGACY, io_read);
     if(!h) return 1;
 
     new slot = 0;
