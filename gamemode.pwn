@@ -11144,11 +11144,8 @@ stock ShowReglasDialog(playerid) {
 }
 
 stock GuardarVentaAutosConfigEnRuta(const ruta[]) {
-    new tmpPath[96];
-    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
-
-    new File:h = fopen(tmpPath, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(tmpPath, io_write); }
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
 
     new line[96];
@@ -11162,6 +11159,12 @@ stock GuardarVentaAutosConfigEnRuta(const ruta[]) {
     fremove(ruta);
     if(frename(tmpPath, ruta)) return 1;
     return 0;
+}
+
+stock GuardarVentaAutosConfig() {
+    new okMain = GuardarVentaAutosConfigEnRuta(PATH_VENTA_AUTOS);
+    new okLegacy = GuardarVentaAutosConfigEnRuta(PATH_VENTA_AUTOS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock GuardarVentaAutosConfig() {
@@ -11213,11 +11216,8 @@ stock CargarVentaAutosConfig() {
 
 
 stock GuardarVentaSkinsConfigEnRuta(const ruta[]) {
-    new tmpPath[96];
-    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
-
-    new File:h = fopen(tmpPath, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(tmpPath, io_write); }
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
     new line[96];
     format(line, sizeof(line), "POS %f %f %f\n", VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2]);
@@ -11231,6 +11231,12 @@ stock GuardarVentaSkinsConfigEnRuta(const ruta[]) {
     fremove(ruta);
     if(frename(tmpPath, ruta)) return 1;
     return 0;
+}
+
+stock GuardarVentaSkinsConfig() {
+    new okMain = GuardarVentaSkinsConfigEnRuta(PATH_VENTA_SKINS);
+    new okLegacy = GuardarVentaSkinsConfigEnRuta(PATH_VENTA_SKINS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock GuardarVentaSkinsConfig() {
@@ -11290,11 +11296,8 @@ stock CargarVentaSkinsConfig() {
 stock GuardarVentaAdminAutosEnRuta(const ruta[]) {
     new now = GetTickCount();
     new line[160];
-    new tmpPath[96];
-    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
-
-    new File:h = fopen(tmpPath, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(tmpPath, io_write); }
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
 
     for(new v = 1; v < MAX_VEHICLES; v++) {
@@ -11310,10 +11313,7 @@ stock GuardarVentaAdminAutosEnRuta(const ruta[]) {
         fwrite(h, line);
     }
     fclose(h);
-
-    fremove(ruta);
-    if(frename(tmpPath, ruta)) return 1;
-    return 0;
+    return 1;
 }
 
 stock GuardarVentaAdminAutos() {
@@ -11378,11 +11378,8 @@ stock CargarVentaAdminAutos() {
 
 stock GuardarVentaAdminSkinsEnRuta(const ruta[]) {
     new line[128];
-    new tmpPath[96];
-    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
-
-    new File:h = fopen(tmpPath, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(tmpPath, io_write); }
+    new File:h = fopen(ruta, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
     if(!h) return 0;
 
     for(new i = 0; i < MAX_SKINS_VENTA; i++) {
@@ -11394,10 +11391,7 @@ stock GuardarVentaAdminSkinsEnRuta(const ruta[]) {
         fwrite(h, line);
     }
     fclose(h);
-
-    fremove(ruta);
-    if(frename(tmpPath, ruta)) return 1;
-    return 0;
+    return 1;
 }
 
 stock GuardarVentaAdminSkins() {
