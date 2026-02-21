@@ -3139,8 +3139,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return SendClientMessage(playerid, 0x66CCFFFF, infoLinea);
     }
 
-    if(!strcmp(cmd, "/ayuda", true)) {
+    if(!strcmp(cmd, "/ayuda", true) || !strcmp(cmd, "/aydua", true)) {
         ShowPlayerDialog(playerid, DIALOG_AYUDA_CATEGORIA, DIALOG_STYLE_LIST, "Ayuda por categorias", "General\nTrabajos\nSistemas\nMembresias\nRol y reglas", "Ver", "Cerrar");
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/ayudatrabajos", true)) {
+        ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{FFFFFF}Guia rapida de trabajos (usa /skills para revisar progreso, nivel y recompensas).\n\n{FFFF00}Camionero{FFFFFF}: inicia en su CP, carga y entrega mercancia en checkpoints.\n- Comandos utiles: /trabajos para dejarlo, GPS con /telefono.\n- Pago por viaje + bonus por nivel y membresia.\n\n{FF8C00}Pizzero{FFFFFF}: toma la moto de reparto y completa entregas en ruta.\n- Subes nivel por entregas exitosas.\n\n{00C853}Basurero{FFFFFF}: recoge bolsas con H y subelas a la Rumpo.\n- Al completar la ruta cobras por bolsas entregadas.\n\n{99CCFF}Armero{FFFFFF}: fabrica armas en la armeria usando materiales de inventario.\n- Sube nivel creando armas para desbloquear mejor rendimiento.\n\n{66CCFF}Mecanico{FFFFFF}: atiende jugadores con /reparar.\n- Skills: /usarkit (nivel 5) y /reparardl (nivel 10).\n\n{66FF99}Medico{FFFFFF}: cura vida con /curar y chaleco con /prote (nivel 4).\n- Ganas exp por tratamientos completados.\n\n{8B4513}Talador{FFFFFF}: tala arboles con H, carga troncos y entrega en la zona de trabajo.\n- Usa /dejartroncos para activar la entrega.\n\n{CCCCCC}Minero{FFFFFF}: mina rocas con H y procesa materiales en hornos.\n- Requiere mazo en buen estado para mantener produccion.", "Cerrar", "");
         return 1;
     }
 
@@ -4480,7 +4485,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{FFFFFF}Revisa tu progreso con /skills.\n\n{FFFF00}Camionero{FFFFFF}: sube con viajes (/trabajos).\n{FF8C00}Pizzero{FFFFFF}: sube con entregas.\n{00C853}Basurero{FFFFFF}: sube con bolsas subidas.\n{99CCFF}Armero{FFFFFF}: sube creando armas.\n{66CCFF}Mecanico{FFFFFF}: sube con reparaciones. Skills: /reparardl nivel 10, /usarkit nivel 5.\n{66FF99}Medico{FFFFFF}: sube con tratamientos. Skill: /prote nivel 4.\n{8B4513}Talador{FFFFFF}: sube con troncos talados.\n{CCCCCC}Minero{FFFFFF}: sistema base de mineria + hornos.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{FFFFFF}Guia rapida de trabajos (usa /skills para revisar progreso, nivel y recompensas).\n\n{FFFF00}Camionero{FFFFFF}: inicia en su CP, carga y entrega mercancia en checkpoints.\n- Comandos utiles: /trabajos para dejarlo, GPS con /telefono.\n- Pago por viaje + bonus por nivel y membresia.\n\n{FF8C00}Pizzero{FFFFFF}: toma la moto de reparto y completa entregas en ruta.\n- Subes nivel por entregas exitosas.\n\n{00C853}Basurero{FFFFFF}: recoge bolsas con H y subelas a la Rumpo.\n- Al completar la ruta cobras por bolsas entregadas.\n\n{99CCFF}Armero{FFFFFF}: fabrica armas en la armeria usando materiales de inventario.\n- Sube nivel creando armas para desbloquear mejor rendimiento.\n\n{66CCFF}Mecanico{FFFFFF}: atiende jugadores con /reparar.\n- Skills: /usarkit (nivel 5) y /reparardl (nivel 10).\n\n{66FF99}Medico{FFFFFF}: cura vida con /curar y chaleco con /prote (nivel 4).\n- Ganas exp por tratamientos completados.\n\n{8B4513}Talador{FFFFFF}: tala arboles con H, carga troncos y entrega en la zona de trabajo.\n- Usa /dejartroncos para activar la entrega.\n\n{CCCCCC}Minero{FFFFFF}: mina rocas con H y procesa materiales en hornos.\n- Requiere mazo en buen estado para mantener produccion.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /fc para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.\n\n{66FFFF}Identificacion:{FFFFFF} /id (panel) y /idd [ID] (chat) para ver datos publicos de jugadores.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
@@ -5391,7 +5396,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) return ShowPrendasAdminEditar(playerid, PrendaEditIndex[playerid]);
             return ShowPrendaUsuarioEditar(playerid, idxp);
         }
-        new bones[] = {1,2,3,4,5,6,7,8,9,10,11};
+        new bones[] = {2,1,1,3,4,5,6,7,8,9,10};
         if(listitem < 0 || listitem >= sizeof(bones)) return 1;
         if(PlayerAdmin[playerid] >= 1 && PrendaEditIndex[playerid] != -1 && !PlayerPrendaComprada[playerid][idxp]) {
             PrendasData[idxp][prendaBone] = bones[listitem];
@@ -6780,7 +6785,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new Float:px, Float:py, Float:pz, Float:pa;
         GetPlayerPos(playerid, px, py, pz);
         GetPlayerFacingAngle(playerid, pa);
-        new veh = CreateVehicle(VentaAutosData[item][vaModelo], px + 3.0, py, pz, pa, -1, -1, 120);
+        new Float:spawnX = px + (floatsin(-pa, degrees) * 4.0);
+        new Float:spawnY = py + (floatcos(-pa, degrees) * 4.0);
+        new veh = CreateVehicle(VentaAutosData[item][vaModelo], spawnX, spawnY, pz, pa, -1, -1, 120);
         if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo crear el vehiculo.");
         if(VehOwner[veh] != -1 && VehModelData[veh] >= 400 && VehModelData[veh] <= 611) {
             DestroyVehicle(veh);
@@ -6795,16 +6802,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VehModelData[veh] = VentaAutosData[item][vaModelo];
         VehColor1Data[veh] = -1;
         VehColor2Data[veh] = -1;
-        VehPosData[veh][0] = px + 3.0;
-        VehPosData[veh][1] = py;
+        VehPosData[veh][0] = spawnX;
+        VehPosData[veh][1] = spawnY;
         VehPosData[veh][2] = pz;
         VehPosData[veh][3] = pa;
         ResetMaleteroVehiculo(veh, playerid);
-        VentaAutosData[item][vaStock]--;
         GuardarVentaAutosConfig();
         GuardarCuenta(playerid);
         ActualizarLabelVentaAutos();
-        SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. El concesionario te entrega las llaves de tu nuevo auto.");
+        SendClientMessage(playerid, 0x00FF00FF, "Compra confirmada. El concesionario te entrega las llaves y coloca tu auto frente a ti.");
         return 1;
     }
     if(dialogid == DIALOG_MALETERO_MENU) {
@@ -7479,8 +7485,10 @@ public AutoGuardadoGlobal() {
     GuardarVentagas();
     GuardarVentaAutosConfig();
     GuardarVentaSkinsConfig();
+    GuardarPrendasConfig();
     GuardarArmeriaConfig();
     GuardarTiendaVirtualConfig();
+    GuardarTerritorios();
     GuardarFacciones();
     return 1;
 }
@@ -8034,7 +8042,7 @@ stock ActualizarLabelVentaAutos() {
     if(VentaAutosLabel != Text3D:-1) { Delete3DTextLabel(VentaAutosLabel); VentaAutosLabel = Text3D:-1; }
     if(!VentaAutosActiva) return 1;
     new texto[256], disponibles;
-    for(new i = 0; i < MAX_AUTOS_VENTA; i++) if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaStock] > 0) disponibles++;
+    for(new i = 0; i < MAX_AUTOS_VENTA; i++) if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaPrecio] > 0) disponibles++;
     format(texto, sizeof(texto), "Concesionario Kame House\nModelos en venta: %d\nUsa H para comprar", disponibles);
     VentaAutosLabel = Create3DTextLabel(texto, 0x33CCFFFF, VentaAutosPos[0], VentaAutosPos[1], VentaAutosPos[2] + 0.6, 18.0, 0);
     return 1;
@@ -8043,7 +8051,7 @@ stock ActualizarLabelVentaAutos() {
 stock GetVentaAutoByListIndex(listindex) {
     new current;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
-        if(!VentaAutosData[i][vaActiva] || VentaAutosData[i][vaStock] <= 0) continue;
+        if(!VentaAutosData[i][vaActiva] || VentaAutosData[i][vaPrecio] <= 0) continue;
         if(current == listindex) return i;
         current++;
     }
@@ -8054,7 +8062,7 @@ stock ShowVentaAutosBuyMenu(playerid) {
     new body[1024], line[96], count;
     body[0] = EOS;
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
-        if(!VentaAutosData[i][vaActiva] || VentaAutosData[i][vaStock] <= 0) continue;
+        if(!VentaAutosData[i][vaActiva] || VentaAutosData[i][vaPrecio] <= 0) continue;
         new vname[32];
         GetNombreVehiculoVanilla(VentaAutosData[i][vaModelo], vname, sizeof(vname));
         format(line, sizeof(line), "[ID %d] (%s) [Valor: $%d] | [Disponible]\n", VentaAutosData[i][vaModelo], vname, VentaAutosData[i][vaPrecio]);
@@ -8080,7 +8088,7 @@ stock ShowVentaAutosRemoveMenu(playerid) {
         if(!VentaAutosData[i][vaActiva]) continue;
         new vname2[32];
         GetNombreVehiculoVanilla(VentaAutosData[i][vaModelo], vname2, sizeof(vname2));
-        format(line, sizeof(line), "[ID %d] (%s) [Valor: $%d] | %s\n", VentaAutosData[i][vaModelo], vname2, VentaAutosData[i][vaPrecio], VentaAutosData[i][vaStock] > 0 ? "[Disponible]" : "[No Disponible]");
+        format(line, sizeof(line), "[ID %d] (%s) [Valor: $%d] | [Activo]\n", VentaAutosData[i][vaModelo], vname2, VentaAutosData[i][vaPrecio]);
         strcat(body, line);
         count++;
     }
@@ -10621,18 +10629,17 @@ stock QuitarPrendaJugador(playerid, idx) {
 
 stock GetPrendaBoneName(bone, dest[], len) {
     switch(bone) {
-        case 1: format(dest, len, "Cabeza");
-        case 2: format(dest, len, "Pecho");
-        case 3: format(dest, len, "Espalda");
-        case 4: format(dest, len, "Brazo izq");
-        case 5: format(dest, len, "Brazo der");
-        case 6: format(dest, len, "Mano izq");
-        case 7: format(dest, len, "Mano der");
-        case 8: format(dest, len, "Muslo izq");
-        case 9: format(dest, len, "Muslo der");
-        case 10: format(dest, len, "Pie izq");
-        case 11: format(dest, len, "Pie der");
-        default: format(dest, len, "Pecho");
+        case 1: format(dest, len, "Pecho/Espalda");
+        case 2: format(dest, len, "Cabeza");
+        case 3: format(dest, len, "Brazo izq");
+        case 4: format(dest, len, "Brazo der");
+        case 5: format(dest, len, "Mano izq");
+        case 6: format(dest, len, "Mano der");
+        case 7: format(dest, len, "Muslo izq");
+        case 8: format(dest, len, "Muslo der");
+        case 9: format(dest, len, "Pie izq");
+        case 10: format(dest, len, "Pie der");
+        default: format(dest, len, "Pecho/Espalda");
     }
     return 1;
 }
