@@ -135,6 +135,8 @@
 #define PATH_VENTA_AUTOS_LEGACY "venta_autos_config.txt"
 #define PATH_VENTA_SKINS "kame_house/venta_skins_config.txt"
 #define PATH_VENTA_SKINS_LEGACY "venta_skins_config.txt"
+#define PATH_VENTA_ADMIN_AUTOS "kame_house/venta_admin_autos.txt"
+#define PATH_VENTA_ADMIN_SKINS "kame_house/venta_admin_skins.txt"
 #define PATH_ARMERIA "kame_house/armeria_config.txt"
 #define PATH_ARMERIA_LEGACY "armeria_config.txt"
 #define PATH_TIENDA_VIRTUAL "kame_house/tienda_virtual_config.txt"
@@ -815,6 +817,7 @@ new MaleteroArmaSlotAmmoVeh[MAX_VEHICLES][MAX_SLOTS_MALETERO];
 new VehOwner[MAX_VEHICLES] = {-1, ...};
 new VehVentaPrecio[MAX_VEHICLES];
 new VehVentaDiamantes[MAX_VEHICLES];
+new VehVentaReponerTick[MAX_VEHICLES];
 new Text3D:VehVentaLabel[MAX_VEHICLES] = {Text3D:-1, ...};
 new bool:VehLocked[MAX_VEHICLES];
 new VehSharedTo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
@@ -1175,6 +1178,10 @@ stock CargarVentaAutosConfig();
 stock GuardarVentaAutosConfig();
 stock CargarVentaSkinsConfig();
 stock GuardarVentaSkinsConfig();
+stock CargarVentaAdminAutos();
+stock GuardarVentaAdminAutos();
+stock CargarVentaAdminSkins();
+stock GuardarVentaAdminSkins();
 stock ActualizarLabelVentaSkins();
 stock ShowVentaSkinsBuyMenu(playerid);
 stock ShowVentaSkinsAdminMenu(playerid);
@@ -1505,6 +1512,7 @@ stock CargarTerritorios() {
         TerritorioData[i][terCooldownExpiraTick] = 0;
     }
     new File:h = fopen(PATH_TERRITORIOS, io_read), line[256];
+    if(!h) h = fopen(PATH_TERRITORIOS_LEGACY, io_read);
     if(!h) return 1;
     while(fread(h, line)) {
         LimpiarLinea(line);
@@ -1721,6 +1729,8 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_VENTAGAS_LEGACY, PATH_VENTAGAS);
     MigrarArchivoLegacy(PATH_VENTA_AUTOS_LEGACY, PATH_VENTA_AUTOS);
     MigrarArchivoLegacy(PATH_VENTA_SKINS_LEGACY, PATH_VENTA_SKINS);
+    MigrarArchivoLegacy("venta_admin_autos.txt", PATH_VENTA_ADMIN_AUTOS);
+    MigrarArchivoLegacy("venta_admin_skins.txt", PATH_VENTA_ADMIN_SKINS);
     MigrarArchivoLegacy(PATH_ARMERIA_LEGACY, PATH_ARMERIA);
     MigrarArchivoLegacy(PATH_TIENDA_VIRTUAL_LEGACY, PATH_TIENDA_VIRTUAL);
     MigrarArchivoLegacy(PATH_FACCIONES_LEGACY, PATH_FACCIONES);
@@ -1728,6 +1738,8 @@ public OnGameModeInit() {
     CargarPrendasConfig();
     CargarVentaAutosConfig();
     CargarVentaSkinsConfig();
+    CargarVentaAdminAutos();
+    CargarVentaAdminSkins();
     CargarArmeriaConfig();
     CargarTiendaVirtualConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
@@ -1832,6 +1844,12 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         new Float:vx, Float:vy, Float:vz;
         GetVehiclePos(v, vx, vy, vz);
         if(!IsPlayerInRangeOfPoint(playerid, 3.0, vx, vy, vz)) continue;
+        new restanteVenta = VehVentaReponerTick[v] - GetTickCount();
+        if(restanteVenta > 0) {
+            new msgVenta[96];
+            format(msgVenta, sizeof(msgVenta), "Este auto estara disponible en %d segundo(s).", (restanteVenta + 999) / 1000);
+            return SendClientMessage(playerid, 0xFFCC00FF, msgVenta);
+        }
         new vname[32], body[160];
         GetNombreVehiculoVanilla(VehModelData[v], vname, sizeof(vname));
         format(body, sizeof(body), "Auto: %s\nPrecio: $%d\nDiamantes: %d\n\nDeseas comprarlo?", vname, VehVentaPrecio[v], VehVentaDiamantes[v]);
@@ -4888,6 +4906,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             VentaSkinsPos[2] = pz;
             ActualizarLabelVentaSkins();
             GuardarVentaSkinsConfig();
+            GuardarVentaAdminAutos();
+            GuardarVentaAdminSkins();
         }
         if(puntoMover == puntoFacciones) {
             if(FaccionCPPickup != 0) DestroyPickup(FaccionCPPickup);
@@ -5793,6 +5813,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         GetNombreVehiculoVanilla(modelo, vn, sizeof(vn));
         format(txt, sizeof(txt), "%s\n$%d | %d diamantes\nPresiona H para comprar", vn, precio, diam);
         VehVentaLabel[veh] = Create3DTextLabel(txt, 0x33CCFFFF, x + 2.0, y, z + 1.0, 20.0, 0);
+        GuardarVentaAdminAutos();
         SendClientMessage(playerid, 0x66FF66FF, "Venta de auto creada correctamente.");
         return 1;
     }
@@ -5827,6 +5848,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new txt[160];
         format(txt, sizeof(txt), "Skin %d\n$%d | %d diamantes\nPresiona H para comprar", skin, precio, diam);
         SkinVentaLabel[slot] = Create3DTextLabel(txt, 0xFF66CCFF, x + 1.5, y, z + 1.0, 20.0, 0);
+        GuardarVentaAdminSkins();
         SendClientMessage(playerid, 0x66FF66FF, "Venta de skin creada correctamente.");
         return 1;
     }
@@ -5843,7 +5865,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             }
             if(best == INVALID_VEHICLE_ID || bestd > 12.0) return SendClientMessage(playerid, -1, "No hay venta de auto cercana.");
             if(VehVentaLabel[best] != Text3D:-1) { Delete3DTextLabel(VehVentaLabel[best]); VehVentaLabel[best] = Text3D:-1; }
-            DestroyVehicle(best); VehOwner[best] = -1; VehVentaPrecio[best] = 0; VehVentaDiamantes[best] = 0;
+            DestroyVehicle(best); VehOwner[best] = -1; VehVentaPrecio[best] = 0; VehVentaDiamantes[best] = 0; VehVentaReponerTick[best] = 0;
+            GuardarVentaAdminAutos();
             return SendClientMessage(playerid, 0x66FF66FF, "Venta de auto eliminada.");
         }
         if(listitem == 1) {
@@ -5858,6 +5881,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(SkinVentaLabel[bests] != Text3D:-1) { Delete3DTextLabel(SkinVentaLabel[bests]); SkinVentaLabel[bests] = Text3D:-1; }
             DestroyActor(SkinVentaActor[bests]); SkinVentaActor[bests] = INVALID_ACTOR_ID;
             VentaSkinsData[bests][vsActiva] = false; VentaSkinsData[bests][vsSkin] = 0; VentaSkinsData[bests][vsPrecio] = 0; SkinVentaPrecio[bests] = 0; SkinVentaDiamantes[bests] = 0;
+            GuardarVentaAdminSkins();
             return SendClientMessage(playerid, 0x66FF66FF, "Venta de skin eliminada.");
         }
         return 1;
@@ -5868,14 +5892,49 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(VentaNuevaTipo[playerid] == 1) {
             new veh = VentaNuevaSlot[playerid];
             if(veh <= 0 || veh >= MAX_VEHICLES || VehOwner[veh] != -2) return SendClientMessage(playerid, -1, "Esta venta ya no esta disponible.");
+            new restanteVenta = VehVentaReponerTick[veh] - GetTickCount();
+            if(restanteVenta > 0) {
+                new msgVenta[96];
+                format(msgVenta, sizeof(msgVenta), "Este auto estara disponible en %d segundo(s).", (restanteVenta + 999) / 1000);
+                return SendClientMessage(playerid, 0xFFCC00FF, msgVenta);
+            }
             if(GetPlayerMoney(playerid) < VehVentaPrecio[veh]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
             if(PlayerDiamantes[playerid] < VehVentaDiamantes[veh]) return SendClientMessage(playerid, -1, "No tienes diamantes suficientes.");
+
+            new limiteVeh = GetLimiteVehiculosJugador(playerid);
+            if(ContarVehiculosTotalesJugador(playerid) >= limiteVeh) {
+                new msgLimite[96];
+                format(msgLimite, sizeof(msgLimite), "Limite alcanzado: maximo %d autos por jugador.", limiteVeh);
+                return SendClientMessage(playerid, -1, msgLimite);
+            }
+
+            new Float:px, Float:py, Float:pz, Float:pa;
+            GetPlayerPos(playerid, px, py, pz);
+            GetPlayerFacingAngle(playerid, pa);
+            new Float:spawnX = px + (floatsin(-pa, degrees) * 4.0);
+            new Float:spawnY = py + (floatcos(-pa, degrees) * 4.0);
+            new nuevoVeh = CreateVehicle(VehModelData[veh], spawnX, spawnY, pz, pa, -1, -1, 120);
+            if(nuevoVeh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo crear el vehiculo.");
+
             KH_GivePlayerMoney(playerid, -VehVentaPrecio[veh]);
             PlayerDiamantes[playerid] -= VehVentaDiamantes[veh];
-            VehOwner[veh] = playerid; VehLocked[veh] = false;
-            if(VehVentaLabel[veh] != Text3D:-1) { Delete3DTextLabel(VehVentaLabel[veh]); VehVentaLabel[veh] = Text3D:-1; }
-            VehVentaPrecio[veh] = 0; VehVentaDiamantes[veh] = 0;
-            SendClientMessage(playerid, 0x66FF66FF, "Compraste el vehiculo. Ya es de tu propiedad.");
+            PutPlayerInVehicle(playerid, nuevoVeh, 0);
+            VehOwner[nuevoVeh] = playerid;
+            VehLocked[nuevoVeh] = false;
+            VehOculto[nuevoVeh] = false;
+            VehLastUseTick[nuevoVeh] = GetTickCount();
+            VehModelData[nuevoVeh] = VehModelData[veh];
+            VehColor1Data[nuevoVeh] = -1;
+            VehColor2Data[nuevoVeh] = -1;
+            VehPosData[nuevoVeh][0] = spawnX;
+            VehPosData[nuevoVeh][1] = spawnY;
+            VehPosData[nuevoVeh][2] = pz;
+            VehPosData[nuevoVeh][3] = pa;
+            ResetMaleteroVehiculo(nuevoVeh, playerid);
+
+            VehVentaReponerTick[veh] = GetTickCount() + 60000;
+            GuardarVentaAdminAutos();
+            SendClientMessage(playerid, 0x66FF66FF, "Compra confirmada. En 1 minuto este auto volvera a estar disponible.");
             GuardarCuenta(playerid);
             return 1;
         }
@@ -5889,6 +5948,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             SetPlayerSkin(playerid, VentaSkinsData[slot][vsSkin]);
             PlayerSkinGuardada[playerid] = VentaSkinsData[slot][vsSkin];
             SendClientMessage(playerid, 0x66FF66FF, "Compraste la skin correctamente.");
+            GuardarVentaAdminSkins();
             GuardarCuenta(playerid);
             return 1;
         }
@@ -7485,6 +7545,8 @@ public AutoGuardadoGlobal() {
     GuardarVentagas();
     GuardarVentaAutosConfig();
     GuardarVentaSkinsConfig();
+    GuardarVentaAdminAutos();
+    GuardarVentaAdminSkins();
     GuardarPrendasConfig();
     GuardarArmeriaConfig();
     GuardarTiendaVirtualConfig();
@@ -9137,7 +9199,7 @@ public CheckInactiveVehicles() {
             continue;
         }
 
-        if(VehOwner[v] == -1) continue;
+        if(VehOwner[v] == -1 || VehOwner[v] == -2) continue;
         if(now - VehLastUseTick[v] < 120000) continue;
         GetVehiclePos(v, VehPosData[v][0], VehPosData[v][1], VehPosData[v][2]);
         GetVehicleHealth(v, VehHealthData[v]);
@@ -11032,6 +11094,7 @@ stock ShowReglasDialog(playerid) {
 
 stock GuardarVentaAutosConfig() {
     new File:h = fopen(PATH_VENTA_AUTOS, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_AUTOS, io_write); }
     if(!h) return 0;
 
     new line[96];
@@ -11053,6 +11116,7 @@ stock CargarVentaAutosConfig() {
     }
 
     new File:h = fopen(PATH_VENTA_AUTOS, io_read), line[96];
+    if(!h) h = fopen(PATH_VENTA_AUTOS_LEGACY, io_read);
     if(!h) {
         GuardarVentaAutosConfig();
         return 1;
@@ -11075,6 +11139,7 @@ stock CargarVentaAutosConfig() {
 
 stock GuardarVentaSkinsConfig() {
     new File:h = fopen(PATH_VENTA_SKINS, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_SKINS, io_write); }
     if(!h) return 0;
     new line[96];
     format(line, sizeof(line), "POS %f %f %f\n", VentaSkinsPos[0], VentaSkinsPos[1], VentaSkinsPos[2]);
@@ -11094,6 +11159,7 @@ stock CargarVentaSkinsConfig() {
         VentaSkinsData[i][vsPrecio] = 0;
     }
     new File:h = fopen(PATH_VENTA_SKINS, io_read), line[96];
+    if(!h) h = fopen(PATH_VENTA_SKINS_LEGACY, io_read);
     if(!h) return GuardarVentaSkinsConfig();
 
     new i;
@@ -11117,6 +11183,124 @@ stock CargarVentaSkinsConfig() {
         VentaSkinsData[i][vsSkin] = strval(strtok(line, idx));
         VentaSkinsData[i][vsPrecio] = strval(strtok(line, idx));
         i++;
+    }
+    fclose(h);
+    return 1;
+}
+
+stock GuardarVentaAdminAutos() {
+    new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_ADMIN_AUTOS, io_write); }
+    if(!h) return 0;
+
+    new line[160], now = GetTickCount();
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != -2 || !IsValidVehicle(v)) continue;
+        new Float:x, Float:y, Float:z, Float:a;
+        GetVehiclePos(v, x, y, z);
+        GetVehicleZAngle(v, a);
+        new restante = VehVentaReponerTick[v] - now;
+        if(restante < 0) restante = 0;
+        format(line, sizeof(line), "%d %f %f %f %f %d %d %d\n", VehModelData[v], x, y, z, a, VehVentaPrecio[v], VehVentaDiamantes[v], restante);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarVentaAdminAutos() {
+    new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_read), line[160];
+    if(!h) return 1;
+
+    new now = GetTickCount();
+    while(fread(h, line)) {
+        LimpiarLinea(line);
+        if(!line[0]) continue;
+
+        new idx = 0;
+        new modelo = strval(strtok(line, idx));
+        if(modelo < 400 || modelo > 611) continue;
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+        new Float:a = floatstr(strtok(line, idx));
+        new precio = strval(strtok(line, idx));
+        new diam = strval(strtok(line, idx));
+        new restante = strval(strtok(line, idx));
+
+        new veh = CreateVehicle(modelo, x, y, z, a, -1, -1, -1);
+        if(veh == INVALID_VEHICLE_ID) continue;
+        VehOwner[veh] = -2;
+        VehLocked[veh] = true;
+        VehVentaPrecio[veh] = precio;
+        VehVentaDiamantes[veh] = diam;
+        VehModelData[veh] = modelo;
+        VehOculto[veh] = false;
+        VehLastUseTick[veh] = now;
+        VehVentaReponerTick[veh] = now + (restante > 0 ? restante : 0);
+
+        new vn[32], txt[160];
+        GetNombreVehiculoVanilla(modelo, vn, sizeof(vn));
+        format(txt, sizeof(txt), "%s\n$%d | %d diamantes\nPresiona H para comprar", vn, precio, diam);
+        VehVentaLabel[veh] = Create3DTextLabel(txt, 0x33CCFFFF, x, y, z + 1.0, 20.0, 0);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock GuardarVentaAdminSkins() {
+    new File:h = fopen(PATH_VENTA_ADMIN_SKINS, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_VENTA_ADMIN_SKINS, io_write); }
+    if(!h) return 0;
+
+    new line[128];
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
+        new Float:x, Float:y, Float:z, Float:a;
+        GetActorPos(SkinVentaActor[i], x, y, z);
+        GetActorFacingAngle(SkinVentaActor[i], a);
+        format(line, sizeof(line), "%d %d %d %f %f %f %f\n", VentaSkinsData[i][vsSkin], SkinVentaPrecio[i], SkinVentaDiamantes[i], x, y, z, a);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarVentaAdminSkins() {
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(SkinVentaLabel[i] != Text3D:-1) { Delete3DTextLabel(SkinVentaLabel[i]); SkinVentaLabel[i] = Text3D:-1; }
+        if(SkinVentaActor[i] != INVALID_ACTOR_ID) { DestroyActor(SkinVentaActor[i]); SkinVentaActor[i] = INVALID_ACTOR_ID; }
+        SkinVentaPrecio[i] = 0;
+        SkinVentaDiamantes[i] = 0;
+    }
+
+    new File:h = fopen(PATH_VENTA_ADMIN_SKINS, io_read), line[128];
+    if(!h) return 1;
+
+    new slot = 0;
+    while(fread(h, line) && slot < MAX_SKINS_VENTA) {
+        LimpiarLinea(line);
+        if(!line[0]) continue;
+        new idx = 0;
+        new skin = strval(strtok(line, idx));
+        new precio = strval(strtok(line, idx));
+        new diam = strval(strtok(line, idx));
+        new Float:x = floatstr(strtok(line, idx));
+        new Float:y = floatstr(strtok(line, idx));
+        new Float:z = floatstr(strtok(line, idx));
+        new Float:a = floatstr(strtok(line, idx));
+
+        if(skin < 0 || skin > 311) continue;
+        VentaSkinsData[slot][vsActiva] = true;
+        VentaSkinsData[slot][vsSkin] = skin;
+        VentaSkinsData[slot][vsPrecio] = precio;
+        SkinVentaPrecio[slot] = precio;
+        SkinVentaDiamantes[slot] = diam;
+        SkinVentaActor[slot] = CreateActor(skin, x, y, z, a);
+        new txt[160];
+        format(txt, sizeof(txt), "Skin %d\n$%d | %d diamantes\nPresiona H para comprar", skin, precio, diam);
+        SkinVentaLabel[slot] = Create3DTextLabel(txt, 0xFF66CCFF, x, y, z + 1.0, 20.0, 0);
+        slot++;
     }
     fclose(h);
     return 1;
