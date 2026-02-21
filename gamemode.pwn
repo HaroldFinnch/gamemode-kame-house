@@ -208,6 +208,16 @@
 #define DIALOG_MECANICO_SOLICITUD 152
 #define DIALOG_MECANICO_REPARAR_PRECIO 170
 #define DIALOG_MEDICO_CURAR_ID 172
+#define DIALOG_FACCION_SALIR_CONFIRM 177
+#define DIALOG_ADMIN_VENTA_PANEL 178
+#define DIALOG_ADMIN_VENTA_AUTO_MODELO 179
+#define DIALOG_ADMIN_VENTA_AUTO_PRECIO 180
+#define DIALOG_ADMIN_VENTA_AUTO_DIAMANTES 181
+#define DIALOG_ADMIN_VENTA_SKIN_ID 182
+#define DIALOG_ADMIN_VENTA_SKIN_PRECIO 183
+#define DIALOG_ADMIN_VENTA_SKIN_DIAMANTES 184
+#define DIALOG_ADMIN_VENTA_ELIMINAR 185
+#define DIALOG_VENTA_NUEVA_COMPRAR 186
 #define DIALOG_TERRITORIO_CREAR_MENU 190
 #define DIALOG_TERRITORIO_CREAR_NOMBRE 191
 #define DIALOG_TIENDA_VIRTUAL_ESPECIALES 192
@@ -328,6 +338,7 @@
 #define COSTO_ANUNCIO 2000
 #define COSTO_COLOR_CREAR_FACCION 100000
 #define COSTO_COMPRAR_COLOR_FACCION 200000
+#define DISTANCIA_INVITACION_FACCION 5.0
 #define POS_FACCION_X 2504.40
 #define POS_FACCION_Y -1663.20
 #define POS_FACCION_Z 13.35
@@ -782,6 +793,14 @@ new VentaSkinsPickup;
 new Text3D:VentaSkinsLabel = Text3D:-1;
 new Float:VentaSkinsPos[3] = {2503.50, -1660.20, 13.35};
 new RdTargetPendiente[MAX_PLAYERS] = {-1, ...};
+new SkinVentaActor[MAX_SKINS_VENTA] = {INVALID_ACTOR_ID, ...};
+new Text3D:SkinVentaLabel[MAX_SKINS_VENTA] = {Text3D:-1, ...};
+new SkinVentaPrecio[MAX_SKINS_VENTA];
+new SkinVentaDiamantes[MAX_SKINS_VENTA];
+new VentaAdminIdPendiente[MAX_PLAYERS];
+new VentaAdminPrecioPendiente[MAX_PLAYERS];
+new VentaNuevaTipo[MAX_PLAYERS];
+new VentaNuevaSlot[MAX_PLAYERS] = {-1, ...};
 
 new MaleteroOwner[MAX_VEHICLES] = {-1, ...};
 new MaleteroSlotsVeh[MAX_VEHICLES];
@@ -794,6 +813,9 @@ new MaleteroArmaSlotIdVeh[MAX_VEHICLES][MAX_SLOTS_MALETERO];
 new MaleteroArmaSlotAmmoVeh[MAX_VEHICLES][MAX_SLOTS_MALETERO];
 
 new VehOwner[MAX_VEHICLES] = {-1, ...};
+new VehVentaPrecio[MAX_VEHICLES];
+new VehVentaDiamantes[MAX_VEHICLES];
+new Text3D:VehVentaLabel[MAX_VEHICLES] = {Text3D:-1, ...};
 new bool:VehLocked[MAX_VEHICLES];
 new VehSharedTo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new VehSharedUntil[MAX_PLAYERS];
@@ -1177,6 +1199,7 @@ stock ObtenerNombrePrendaJugador(playerid, idx, dest[], len);
 stock IsPrendaSlotEnUsoPorJugadores(idx);
 stock ContarPrendasJugador(playerid);
 stock GetPrendaBoneName(bone, dest[], len);
+stock bool:IsPlayerInRangeOfPlayer(playerid, targetid, Float:dist);
 stock IsNearPrendas(playerid);
 stock ShowVentaAutosRemoveMenu(playerid);
 stock GetVentaAutoByAnyListIndex(listindex);
@@ -1795,16 +1818,39 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     new bool:presionoH = ((newkeys & KEY_CTRL_BACK) && !(oldkeys & KEY_CTRL_BACK));
 
     if(presionoY && EsDueno(playerid)) { // Tecla Y (solo owner/admin principal)
-        if(IsNearVentaAutos(playerid)) return ShowVentaAutosAdminMenu(playerid);
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
-        if(IsNearVentaSkins(playerid)) return ShowVentaSkinsAdminMenu(playerid);
         if(IsNearTiendaVirtual(playerid)) return MostrarMenuAdminPreciosMembresia(playerid);
     }
 
     // Teclas B/L deshabilitadas por estabilidad del sistema.
 
     if(!presionoH) return 1; // Tecla H
+
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != -2) continue;
+        new Float:vx, Float:vy, Float:vz;
+        GetVehiclePos(v, vx, vy, vz);
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, vx, vy, vz)) continue;
+        new vname[32], body[160];
+        GetNombreVehiculoVanilla(VehModelData[v], vname, sizeof(vname));
+        format(body, sizeof(body), "Auto: %s\nPrecio: $%d\nDiamantes: %d\n\nDeseas comprarlo?", vname, VehVentaPrecio[v], VehVentaDiamantes[v]);
+        VentaNuevaTipo[playerid] = 1;
+        VentaNuevaSlot[playerid] = v;
+        return ShowPlayerDialog(playerid, DIALOG_VENTA_NUEVA_COMPRAR, DIALOG_STYLE_MSGBOX, "Comprar auto", body, "Comprar", "Cancelar");
+    }
+
+    for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+        if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
+        new Float:sx, Float:sy, Float:sz;
+        GetActorPos(SkinVentaActor[i], sx, sy, sz);
+        if(!IsPlayerInRangeOfPoint(playerid, 3.0, sx, sy, sz)) continue;
+        new body2[160];
+        format(body2, sizeof(body2), "Skin: %d\nPrecio: $%d\nDiamantes: %d\n\nDeseas comprarla?", VentaSkinsData[i][vsSkin], SkinVentaPrecio[i], SkinVentaDiamantes[i]);
+        VentaNuevaTipo[playerid] = 2;
+        VentaNuevaSlot[playerid] = i;
+        return ShowPlayerDialog(playerid, DIALOG_VENTA_NUEVA_COMPRAR, DIALOG_STYLE_MSGBOX, "Comprar skin", body2, "Comprar", "Cancelar");
+    }
 
     if(TrabajandoBasurero[playerid] > 0 && !IsPlayerInAnyVehicle(playerid) && BasureroRecolectando[playerid]) {
         BasureroRecolectando[playerid] = false;
@@ -1892,15 +1938,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(CosecharCultivoCercano(playerid)) return 1;
     }
 
-    if(IsNearVentaAutos(playerid)) {
-        ShowAdminEditHint(playerid, "venta de autos");
-        return ShowVentaAutosBuyMenu(playerid);
-    }
-
-    if(IsNearVentaSkins(playerid)) {
-        ShowAdminEditHint(playerid, "venta de skins");
-        return ShowVentaSkinsBuyMenu(playerid);
-    }
+    // Venta por CP eliminada: ahora se administra desde /admm.
 
     if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoFacciones][0], PuntoPos[puntoFacciones][1], PuntoPos[puntoFacciones][2])) {
         return MostrarMenuFaccionesCP(playerid);
@@ -2076,7 +2114,6 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
     for(new pp = 0; pp < TotalPrepiezaPoints; pp++) {
         if(!PrepiezaPoints[pp][ppActivo]) continue;
         if(!IsPlayerInRangeOfPoint(playerid, 2.5, PrepiezaPoints[pp][ppX], PrepiezaPoints[pp][ppY], PrepiezaPoints[pp][ppZ])) continue;
-        if(ArmeroNivel[playerid] <= 0) return SendClientMessage(playerid, -1, "Debes ser armero (minimo nivel 1).");
         if(GetTickCount() < PrepiezaCooldownTick[playerid][pp]) {
             new leftPP[24], msgPP[128];
             FormatTiempoRestante(PrepiezaCooldownTick[playerid][pp] - GetTickCount(), leftPP, sizeof(leftPP));
@@ -2776,6 +2813,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return MostrarPanelFaccionOwner(playerid);
     }
 
+    if(!strcmp(cmd, "/salirfaccion", true)) {
+        if(PlayerFaccionId[playerid] == -1) return SendClientMessage(playerid, -1, "No perteneces a ninguna faccion.");
+        if(PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) return SendClientMessage(playerid, -1, "Transfiere o elimina tu faccion antes de salir.");
+        return ShowPlayerDialog(playerid, DIALOG_FACCION_SALIR_CONFIRM, DIALOG_STYLE_MSGBOX, "Salir de faccion", "Deseas salir de tu faccion actual?", "Salir", "Cancelar");
+    }
+
     if(!strcmp(cmd, "/crearterri", true)) {
         if(!EsStaff(playerid)) return SendClientMessage(playerid, -1, "Solo administracion puede crear territorios.");
         return MostrarMenuCrearTerritorio(playerid);
@@ -3383,6 +3426,11 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return SendClientMessage(playerid, -1, "Acercate a la armeria y usa la tecla Y para editar armas.");
     }
 
+    if(!strcmp(cmd, "/eliminarventa", true)) {
+        if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_ELIMINAR, DIALOG_STYLE_LIST, "Eliminar venta", "Venta de auto mas cercana\nVenta de skin mas cercana", "Eliminar", "Cerrar");
+    }
+
     if(!strcmp(cmd, "/admm", true)) {
         if(EsDueno(playerid)) return MostrarDialogoAdmin(playerid);
         if(EsModerador(playerid)) return MostrarDialogoMod(playerid);
@@ -3456,7 +3504,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(TotalHornos >= MAX_HORNOS) return SendClientMessage(playerid, -1, "Limite de hornos alcanzado.");
         new Float:x, Float:y, Float:z; GetPlayerPos(playerid, x, y, z);
         HornoData[TotalHornos][hornoActivo] = true; HornoData[TotalHornos][hornoX] = x; HornoData[TotalHornos][hornoY] = y; HornoData[TotalHornos][hornoZ] = z;
-        HornoData[TotalHornos][hornoObj] = CreateObject(11725, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoObj] = CreateObject(1481, x, y, z - 1.0, 0.0, 0.0, 0.0);
         HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0); HornoData[TotalHornos][hornoListoRetiro] = false; HornoData[TotalHornos][hornoEnUso] = false; HornoData[TotalHornos][hornoOwner] = INVALID_PLAYER_ID;
         TotalHornos++; GuardarHornos();
         return SendClientMessage(playerid, 0x00FF00FF, "Horno creado.");
@@ -4432,10 +4480,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
     if(dialogid == DIALOG_AYUDA_CATEGORIA) {
         if(!response) return 1;
         if(listitem == 0) return ShowAyudaDialog(playerid);
-        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{CCCCCC}[Minero]{FFFFFF}\n- Extrae piedra/cobre/hierro en minas y hornos.\n- Comandos: /mina, H en mina, H en horno, /inventario (/inv), /trabajos.\n\n{8B4513}[Talador]{FFFFFF}\n- Tala arboles, carga troncos y entrega en el CP del trabajo.\n- Comandos: H en arbol/Sadler, /dejartroncos, /trabajos.\n\n{00C853}[Basurero]{FFFFFF}\n- Recoge bolsas y subelas a la Rumpo con H (cada bolsa subida cuenta para skill).\n- Comandos: H en bolsa/camion, /tirarbasura, /trabajos.\n\n{FF8C00}[Pizzero]{FFFFFF}\n- Entrega pizzas en moto por checkpoints.\n- Comandos: H para tomar trabajo, /trabajos.\n\n{FFFF00}[Camionero]{FFFFFF}\n- Rutas de carga y entrega para subir nivel.\n- Comandos: H para iniciar, /trabajos.\n\n{99CCFF}[Armero]{FFFFFF}\n- Crea armas y municion con materiales.\n- Comandos: H en armeria, /armero, /inventario.\n\n{66CCFF}[Mecanico]{FFFFFF}\n- Repara vehiculos por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /reparar, /usarkit.\n\n{66FF99}[Medico]{FFFFFF}\n- Cura vida/chaleco por solicitud de jugadores.\n- Comandos: H para tomar trabajo, /curar, /prote.", "Cerrar", "");
-        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /fc para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.
-
-{66FFFF}Identificacion:{FFFFFF} /id (panel) y /idd [ID] (chat) para ver datos publicos de jugadores.", "Cerrar", "");
+        if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{FFFFFF}Revisa tu progreso con /skills.\n\n{FFFF00}Camionero{FFFFFF}: sube con viajes (/trabajos).\n{FF8C00}Pizzero{FFFFFF}: sube con entregas.\n{00C853}Basurero{FFFFFF}: sube con bolsas subidas.\n{99CCFF}Armero{FFFFFF}: sube creando armas.\n{66CCFF}Mecanico{FFFFFF}: sube con reparaciones. Skills: /reparardl nivel 10, /usarkit nivel 5.\n{66FF99}Medico{FFFFFF}: sube con tratamientos. Skill: /prote nivel 4.\n{8B4513}Talador{FFFFFF}: sube con troncos talados.\n{CCCCCC}Minero{FFFFFF}: sistema base de mineria + hornos.", "Cerrar", "");
+        if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /fc para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.\n\n{66FFFF}Identificacion:{FFFFFF} /id (panel) y /idd [ID] (chat) para ver datos publicos de jugadores.", "Cerrar", "");
         if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
@@ -5052,10 +5098,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(GetPlayerMoney(playerid) < COSTO_SMS) return SendClientMessage(playerid, -1, "No tienes $100 para enviar el mensaje.");
 
         KH_GivePlayerMoney(playerid, -COSTO_SMS);
-        new msgTo[180], msgFrom[120], sender[MAX_PLAYER_NAME];
+        new msgTo[180], msgFrom[180], sender[MAX_PLAYER_NAME];
         GetPlayerName(playerid, sender, sizeof(sender));
         format(msgTo, sizeof(msgTo), "[SMS] %s(%d): %s", sender, playerid, inputtext);
-        format(msgFrom, sizeof(msgFrom), "[SMS] Mensaje enviado a %d. Costo: $%d", target, COSTO_SMS);
+        format(msgFrom, sizeof(msgFrom), "[SMS] Enviado a %d: %s | Costo: $%d", target, inputtext, COSTO_SMS);
         SendClientMessage(target, 0xFFE680FF, msgTo);
         SendClientMessage(playerid, 0x66FF66FF, msgFrom);
         return 1;
@@ -5572,11 +5618,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(!response) return MostrarPanelFaccionOwner(playerid);
         new target = strval(inputtext), fid = PlayerFaccionId[playerid];
         if(fid == -1 || !IsPlayerConnected(target) || target == playerid) return SendClientMessage(playerid, -1, "ID invalido.");
+        if(!IsPlayerInRangeOfPlayer(playerid, target, DISTANCIA_INVITACION_FACCION)) return SendClientMessage(playerid, -1, "Debes estar a menos de 5 metros para invitar.");
         if(PlayerFaccionId[target] != -1) return SendClientMessage(playerid, -1, "Ese jugador ya pertenece a una faccion.");
         InvitacionFaccionId[target] = fid;
         InvitacionFaccionOwner[target] = playerid;
         new nombre[MAX_PLAYER_NAME], txt[180]; GetPlayerName(playerid, nombre, sizeof(nombre));
-        format(txt, sizeof(txt), "%s quiere invitarte a la faccion %s", nombre, FaccionData[fid][facNombre]);
+        format(txt, sizeof(txt), "[ALERTA] %s te invita a la faccion %s. Aceptar o rechazar?", nombre, FaccionData[fid][facNombre]);
         ShowPlayerDialog(target, DIALOG_FACCION_INVITACION, DIALOG_STYLE_MSGBOX, "Invitacion de faccion", txt, "Aceptar", "Rechazar");
         SendClientMessage(playerid, 0x66FF66FF, "Invitacion enviada.");
         return 1;
@@ -5617,6 +5664,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         RemoverMiembroFaccion(fid, target);
         GuardarFacciones();
         SendClientMessage(playerid, 0x66FF66FF, "Miembro expulsado.");
+        return 1;
+    }
+
+
+    if(dialogid == DIALOG_FACCION_SALIR_CONFIRM) {
+        if(!response) return 1;
+        new fid = PlayerFaccionId[playerid];
+        if(fid == -1) return 1;
+        if(PlayerFaccionRango[playerid] == FACCION_RANGO_LIDER) return SendClientMessage(playerid, -1, "El lider no puede salir sin gestionar la faccion.");
+        RemoverMiembroFaccion(fid, playerid);
+        GuardarFacciones();
+        SendClientMessage(playerid, 0x66FF66FF, "Saliste de la faccion correctamente.");
         return 1;
     }
 
@@ -5689,6 +5748,145 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 16) return MostrarMenuAdminMembresias(playerid);
         if(listitem == 17) return MostrarMenuAdminNiveles(playerid);
         if(listitem == 18) return MostrarDialogoReportesStaff(playerid);
+        if(listitem == 19) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_PANEL, DIALOG_STYLE_LIST, "Venta skins/autos", "Vender auto\nVender skin\nEliminar venta cercana", "Abrir", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_PANEL) {
+        if(!response) return MostrarDialogoAdmin(playerid);
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_AUTO_MODELO, DIALOG_STYLE_INPUT, "Venta admin - Auto", "Ingresa ID del vehiculo (400-611):", "Siguiente", "Atras");
+        if(listitem == 1) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_SKIN_ID, DIALOG_STYLE_INPUT, "Venta admin - Skin", "Ingresa ID de skin:", "Siguiente", "Atras");
+        if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_ELIMINAR, DIALOG_STYLE_LIST, "Eliminar venta", "Venta de auto mas cercana\nVenta de skin mas cercana", "Eliminar", "Atras");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_AUTO_MODELO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_PANEL, DIALOG_STYLE_LIST, "Venta skins/autos", "Vender auto\nVender skin\nEliminar venta cercana", "Abrir", "Atras");
+        new modelo = strval(inputtext);
+        if(modelo < 400 || modelo > 611) return SendClientMessage(playerid, -1, "Modelo invalido (400-611).");
+        VentaAdminIdPendiente[playerid] = modelo;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_AUTO_PRECIO, DIALOG_STYLE_INPUT, "Venta admin - Auto", "Precio en dinero:", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_AUTO_PRECIO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_AUTO_MODELO, DIALOG_STYLE_INPUT, "Venta admin - Auto", "Ingresa ID del vehiculo (400-611):", "Siguiente", "Atras");
+        new precio = strval(inputtext);
+        if(precio < 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        VentaAdminPrecioPendiente[playerid] = precio;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_AUTO_DIAMANTES, DIALOG_STYLE_INPUT, "Venta admin - Auto", "Costo en diamantes:", "Crear", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_AUTO_DIAMANTES) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_AUTO_PRECIO, DIALOG_STYLE_INPUT, "Venta admin - Auto", "Precio en dinero:", "Siguiente", "Atras");
+        new diam = strval(inputtext), modelo = VentaAdminIdPendiente[playerid], precio = VentaAdminPrecioPendiente[playerid];
+        if(diam < 0) return SendClientMessage(playerid, -1, "Diamantes invalidos.");
+        new Float:x, Float:y, Float:z, Float:a; GetPlayerPos(playerid, x, y, z); GetPlayerFacingAngle(playerid, a);
+        new veh = CreateVehicle(modelo, x + 2.0, y, z, a, -1, -1, -1);
+        if(veh == INVALID_VEHICLE_ID) return SendClientMessage(playerid, -1, "No se pudo crear la venta.");
+        VehOwner[veh] = -2; VehLocked[veh] = true; VehVentaPrecio[veh] = precio; VehVentaDiamantes[veh] = diam; VehModelData[veh] = modelo;
+        new vn[32], txt[160];
+        GetNombreVehiculoVanilla(modelo, vn, sizeof(vn));
+        format(txt, sizeof(txt), "%s\n$%d | %d diamantes\nPresiona H para comprar", vn, precio, diam);
+        VehVentaLabel[veh] = Create3DTextLabel(txt, 0x33CCFFFF, x + 2.0, y, z + 1.0, 20.0, 0);
+        SendClientMessage(playerid, 0x66FF66FF, "Venta de auto creada correctamente.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_SKIN_ID) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_PANEL, DIALOG_STYLE_LIST, "Venta skins/autos", "Vender auto\nVender skin\nEliminar venta cercana", "Abrir", "Atras");
+        new skin = strval(inputtext);
+        if(skin < 0 || skin > 311) return SendClientMessage(playerid, -1, "Skin invalida.");
+        VentaAdminIdPendiente[playerid] = skin;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_SKIN_PRECIO, DIALOG_STYLE_INPUT, "Venta admin - Skin", "Precio en dinero:", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_SKIN_PRECIO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_SKIN_ID, DIALOG_STYLE_INPUT, "Venta admin - Skin", "Ingresa ID de skin:", "Siguiente", "Atras");
+        new precio = strval(inputtext);
+        if(precio < 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        VentaAdminPrecioPendiente[playerid] = precio;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_SKIN_DIAMANTES, DIALOG_STYLE_INPUT, "Venta admin - Skin", "Costo en diamantes:", "Crear", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_SKIN_DIAMANTES) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_SKIN_PRECIO, DIALOG_STYLE_INPUT, "Venta admin - Skin", "Precio en dinero:", "Siguiente", "Atras");
+        new diam = strval(inputtext), skin = VentaAdminIdPendiente[playerid], precio = VentaAdminPrecioPendiente[playerid];
+        if(diam < 0) return SendClientMessage(playerid, -1, "Diamantes invalidos.");
+        new slot = -1;
+        for(new i = 0; i < MAX_SKINS_VENTA; i++) if(!VentaSkinsData[i][vsActiva]) { slot = i; break; }
+        if(slot == -1) return SendClientMessage(playerid, -1, "No hay slots de venta de skin.");
+        new Float:x, Float:y, Float:z, Float:a; GetPlayerPos(playerid, x, y, z); GetPlayerFacingAngle(playerid, a);
+        VentaSkinsData[slot][vsActiva] = true; VentaSkinsData[slot][vsSkin] = skin; VentaSkinsData[slot][vsPrecio] = precio;
+        SkinVentaPrecio[slot] = precio; SkinVentaDiamantes[slot] = diam;
+        SkinVentaActor[slot] = CreateActor(skin, x + 1.5, y, z, a);
+        new txt[160];
+        format(txt, sizeof(txt), "Skin %d\n$%d | %d diamantes\nPresiona H para comprar", skin, precio, diam);
+        SkinVentaLabel[slot] = Create3DTextLabel(txt, 0xFF66CCFF, x + 1.5, y, z + 1.0, 20.0, 0);
+        SendClientMessage(playerid, 0x66FF66FF, "Venta de skin creada correctamente.");
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_VENTA_ELIMINAR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_VENTA_PANEL, DIALOG_STYLE_LIST, "Venta skins/autos", "Vender auto\nVender skin\nEliminar venta cercana", "Abrir", "Atras");
+        if(listitem == 0) {
+            new best = INVALID_VEHICLE_ID; new Float:bestd = 99999.0; new Float:px, Float:py, Float:pz; GetPlayerPos(playerid, px, py, pz);
+            for(new v = 1; v < MAX_VEHICLES; v++) {
+                if(VehOwner[v] != -2) continue;
+                new Float:x, Float:y, Float:z; GetVehiclePos(v, x, y, z);
+                new Float:d = floatsqroot((x-px)*(x-px)+(y-py)*(y-py)+(z-pz)*(z-pz));
+                if(d < bestd) { bestd = d; best = v; }
+            }
+            if(best == INVALID_VEHICLE_ID || bestd > 12.0) return SendClientMessage(playerid, -1, "No hay venta de auto cercana.");
+            if(VehVentaLabel[best] != Text3D:-1) { Delete3DTextLabel(VehVentaLabel[best]); VehVentaLabel[best] = Text3D:-1; }
+            DestroyVehicle(best); VehOwner[best] = -1; VehVentaPrecio[best] = 0; VehVentaDiamantes[best] = 0;
+            return SendClientMessage(playerid, 0x66FF66FF, "Venta de auto eliminada.");
+        }
+        if(listitem == 1) {
+            new bests = -1; new Float:bestd2 = 99999.0; new Float:px2, Float:py2, Float:pz2; GetPlayerPos(playerid, px2, py2, pz2);
+            for(new i = 0; i < MAX_SKINS_VENTA; i++) {
+                if(!VentaSkinsData[i][vsActiva] || SkinVentaActor[i] == INVALID_ACTOR_ID) continue;
+                new Float:x, Float:y, Float:z; GetActorPos(SkinVentaActor[i], x, y, z);
+                new Float:d = floatsqroot((x-px2)*(x-px2)+(y-py2)*(y-py2)+(z-pz2)*(z-pz2));
+                if(d < bestd2) { bestd2 = d; bests = i; }
+            }
+            if(bests == -1 || bestd2 > 12.0) return SendClientMessage(playerid, -1, "No hay venta de skin cercana.");
+            if(SkinVentaLabel[bests] != Text3D:-1) { Delete3DTextLabel(SkinVentaLabel[bests]); SkinVentaLabel[bests] = Text3D:-1; }
+            DestroyActor(SkinVentaActor[bests]); SkinVentaActor[bests] = INVALID_ACTOR_ID;
+            VentaSkinsData[bests][vsActiva] = false; VentaSkinsData[bests][vsSkin] = 0; VentaSkinsData[bests][vsPrecio] = 0; SkinVentaPrecio[bests] = 0; SkinVentaDiamantes[bests] = 0;
+            return SendClientMessage(playerid, 0x66FF66FF, "Venta de skin eliminada.");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_VENTA_NUEVA_COMPRAR) {
+        if(!response) return 1;
+        if(VentaNuevaTipo[playerid] == 1) {
+            new veh = VentaNuevaSlot[playerid];
+            if(veh <= 0 || veh >= MAX_VEHICLES || VehOwner[veh] != -2) return SendClientMessage(playerid, -1, "Esta venta ya no esta disponible.");
+            if(GetPlayerMoney(playerid) < VehVentaPrecio[veh]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+            if(PlayerDiamantes[playerid] < VehVentaDiamantes[veh]) return SendClientMessage(playerid, -1, "No tienes diamantes suficientes.");
+            KH_GivePlayerMoney(playerid, -VehVentaPrecio[veh]);
+            PlayerDiamantes[playerid] -= VehVentaDiamantes[veh];
+            VehOwner[veh] = playerid; VehLocked[veh] = false;
+            if(VehVentaLabel[veh] != Text3D:-1) { Delete3DTextLabel(VehVentaLabel[veh]); VehVentaLabel[veh] = Text3D:-1; }
+            VehVentaPrecio[veh] = 0; VehVentaDiamantes[veh] = 0;
+            SendClientMessage(playerid, 0x66FF66FF, "Compraste el vehiculo. Ya es de tu propiedad.");
+            GuardarCuenta(playerid);
+            return 1;
+        }
+        if(VentaNuevaTipo[playerid] == 2) {
+            new slot = VentaNuevaSlot[playerid];
+            if(slot < 0 || slot >= MAX_SKINS_VENTA || !VentaSkinsData[slot][vsActiva]) return SendClientMessage(playerid, -1, "Esta venta ya no esta disponible.");
+            if(GetPlayerMoney(playerid) < SkinVentaPrecio[slot]) return SendClientMessage(playerid, -1, "No tienes dinero suficiente.");
+            if(PlayerDiamantes[playerid] < SkinVentaDiamantes[slot]) return SendClientMessage(playerid, -1, "No tienes diamantes suficientes.");
+            KH_GivePlayerMoney(playerid, -SkinVentaPrecio[slot]);
+            PlayerDiamantes[playerid] -= SkinVentaDiamantes[slot];
+            SetPlayerSkin(playerid, VentaSkinsData[slot][vsSkin]);
+            PlayerSkinGuardada[playerid] = VentaSkinsData[slot][vsSkin];
+            SendClientMessage(playerid, 0x66FF66FF, "Compraste la skin correctamente.");
+            GuardarCuenta(playerid);
+            return 1;
+        }
         return 1;
     }
 
@@ -7440,6 +7638,11 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
         if(vehid != INVALID_VEHICLE_ID) {
             VehLastUseTick[vehid] = GetTickCount();
             VehOculto[vehid] = false;
+            if(VehOwner[vehid] == -2) {
+                RemovePlayerFromVehicle(playerid);
+                SendClientMessage(playerid, 0xFF0000FF, "Este vehiculo esta en venta. Presiona H para comprarlo.");
+                return 1;
+            }
             if(VehLocked[vehid] && !PlayerTieneAccesoVehiculo(playerid, vehid)) {
                 RemovePlayerFromVehicle(playerid);
                 SendClientMessage(playerid, 0xFF0000FF, "Vehiculo bloqueado. No tienes llave.");
@@ -7797,6 +8000,14 @@ stock MostrarAnuncioGlobal(const emisor[], const texto[]) {
         if(IsPlayerConnected(i)) MostrarAnuncioJugador(i, anuncio);
     }
     return 1;
+}
+
+
+stock bool:IsPlayerInRangeOfPlayer(playerid, targetid, Float:dist) {
+    if(!IsPlayerConnected(playerid) || !IsPlayerConnected(targetid)) return false;
+    new Float:x, Float:y, Float:z;
+    GetPlayerPos(targetid, x, y, z);
+    return IsPlayerInRangeOfPoint(playerid, dist, x, y, z);
 }
 
 stock IsNearPrendas(playerid) {
@@ -9652,7 +9863,7 @@ stock GetHornoMasCercano(playerid) {
 }
 
 stock MostrarDialogoAdmin(playerid) {
-    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones\n{66FFFF}Membresias\n{F7DC6F}Niveles\n{FFB6C1}Ver reportes", "Abrir", "Cerrar");
+    ShowPlayerDialog(playerid, DIALOG_ADMIN_MENU, DIALOG_STYLE_LIST, "{F7D154}Panel Owner", "{58D68D}Ir a jugador (ID)\n{5DADE2}Mover puntos y CP\n{5DADE2}Crear puntos/sistemas\n{5DADE2}Comandos admin\n{F1948A}Sancionar\n{F1948A}Quitar sancion\n{F5B041}Dar dinero\n{F5B041}Dar minerales\n{F5B041}Dar vida/chaleco\n{AF7AC5}Cambiar skin\n{AF7AC5}Administrar prendas\n{AF7AC5}Editmap\n{85C1E9}Asignar Moderador\n{85C1E9}Eliminar Moderador\n{F4D03F}Modo Dios\n{58D68D}Facciones\n{66FFFF}Membresias\n{F7DC6F}Niveles\n{FFB6C1}Ver reportes\n{7DCEA0}Venta skins/autos", "Abrir", "Cerrar");
     return 1;
 }
 
@@ -10123,7 +10334,7 @@ stock CargarHornos() {
         HornoData[TotalHornos][hornoX] = x;
         HornoData[TotalHornos][hornoY] = y;
         HornoData[TotalHornos][hornoZ] = z;
-        HornoData[TotalHornos][hornoObj] = CreateObject(11725, x, y, z - 1.0, 0.0, 0.0, 0.0);
+        HornoData[TotalHornos][hornoObj] = CreateObject(1481, x, y, z - 1.0, 0.0, 0.0, 0.0);
         HornoData[TotalHornos][hornoLabel] = Create3DTextLabel("Horno\nUsa H", 0xFFAA00FF, x, y, z + 0.8, 12.0, 0);
         HornoData[TotalHornos][hornoListoRetiro] = false;
         HornoData[TotalHornos][hornoEnUso] = false;
