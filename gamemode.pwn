@@ -6792,7 +6792,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         for(new i = 0; i < MAX_SKINS_VENTA; i++) {
             if(VentaSkinsData[i][vsActiva] && VentaSkinsData[i][vsSkin] == skin) {
                 VentaSkinsData[i][vsPrecio] = precio;
-                    ActualizarLabelVentaSkins();
+                ActualizarLabelVentaSkins();
                 SendClientMessage(playerid, 0x00FF00FF, "Skin actualizada correctamente.");
                 return ShowVentaSkinsAdminMenu(playerid);
             }
@@ -6803,7 +6803,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 VentaSkinsData[i][vsActiva] = true;
                 VentaSkinsData[i][vsSkin] = skin;
                 VentaSkinsData[i][vsPrecio] = precio;
-                    ActualizarLabelVentaSkins();
+                ActualizarLabelVentaSkins();
                 SendClientMessage(playerid, 0x00FF00FF, "Skin agregada correctamente.");
                 return ShowVentaSkinsAdminMenu(playerid);
             }
@@ -6819,7 +6819,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VentaSkinsData[item][vsActiva] = false;
         VentaSkinsData[item][vsSkin] = 0;
         VentaSkinsData[item][vsPrecio] = 0;
-            ActualizarLabelVentaSkins();
+        ActualizarLabelVentaSkins();
         SendClientMessage(playerid, 0x00FF00FF, "Skin eliminada de la venta.");
         return ShowVentaSkinsAdminMenu(playerid);
     }
