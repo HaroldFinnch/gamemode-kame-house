@@ -1500,8 +1500,11 @@ stock TickPagoTerritorios() {
 }
 
 stock GuardarTerritoriosEnRuta(const ruta[]) {
-    new File:h = fopen(ruta, io_write);
-    if(!h) { fcreatedir(DIR_DATA); h = fopen(ruta, io_write); }
+    new tmpPath[96];
+    format(tmpPath, sizeof(tmpPath), "%s.tmp", ruta);
+
+    new File:h = fopen(tmpPath, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(tmpPath, io_write); }
     if(!h) return 0;
     new line[256];
     for(new i=0; i<MAX_TERRITORIOS; i++) {
@@ -1510,7 +1513,10 @@ stock GuardarTerritoriosEnRuta(const ruta[]) {
         fwrite(h, line);
     }
     fclose(h);
-    return 1;
+
+    fremove(ruta);
+    if(frename(tmpPath, ruta)) return 1;
+    return 0;
 }
 
 stock GuardarTerritorios() {
@@ -1525,8 +1531,20 @@ stock CargarTerritorios() {
         TerritorioData[i][terZona] = -1;
         TerritorioData[i][terCooldownExpiraTick] = 0;
     }
-    new File:h = fopen(PATH_TERRITORIOS, io_read), line[256];
-    if(!h) h = fopen(PATH_TERRITORIOS_LEGACY, io_read);
+    new File:h = fopen(PATH_TERRITORIOS, io_read), line[256], bool:usarLegacy;
+    if(h) {
+        new bool:tieneDatos;
+        while(fread(h, line)) {
+            LimpiarLinea(line);
+            if(!line[0]) continue;
+            tieneDatos = true;
+            break;
+        }
+        fclose(h);
+        if(!tieneDatos && fexist(PATH_TERRITORIOS_LEGACY)) usarLegacy = true;
+    } else usarLegacy = true;
+
+    h = fopen(usarLegacy ? PATH_TERRITORIOS_LEGACY : PATH_TERRITORIOS, io_read);
     if(!h) return 1;
     while(fread(h, line)) {
         LimpiarLinea(line);
@@ -11137,7 +11155,16 @@ stock GuardarVentaAutosConfigEnRuta(const ruta[]) {
     }
 
     fclose(h);
-    return 1;
+
+    fremove(ruta);
+    if(frename(tmpPath, ruta)) return 1;
+    return 0;
+}
+
+stock GuardarVentaAutosConfig() {
+    new okMain = GuardarVentaAutosConfigEnRuta(PATH_VENTA_AUTOS);
+    new okLegacy = GuardarVentaAutosConfigEnRuta(PATH_VENTA_AUTOS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock GuardarVentaAutosConfig() {
@@ -11154,8 +11181,20 @@ stock CargarVentaAutosConfig() {
         VentaAutosData[i][vaStock] = 0;
     }
 
-    new File:h = fopen(PATH_VENTA_AUTOS, io_read), line[96];
-    if(!h) h = fopen(PATH_VENTA_AUTOS_LEGACY, io_read);
+    new File:h = fopen(PATH_VENTA_AUTOS, io_read), line[96], bool:usarLegacy;
+    if(h) {
+        new bool:tieneDatos;
+        while(fread(h, line)) {
+            LimpiarLinea(line);
+            if(!line[0]) continue;
+            tieneDatos = true;
+            break;
+        }
+        fclose(h);
+        if(!tieneDatos && fexist(PATH_VENTA_AUTOS_LEGACY)) usarLegacy = true;
+    } else usarLegacy = true;
+
+    h = fopen(usarLegacy ? PATH_VENTA_AUTOS_LEGACY : PATH_VENTA_AUTOS, io_read);
     if(!h) {
         GuardarVentaAutosConfig();
         return 1;
@@ -11188,7 +11227,16 @@ stock GuardarVentaSkinsConfigEnRuta(const ruta[]) {
         fwrite(h, line);
     }
     fclose(h);
-    return 1;
+
+    fremove(ruta);
+    if(frename(tmpPath, ruta)) return 1;
+    return 0;
+}
+
+stock GuardarVentaSkinsConfig() {
+    new okMain = GuardarVentaSkinsConfigEnRuta(PATH_VENTA_SKINS);
+    new okLegacy = GuardarVentaSkinsConfigEnRuta(PATH_VENTA_SKINS_LEGACY);
+    return (okMain || okLegacy);
 }
 
 stock GuardarVentaSkinsConfig() {
@@ -11203,8 +11251,20 @@ stock CargarVentaSkinsConfig() {
         VentaSkinsData[i][vsSkin] = 0;
         VentaSkinsData[i][vsPrecio] = 0;
     }
-    new File:h = fopen(PATH_VENTA_SKINS, io_read), line[96];
-    if(!h) h = fopen(PATH_VENTA_SKINS_LEGACY, io_read);
+    new File:h = fopen(PATH_VENTA_SKINS, io_read), line[96], bool:usarLegacy;
+    if(h) {
+        new bool:tieneDatos;
+        while(fread(h, line)) {
+            LimpiarLinea(line);
+            if(!line[0]) continue;
+            tieneDatos = true;
+            break;
+        }
+        fclose(h);
+        if(!tieneDatos && fexist(PATH_VENTA_SKINS_LEGACY)) usarLegacy = true;
+    } else usarLegacy = true;
+
+    h = fopen(usarLegacy ? PATH_VENTA_SKINS_LEGACY : PATH_VENTA_SKINS, io_read);
     if(!h) return GuardarVentaSkinsConfig();
 
     new i;
@@ -11263,8 +11323,20 @@ stock GuardarVentaAdminAutos() {
 }
 
 stock CargarVentaAdminAutos() {
-    new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_read), line[160];
-    if(!h) h = fopen(PATH_VENTA_ADMIN_AUTOS_LEGACY, io_read);
+    new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_read), line[160], bool:usarLegacy;
+    if(h) {
+        new bool:tieneDatos;
+        while(fread(h, line)) {
+            LimpiarLinea(line);
+            if(!line[0]) continue;
+            tieneDatos = true;
+            break;
+        }
+        fclose(h);
+        if(!tieneDatos && fexist(PATH_VENTA_ADMIN_AUTOS_LEGACY)) usarLegacy = true;
+    } else usarLegacy = true;
+
+    h = fopen(usarLegacy ? PATH_VENTA_ADMIN_AUTOS_LEGACY : PATH_VENTA_ADMIN_AUTOS, io_read);
     if(!h) return 1;
 
     new now = GetTickCount();
@@ -11336,8 +11408,20 @@ stock CargarVentaAdminSkins() {
         SkinVentaDiamantes[i] = 0;
     }
 
-    new File:h = fopen(PATH_VENTA_ADMIN_SKINS, io_read), line[128];
-    if(!h) h = fopen(PATH_VENTA_ADMIN_SKINS_LEGACY, io_read);
+    new File:h = fopen(PATH_VENTA_ADMIN_SKINS, io_read), line[128], bool:usarLegacy;
+    if(h) {
+        new bool:tieneDatos;
+        while(fread(h, line)) {
+            LimpiarLinea(line);
+            if(!line[0]) continue;
+            tieneDatos = true;
+            break;
+        }
+        fclose(h);
+        if(!tieneDatos && fexist(PATH_VENTA_ADMIN_SKINS_LEGACY)) usarLegacy = true;
+    } else usarLegacy = true;
+
+    h = fopen(usarLegacy ? PATH_VENTA_ADMIN_SKINS_LEGACY : PATH_VENTA_ADMIN_SKINS, io_read);
     if(!h) return 1;
 
     new slot = 0;
