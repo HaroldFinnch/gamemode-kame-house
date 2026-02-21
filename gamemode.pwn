@@ -137,6 +137,7 @@
 #define PATH_VENTA_SKINS_LEGACY "venta_skins_config.txt"
 #define PATH_VENTA_ADMIN_AUTOS "kame_house/venta_admin_autos.txt"
 #define PATH_VENTA_ADMIN_SKINS "kame_house/venta_admin_skins.txt"
+#define PATH_TUNING_MODELOS "kame_house/tuning_modelos.txt"
 #define PATH_VENTA_ADMIN_AUTOS_LEGACY "venta_admin_autos.txt"
 #define PATH_VENTA_ADMIN_SKINS_LEGACY "venta_admin_skins.txt"
 #define PATH_ARMERIA "kame_house/armeria_config.txt"
@@ -230,6 +231,13 @@
 #define DIALOG_DEJARTRABAJO 174
 #define DIALOG_ID_BUSCAR 175
 #define DIALOG_ID_INFO 176
+#define DIALOG_CREAR_CASA_DIAMANTES 194
+#define DIALOG_TUNING_MODELOS_LISTA 195
+#define DIALOG_TUNING_MODELOS_COMPRAR 196
+#define DIALOG_ADMIN_TUNING_MODELO_ID 197
+#define DIALOG_ADMIN_TUNING_MODELO_DINERO 198
+#define DIALOG_ADMIN_TUNING_MODELO_DIAMANTES 199
+#define DIALOG_ADMIN_TUNING_ELIMINAR 200
 #define DIALOG_ADMIN_NIVELES_MENU 153
 #define DIALOG_ADMIN_SET_NIVEL_ID 154
 #define DIALOG_ADMIN_SET_NIVEL_VALOR 155
@@ -541,6 +549,7 @@ enum eCasa {
     Float:cZ,
     cInteriorSlot,
     cPrecio,
+    cPrecioDiamantes,
     cOwner[MAX_PLAYER_NAME],
     cFriends[128]
 }
@@ -801,6 +810,21 @@ new SkinVentaActor[MAX_SKINS_VENTA] = {INVALID_ACTOR_ID, ...};
 new Text3D:SkinVentaLabel[MAX_SKINS_VENTA] = {Text3D:-1, ...};
 new SkinVentaPrecio[MAX_SKINS_VENTA];
 new SkinVentaDiamantes[MAX_SKINS_VENTA];
+
+#define MAX_TUNING_MODELOS 200
+enum eTuningModeloData {
+    bool:tmActiva,
+    tmModelo,
+    tmPrecioDinero,
+    tmPrecioDiamantes
+}
+new TuningModelosData[MAX_TUNING_MODELOS][eTuningModeloData];
+new TuningModeloAdminIdPendiente[MAX_PLAYERS];
+new TuningModeloAdminPrecioPendiente[MAX_PLAYERS];
+new TuningModeloListaSlots[MAX_PLAYERS][MAX_TUNING_MODELOS];
+new TuningModeloListaCount[MAX_PLAYERS];
+new TuningModeloSeleccionSlot[MAX_PLAYERS] = {-1, ...};
+new PlayerAutoTuningModelos[MAX_PLAYERS][MAX_AUTOS_NORMALES_JUGADOR][MAX_TUNING_MODELOS];
 new VentaAdminIdPendiente[MAX_PLAYERS];
 new VentaAdminPrecioPendiente[MAX_PLAYERS];
 new VentaNuevaTipo[MAX_PLAYERS];
@@ -1123,6 +1147,12 @@ stock GetMembresiaColor(tipo);
 stock ActualizarBeneficiosMembresia(playerid);
 stock GetLimiteVehiculosJugador(playerid);
 stock GetLimitePrendasJugador(playerid);
+stock GetLimiteTuningJugador(playerid);
+stock CargarTuningModelosConfig();
+stock GuardarTuningModelosConfig();
+stock ContarTuneoVehiculo(owner, vehSlot);
+stock GetVehiculoSlotJugador(owner, veh);
+stock LimpiarTuneoVehiculo(owner, vehSlot);
 stock GetLimiteMaleteroJugador(playerid);
 stock GetLimiteTrabajosJugador(playerid);
 stock GetBonusTrabajoMembresia(playerid);
@@ -1769,9 +1799,9 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_TERRITORIOS_LEGACY, PATH_TERRITORIOS);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
-    CargarVentaSkinsConfig();
     CargarVentaAdminAutos();
     CargarVentaAdminSkins();
+    CargarTuningModelosConfig();
     CargarArmeriaConfig();
     CargarTiendaVirtualConfig();
     VentaAutosPos[0] = PuntoPos[puntoVentaAutos][0];
@@ -1780,10 +1810,6 @@ public OnGameModeInit() {
 
     CrearPuntosFijos();
     ActualizarLabelVentaAutos();
-    PuntoPos[puntoVentaSkins][0] = VentaSkinsPos[0];
-    PuntoPos[puntoVentaSkins][1] = VentaSkinsPos[1];
-    PuntoPos[puntoVentaSkins][2] = VentaSkinsPos[2];
-    ActualizarLabelVentaSkins();
     if(BasureroNPC != INVALID_ACTOR_ID) DestroyActor(BasureroNPC);
     BasureroNPC = CreateActor(BASURERO_NPC_SKIN, PuntoPos[puntoBasurero][0], PuntoPos[puntoBasurero][1], PuntoPos[puntoBasurero][2], 180.0);
     CargarRutasBasura();
@@ -1813,11 +1839,13 @@ public OnGameModeInit() {
             if(strval(tokenA) >= 1 && strval(tokenA) <= 5 && strval(tokenB) > 0) {
                 CasaData[TotalCasas][cInteriorSlot] = strval(tokenA);
                 CasaData[TotalCasas][cPrecio] = strval(tokenB);
+                CasaData[TotalCasas][cPrecioDiamantes] = strval(strtok(str, idx));
                 format(ownerTok, sizeof(ownerTok), "%s", strtok(str, idx));
                 format(friendsTok, sizeof(friendsTok), "%s", strtok(str, idx));
             } else {
                 CasaData[TotalCasas][cInteriorSlot] = 1;
                 CasaData[TotalCasas][cPrecio] = strval(tokenA);
+                CasaData[TotalCasas][cPrecioDiamantes] = 0;
                 format(ownerTok, sizeof(ownerTok), "%s", tokenB);
                 format(friendsTok, sizeof(friendsTok), "%s", strtok(str, idx));
             }
@@ -1829,7 +1857,7 @@ public OnGameModeInit() {
 
             new labelstr[64];
             if(!strcmp(CasaData[TotalCasas][cOwner], "None")) {
-                format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", CasaData[TotalCasas][cPrecio], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
+                format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d + %d diamantes\nInt: %s", CasaData[TotalCasas][cPrecio], CasaData[TotalCasas][cPrecioDiamantes], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
             } else {
                 format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", CasaData[TotalCasas][cOwner], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
             }
@@ -1865,6 +1893,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
         if(IsNearTiendaVirtual(playerid)) return MostrarMenuAdminPreciosMembresia(playerid);
+        if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_ID, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Ingresa el modelo de tuning a vender (object model id):", "Siguiente", "Cerrar");
     }
 
     // Teclas B/L deshabilitadas por estabilidad del sistema.
@@ -3333,7 +3362,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
             return SendClientMessage(playerid, -1, aviso);
         }
         if(GetPlayerMoney(playerid) < CasaData[casa][cPrecio]) return SendClientMessage(playerid, -1, "No tienes suficiente dinero.");
+        if(PlayerDiamantes[playerid] < CasaData[casa][cPrecioDiamantes]) return SendClientMessage(playerid, -1, "No tienes diamantes suficientes.");
         KH_GivePlayerMoney(playerid, -CasaData[casa][cPrecio]);
+        PlayerDiamantes[playerid] -= CasaData[casa][cPrecioDiamantes];
         new name[MAX_PLAYER_NAME];
         GetPlayerName(playerid, name, sizeof(name));
         strmid(CasaData[casa][cOwner], name, 0, strlen(name)+1, MAX_PLAYER_NAME);
@@ -3346,6 +3377,26 @@ public OnPlayerCommandText(playerid, cmdtext[])
         SendClientMessage(playerid, 0x00FF00FF, "Casa comprada exitosamente.");
         EnviarEntornoAccion(playerid, "firma papeles y compra una propiedad de la ciudad.");
         GuardarCasas();
+        return 1;
+    }
+
+    if(!strcmp(cmd, "/vendercasa", true)) {
+        new casa = GetClosestCasaOwnedBy(playerid);
+        if(casa == -1) return SendClientMessage(playerid, -1, "No estas cerca de una casa de tu propiedad.");
+        new reembolsoDinero = (CasaData[casa][cPrecio] * 60) / 100;
+        new reembolsoDiam = (CasaData[casa][cPrecioDiamantes] * 60) / 100;
+        if(reembolsoDinero > 0) KH_GivePlayerMoney(playerid, reembolsoDinero);
+        if(reembolsoDiam > 0) PlayerDiamantes[playerid] += reembolsoDiam;
+        strmid(CasaData[casa][cOwner], "None", 0, strlen("None")+1, MAX_PLAYER_NAME);
+        CasaData[casa][cFriends][0] = EOS;
+        new labelstr[128];
+        format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d + %d diamantes\nInt: %s", CasaData[casa][cPrecio], CasaData[casa][cPrecioDiamantes], CasaInteriorNombre[CasaData[casa][cInteriorSlot] - 1]);
+        Update3DTextLabelText(CasaLabel[casa], 0x00FF00FF, labelstr);
+        if(CasaPickup[casa] != 0) DestroyPickup(CasaPickup[casa]);
+        CasaPickup[casa] = CreatePickup(1273, 2, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ], 0);
+        GuardarCasas();
+        GuardarCuenta(playerid);
+        SendClientMessage(playerid, 0x66FF66FF, "Vendiste tu casa y volvio al mercado.");
         return 1;
     }
 
@@ -3406,13 +3457,13 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
     if(!strcmp(cmd, "/crearventadeautos", true)) {
-        return SendClientMessage(playerid, -1, "Comando eliminado. Usa /mover para ajustar el CP del concesionario.");
+        return SendClientMessage(playerid, -1, "Comando eliminado. Usa /admm > Venta skins/autos.");
     }
 
 
     if(!strcmp(cmd, "/agregarauto", true)) {
         if(!EsDueno(playerid)) return SendClientMessage(playerid, -1, "No eres admin.");
-        return SendClientMessage(playerid, -1, "Acercate al concesionario y usa la tecla Y para editar el catalogo.");
+        return SendClientMessage(playerid, -1, "Sistema eliminado. Usa /admm > Venta skins/autos.");
     }
 
     if(!strcmp(cmd, "/kick", true)) {
@@ -3800,6 +3851,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             CasaData[i][cZ] = CasaData[i + 1][cZ];
             CasaData[i][cInteriorSlot] = CasaData[i + 1][cInteriorSlot];
             CasaData[i][cPrecio] = CasaData[i + 1][cPrecio];
+            CasaData[i][cPrecioDiamantes] = CasaData[i + 1][cPrecioDiamantes];
             strmid(CasaData[i][cOwner], CasaData[i + 1][cOwner], 0, MAX_PLAYER_NAME, MAX_PLAYER_NAME);
             strmid(CasaData[i][cFriends], CasaData[i + 1][cFriends], 0, 128, 128);
         }
@@ -3824,7 +3876,7 @@ public OnPlayerCommandText(playerid, cmdtext[])
             CasaPickup[i] = CreatePickup(strcmp(CasaData[i][cOwner], "None") == 0 ? 1273 : 1559, strcmp(CasaData[i][cOwner], "None") == 0 ? 2 : 23, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ], 0);
 
             new labelstr[64];
-            if(!strcmp(CasaData[i][cOwner], "None")) format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", CasaData[i][cPrecio], CasaInteriorNombre[CasaData[i][cInteriorSlot] - 1]);
+            if(!strcmp(CasaData[i][cOwner], "None")) format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d + %d diamantes\nInt: %s", CasaData[i][cPrecio], CasaData[i][cPrecioDiamantes], CasaInteriorNombre[CasaData[i][cInteriorSlot] - 1]);
             else format(labelstr, sizeof(labelstr), "Casa de %s\nInt: %s", CasaData[i][cOwner], CasaInteriorNombre[CasaData[i][cInteriorSlot] - 1]);
             CasaLabel[i] = Create3DTextLabel(labelstr, 0x00FF00FF, CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ] + 0.5, 10.0, 0);
 
@@ -4497,16 +4549,27 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         new interiorSlot = strval(inputtext);
         if(interiorSlot < 1 || interiorSlot > 5) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_INTERIOR, DIALOG_STYLE_INPUT, "Crear casa", "Interior invalido.\n\n1) Safe House 1 (ID 10)\n2) Safe House 4 (ID 1)\n3) Vank Hoff Hotel (ID 5)\n4) Willowfield safehouse (ID 11)\n5) Unknown safe house (ID 9)\n\nIngresa el numero de interior (1-5):", "Siguiente", "Cancelar");
         CasaInteriorPendiente[playerid] = interiorSlot;
-        return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio de la casa:", "Crear", "Atras");
+        return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio en dinero de la casa:", "Siguiente", "Atras");
     }
 
     if(dialogid == DIALOG_CREAR_CASA_PRECIO) {
         if(!response) return ShowCrearCasaInteriorDialog(playerid);
         if(CasaInteriorPendiente[playerid] < 1 || CasaInteriorPendiente[playerid] > 5) return ShowCrearCasaInteriorDialog(playerid);
+        if(TotalCasas >= MAX_CASAS) return SendClientMessage(playerid, -1, "Maximo de casas alcanzado.");
 
         new precio = strval(inputtext);
-        if(precio <= 0) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Precio invalido. Ingresa un precio mayor a 0:", "Crear", "Atras");
+        if(precio <= 0) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Precio en dinero invalido. Ingresa un valor mayor a 0:", "Siguiente", "Atras");
+        CasaData[TotalCasas][cPrecio] = precio;
+        return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_DIAMANTES, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio en diamantes (0 o mas):", "Crear", "Atras");
+    }
+
+    if(dialogid == DIALOG_CREAR_CASA_DIAMANTES) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_PRECIO, DIALOG_STYLE_INPUT, "Crear casa", "Ingresa el precio en dinero de la casa:", "Siguiente", "Atras");
+        if(CasaInteriorPendiente[playerid] < 1 || CasaInteriorPendiente[playerid] > 5) return ShowCrearCasaInteriorDialog(playerid);
         if(TotalCasas >= MAX_CASAS) return SendClientMessage(playerid, -1, "Maximo de casas alcanzado.");
+
+        new diam = strval(inputtext);
+        if(diam < 0) return ShowPlayerDialog(playerid, DIALOG_CREAR_CASA_DIAMANTES, DIALOG_STYLE_INPUT, "Crear casa", "Diamantes invalidos. Ingresa 0 o un numero mayor:", "Crear", "Atras");
 
         new Float:p[3];
         GetPlayerPos(playerid, p[0], p[1], p[2]);
@@ -4515,14 +4578,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         CasaData[TotalCasas][cY] = p[1];
         CasaData[TotalCasas][cZ] = p[2];
         CasaData[TotalCasas][cInteriorSlot] = CasaInteriorPendiente[playerid];
-        CasaData[TotalCasas][cPrecio] = precio;
+        CasaData[TotalCasas][cPrecioDiamantes] = diam;
         strmid(CasaData[TotalCasas][cOwner], "None", 0, strlen("None")+1, MAX_PLAYER_NAME);
         CasaData[TotalCasas][cFriends][0] = EOS;
 
         CasaPickup[TotalCasas] = CreatePickup(1273, 2, p[0], p[1], p[2], 0);
 
-        new labelstr[96];
-        format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d\nInt: %s", precio, CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
+        new labelstr[128];
+        format(labelstr, sizeof(labelstr), "Casa en venta\nPrecio: $%d + %d diamantes\nInt: %s", CasaData[TotalCasas][cPrecio], CasaData[TotalCasas][cPrecioDiamantes], CasaInteriorNombre[CasaData[TotalCasas][cInteriorSlot] - 1]);
         CasaLabel[TotalCasas] = Create3DTextLabel(labelstr, 0x00FF00FF, p[0], p[1], p[2] + 0.5, 10.0, 0);
 
         TotalCasas++;
@@ -4537,7 +4600,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{FFFFFF}Guia rapida de trabajos (usa /skills para revisar progreso, nivel y recompensas).\n\n{FFFF00}Camionero{FFFFFF}: inicia en su CP, carga y entrega mercancia en checkpoints.\n- Comandos utiles: /trabajos para dejarlo, GPS con /telefono.\n- Pago por viaje + bonus por nivel y membresia.\n\n{FF8C00}Pizzero{FFFFFF}: toma la moto de reparto y completa entregas en ruta.\n- Subes nivel por entregas exitosas.\n\n{00C853}Basurero{FFFFFF}: recoge bolsas con H y subelas a la Rumpo.\n- Al completar la ruta cobras por bolsas entregadas.\n\n{99CCFF}Armero{FFFFFF}: fabrica armas en la armeria usando materiales de inventario.\n- Sube nivel creando armas para desbloquear mejor rendimiento.\n\n{66CCFF}Mecanico{FFFFFF}: atiende jugadores con /reparar.\n- Skills: /usarkit (nivel 5) y /reparardl (nivel 10).\n\n{66FF99}Medico{FFFFFF}: cura vida con /curar y chaleco con /prote (nivel 4).\n- Ganas exp por tratamientos completados.\n\n{8B4513}Talador{FFFFFF}: tala arboles con H, carga troncos y entrega en la zona de trabajo.\n- Usa /dejartroncos para activar la entrega.\n\n{CCCCCC}Minero{FFFFFF}: mina rocas con H y procesa materiales en hornos.\n- Requiere mazo en buen estado para mantener produccion.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /fc para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.\n\n{66FFFF}Identificacion:{FFFFFF} /id (panel) y /idd [ID] (chat) para ver datos publicos de jugadores.", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 3 tuneos por auto\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 10 tuneos por auto\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 25 tuneos por auto\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
     }
@@ -4937,7 +5000,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             VentaSkinsPos[1] = py;
             VentaSkinsPos[2] = pz;
             ActualizarLabelVentaSkins();
-            GuardarVentaSkinsConfig();
             GuardarVentaAdminAutos();
             GuardarVentaAdminSkins();
         }
@@ -5126,7 +5188,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 2) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_MENSAJE_ID, DIALOG_STYLE_INPUT, "Telefono - Enviar mensaje", "Ingresa el ID del jugador:", "Siguiente", "Atras");
         if(listitem == 3) return ShowPlayerDialog(playerid, DIALOG_TELEFONO_CALC_VALOR1, DIALOG_STYLE_INPUT, "Telefono - Calculadora", "Ingresa el primer valor:", "Siguiente", "Atras");
         if(listitem == 4) return ShowTelefonoVehiculosMenu(playerid);
-        if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{66CCFF}Trabajo De Mecanico\n{CC6600}Armeria\n{99CCFF}Concesionario\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{66FFFF}Tienda Virtual Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
+        if(listitem == 5) return ShowPlayerDialog(playerid, DIALOG_GPS, DIALOG_STYLE_LIST, "GPS de la ciudad", "{FFD700}Trabajo Camionero\n{AAAAAA}Trabajo Minero\n{CC6600}Trabajo Armero\n{FF4500}Trabajo Pizzero\n{66FF66}Trabajo Basurero\n{FFFFFF}Deposito de Carga\n{33CCFF}Banco KameHouse\n{66FF99}Tienda Kame House\n{66CCFF}Trabajo De Mecanico\n{CC6600}Armeria\n{FF66CC}Tuning Kame House\n{CC99FF}Facciones Kame House\n{66FFFF}Tienda Virtual Kame House\n{FFAA00}Horno mas cercano", "Ir", "Cerrar");
         if(listitem == 6) {
             new restaurados = RestaurarVehiculosJugador(playerid);
             new msg[96];
@@ -6730,8 +6792,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         for(new i = 0; i < MAX_SKINS_VENTA; i++) {
             if(VentaSkinsData[i][vsActiva] && VentaSkinsData[i][vsSkin] == skin) {
                 VentaSkinsData[i][vsPrecio] = precio;
-                GuardarVentaSkinsConfig();
-                ActualizarLabelVentaSkins();
+                    ActualizarLabelVentaSkins();
                 SendClientMessage(playerid, 0x00FF00FF, "Skin actualizada correctamente.");
                 return ShowVentaSkinsAdminMenu(playerid);
             }
@@ -6742,8 +6803,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 VentaSkinsData[i][vsActiva] = true;
                 VentaSkinsData[i][vsSkin] = skin;
                 VentaSkinsData[i][vsPrecio] = precio;
-                GuardarVentaSkinsConfig();
-                ActualizarLabelVentaSkins();
+                    ActualizarLabelVentaSkins();
                 SendClientMessage(playerid, 0x00FF00FF, "Skin agregada correctamente.");
                 return ShowVentaSkinsAdminMenu(playerid);
             }
@@ -6759,8 +6819,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VentaSkinsData[item][vsActiva] = false;
         VentaSkinsData[item][vsSkin] = 0;
         VentaSkinsData[item][vsPrecio] = 0;
-        GuardarVentaSkinsConfig();
-        ActualizarLabelVentaSkins();
+            ActualizarLabelVentaSkins();
         SendClientMessage(playerid, 0x00FF00FF, "Skin eliminada de la venta.");
         return ShowVentaSkinsAdminMenu(playerid);
     }
@@ -6953,6 +7012,21 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return ShowPlayerDialog(playerid, DIALOG_PINTURA_COLOR, DIALOG_STYLE_LIST, "Tuning Kame House - Colores ($10000)", colores, "Pintar", "Atras");
         }
         if(listitem == 1) return MostrarListaVehiculosChatarra(playerid);
+        if(listitem == 2) {
+            new list[4096], line[96];
+            list[0] = EOS;
+            TuningModeloListaCount[playerid] = 0;
+            for(new i = 0; i < MAX_TUNING_MODELOS; i++) {
+                if(!TuningModelosData[i][tmActiva]) continue;
+                format(line, sizeof(line), "Modelo %d | $%d | %d diamantes", TuningModelosData[i][tmModelo], TuningModelosData[i][tmPrecioDinero], TuningModelosData[i][tmPrecioDiamantes]);
+                if(TuningModeloListaCount[playerid] > 0) strcat(list, "\n");
+                strcat(list, line);
+                TuningModeloListaSlots[playerid][TuningModeloListaCount[playerid]] = i;
+                TuningModeloListaCount[playerid]++;
+            }
+            if(TuningModeloListaCount[playerid] == 0) return SendClientMessage(playerid, -1, "No hay modelos de tuneo disponibles.");
+            return ShowPlayerDialog(playerid, DIALOG_TUNING_MODELOS_LISTA, DIALOG_STYLE_LIST, "Tuneo - Modelos", list, "Comprar", "Atras");
+        }
         return 1;
     }
 
@@ -6993,14 +7067,86 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(veh <= 0 || veh >= MAX_VEHICLES || VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "El vehiculo seleccionado ya no esta disponible.");
         new precioOriginal = GetPrecioOriginalVehiculo(VehModelData[veh]);
         if(precioOriginal <= 0) precioOriginal = 100000;
-        new pago = (precioOriginal * 70) / 100;
-        KH_GivePlayerMoney(playerid, pago);
+        new pagoDinero = (precioOriginal * 70) / 100;
+        new pagoDiamantes = 0;
+        for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
+            if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == VehModelData[veh]) {
+                pagoDiamantes = (VentaAutosData[i][vaStock] * 70) / 100;
+                break;
+            }
+        }
+        KH_GivePlayerMoney(playerid, pagoDinero);
+        if(pagoDiamantes > 0) PlayerDiamantes[playerid] += pagoDiamantes;
         EliminarVehiculoJugador(veh);
         GuardarCuenta(playerid);
         new msg[144];
-        format(msg, sizeof(msg), "Vendiste tu vehiculo como chatarra y recibiste $%d (70%% del precio original).", pago);
+        format(msg, sizeof(msg), "Vendiste tu vehiculo como chatarra y recibiste $%d y %d diamantes (70%% del costo original).", pagoDinero, pagoDiamantes);
         SendClientMessage(playerid, 0x66FF66FF, msg);
         return 1;
+    }
+
+
+    if(dialogid == DIALOG_TUNING_MODELOS_LISTA) {
+        if(!response) return MostrarMenuTuning(playerid);
+        if(listitem < 0 || listitem >= TuningModeloListaCount[playerid]) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        TuningModeloSeleccionSlot[playerid] = TuningModeloListaSlots[playerid][listitem];
+        new slot = TuningModeloSeleccionSlot[playerid];
+        new body[160];
+        format(body, sizeof(body), "Modelo: %d\nPrecio: $%d\nDiamantes: %d\n\nDeseas comprar este tuneo?", TuningModelosData[slot][tmModelo], TuningModelosData[slot][tmPrecioDinero], TuningModelosData[slot][tmPrecioDiamantes]);
+        return ShowPlayerDialog(playerid, DIALOG_TUNING_MODELOS_COMPRAR, DIALOG_STYLE_MSGBOX, "Confirmar tuneo", body, "Comprar", "Cancelar");
+    }
+
+    if(dialogid == DIALOG_TUNING_MODELOS_COMPRAR) {
+        if(!response) return MostrarMenuTuning(playerid);
+        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo tu auto para tuneo.");
+        new veh = GetPlayerVehicleID(playerid);
+        if(VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "Solo puedes tunear un vehiculo propio.");
+        new slot = TuningModeloSeleccionSlot[playerid];
+        if(slot < 0 || slot >= MAX_TUNING_MODELOS || !TuningModelosData[slot][tmActiva]) return SendClientMessage(playerid, -1, "Ese tuneo ya no esta disponible.");
+        new vehSlot = GetVehiculoSlotJugador(playerid, veh);
+        if(vehSlot == -1) return SendClientMessage(playerid, -1, "No se encontro el slot de tu vehiculo.");
+        if(ContarTuneoVehiculo(playerid, vehSlot) >= GetLimiteTuningJugador(playerid)) {
+            new m[96]; format(m, sizeof(m), "Tu membresia permite maximo %d tuneos por auto.", GetLimiteTuningJugador(playerid));
+            return SendClientMessage(playerid, -1, m);
+        }
+        if(GetPlayerMoney(playerid) < TuningModelosData[slot][tmPrecioDinero] || PlayerDiamantes[playerid] < TuningModelosData[slot][tmPrecioDiamantes]) return SendClientMessage(playerid, -1, "No tienes suficiente dinero/diamantes.");
+        KH_GivePlayerMoney(playerid, -TuningModelosData[slot][tmPrecioDinero]);
+        PlayerDiamantes[playerid] -= TuningModelosData[slot][tmPrecioDiamantes];
+        PlayerAutoTuningModelos[playerid][vehSlot][slot] = 1;
+        SendClientMessage(playerid, 0x66FF66FF, "Tuneo comprado y aplicado al vehiculo.");
+        GuardarCuenta(playerid);
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_TUNING_MODELO_ID) {
+        if(!response) return 1;
+        new modelo = strval(inputtext);
+        if(modelo <= 0) return SendClientMessage(playerid, -1, "Modelo invalido.");
+        TuningModeloAdminIdPendiente[playerid] = modelo;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_DINERO, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Precio en dinero:", "Siguiente", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_TUNING_MODELO_DINERO) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_ID, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Ingresa el modelo de tuning a vender (object model id):", "Siguiente", "Cerrar");
+        new precio = strval(inputtext);
+        if(precio < 0) return SendClientMessage(playerid, -1, "Precio invalido.");
+        TuningModeloAdminPrecioPendiente[playerid] = precio;
+        return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_DIAMANTES, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Precio en diamantes:", "Guardar", "Atras");
+    }
+
+    if(dialogid == DIALOG_ADMIN_TUNING_MODELO_DIAMANTES) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_DINERO, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Precio en dinero:", "Siguiente", "Atras");
+        new diam = strval(inputtext);
+        if(diam < 0) return SendClientMessage(playerid, -1, "Diamantes invalidos.");
+        new slot = -1;
+        for(new i = 0; i < MAX_TUNING_MODELOS; i++) if(!TuningModelosData[i][tmActiva]) { slot = i; break; }
+        if(slot == -1) return SendClientMessage(playerid, -1, "No hay slots de tuneo disponibles.");
+        TuningModelosData[slot][tmActiva] = true;
+        TuningModelosData[slot][tmModelo] = TuningModeloAdminIdPendiente[playerid];
+        TuningModelosData[slot][tmPrecioDinero] = TuningModeloAdminPrecioPendiente[playerid];
+        TuningModelosData[slot][tmPrecioDiamantes] = diam;
+        GuardarTuningModelosConfig();
+        return SendClientMessage(playerid, 0x66FF66FF, "Modelo de tuneo agregado correctamente.");
     }
 
     if(dialogid == DIALOG_BANK_MENU) {
@@ -7422,9 +7568,9 @@ public GuardarCasas() {
     if(h) {
         new line[256];
         for(new i = 0; i < TotalCasas; i++) {
-            format(line, sizeof(line), "%f %f %f %d %d %s %s\n",
+            format(line, sizeof(line), "%f %f %f %d %d %d %s %s\n",
                 CasaData[i][cX], CasaData[i][cY], CasaData[i][cZ],
-                CasaData[i][cInteriorSlot], CasaData[i][cPrecio], CasaData[i][cOwner], CasaData[i][cFriends]);
+                CasaData[i][cInteriorSlot], CasaData[i][cPrecio], CasaData[i][cPrecioDiamantes], CasaData[i][cOwner], CasaData[i][cFriends]);
             fwrite(h, line);
         }
         fclose(h);
@@ -7578,9 +7724,9 @@ public AutoGuardadoGlobal() {
     GuardarEditMap();
     GuardarVentagas();
     GuardarVentaAutosConfig();
-    GuardarVentaSkinsConfig();
     GuardarVentaAdminAutos();
     GuardarVentaAdminSkins();
+    GuardarTuningModelosConfig();
     GuardarPrendasConfig();
     GuardarArmeriaConfig();
     GuardarTiendaVirtualConfig();
@@ -7993,6 +8139,13 @@ stock GetLimiteVehiculosJugador(playerid) {
     if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 10;
     if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 3;
     return 1;
+}
+
+stock GetLimiteTuningJugador(playerid) {
+    ExpirarMembresiaSiCorresponde(playerid);
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 25;
+    if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 10;
+    return 3;
 }
 
 stock GetLimitePrendasJugador(playerid) {
@@ -8734,8 +8887,8 @@ stock GetPuntoMovibleNombre(ePuntoMovible:punto, dest[], len) {
         case puntoSemilleria: format(dest, len, "Tienda Kame House");
         case puntoMecanico: format(dest, len, "Trabajo De Mecanico");
         case puntoArmeria: format(dest, len, "Armeria");
-        case puntoVentaAutos: format(dest, len, "Venta de autos");
-        case puntoVentaSkins: format(dest, len, "Tienda De Skins");
+        case puntoVentaAutos: format(dest, len, "Reservado");
+        case puntoVentaSkins: format(dest, len, "Reservado");
         case puntoMaletero: format(dest, len, "Reservado");
         case puntoPintura: format(dest, len, "Tuning Kame House");
         case puntoMinero: format(dest, len, "Trabajo minero");
@@ -8796,10 +8949,10 @@ stock RecrearPuntoFijo(ePuntoMovible:punto) {
             PuntoLabel[punto] = Create3DTextLabel("{AA0000}Mercado de armas\n{FFFFFF}Presiona {FFFF00}'H' {FFFFFF}para comprar", -1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2] + 0.5, 12.0, 0);
         }
         case puntoVentaAutos: {
-            PuntoPickup[punto] = CreatePickup(1274, 1, PuntoPos[punto][0], PuntoPos[punto][1], PuntoPos[punto][2], 0);
+            // Sistema legacy eliminado.
         }
         case puntoVentaSkins: {
-            // Este punto usa su propio pickup/label (VentaSkinsPickup y VentaSkinsLabel).
+            // Sistema legacy eliminado.
         }
         case puntoMaletero: {
             // Punto reservado: no crear pickup ni label.
@@ -11447,6 +11600,42 @@ stock CargarVentaAdminSkins() {
     return 1;
 }
 
+
+stock GuardarTuningModelosConfig() {
+    new File:h = fopen(PATH_TUNING_MODELOS, io_write);
+    if(!h) { fcreatedir(DIR_DATA); h = fopen(PATH_TUNING_MODELOS, io_write); }
+    if(!h) return 0;
+    new line[96];
+    for(new i = 0; i < MAX_TUNING_MODELOS; i++) {
+        format(line, sizeof(line), "%d %d %d %d\n", TuningModelosData[i][tmActiva], TuningModelosData[i][tmModelo], TuningModelosData[i][tmPrecioDinero], TuningModelosData[i][tmPrecioDiamantes]);
+        fwrite(h, line);
+    }
+    fclose(h);
+    return 1;
+}
+
+stock CargarTuningModelosConfig() {
+    for(new i = 0; i < MAX_TUNING_MODELOS; i++) {
+        TuningModelosData[i][tmActiva] = false;
+        TuningModelosData[i][tmModelo] = 0;
+        TuningModelosData[i][tmPrecioDinero] = 0;
+        TuningModelosData[i][tmPrecioDiamantes] = 0;
+    }
+    new File:h = fopen(PATH_TUNING_MODELOS, io_read);
+    if(!h) return GuardarTuningModelosConfig();
+    new line[96], i;
+    while(fread(h, line) && i < MAX_TUNING_MODELOS) {
+        new idx = 0;
+        TuningModelosData[i][tmActiva] = strval(strtok(line, idx)) != 0;
+        TuningModelosData[i][tmModelo] = strval(strtok(line, idx));
+        TuningModelosData[i][tmPrecioDinero] = strval(strtok(line, idx));
+        TuningModelosData[i][tmPrecioDiamantes] = strval(strtok(line, idx));
+        i++;
+    }
+    fclose(h);
+    return 1;
+}
+
 stock GuardarArmeriaConfig() {
     new File:h = fopen(PATH_ARMERIA, io_write);
     if(!h) return 0;
@@ -11635,8 +11824,35 @@ stock MostrarListaVehiculosChatarra(playerid) {
     return ShowPlayerDialog(playerid, DIALOG_CHATARRA_VEHICULO, DIALOG_STYLE_LIST, "Vender Auto Como Chatarra", list, "Vender", "Atras");
 }
 
+stock GetVehiculoSlotJugador(owner, veh) {
+    new slot = 0;
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != owner) continue;
+        if(slot >= MAX_AUTOS_NORMALES_JUGADOR) break;
+        if(v == veh) return slot;
+        slot++;
+    }
+    return -1;
+}
+
+stock ContarTuneoVehiculo(owner, vehSlot) {
+    if(owner < 0 || owner >= MAX_PLAYERS || vehSlot < 0 || vehSlot >= MAX_AUTOS_NORMALES_JUGADOR) return 0;
+    new c;
+    for(new i = 0; i < MAX_TUNING_MODELOS; i++) if(PlayerAutoTuningModelos[owner][vehSlot][i]) c++;
+    return c;
+}
+
+stock LimpiarTuneoVehiculo(owner, vehSlot) {
+    if(owner < 0 || owner >= MAX_PLAYERS || vehSlot < 0 || vehSlot >= MAX_AUTOS_NORMALES_JUGADOR) return 0;
+    for(new i = 0; i < MAX_TUNING_MODELOS; i++) PlayerAutoTuningModelos[owner][vehSlot][i] = 0;
+    return 1;
+}
+
 stock EliminarVehiculoJugador(veh) {
     if(veh <= 0 || veh >= MAX_VEHICLES) return 0;
+    new owner = VehOwner[veh];
+    new slot = GetVehiculoSlotJugador(owner, veh);
+    if(slot != -1) LimpiarTuneoVehiculo(owner, slot);
     if(IsValidVehicle(veh)) DestroyVehicle(veh);
     ResetMaleteroVehiculo(veh);
     VehOwner[veh] = -1;
