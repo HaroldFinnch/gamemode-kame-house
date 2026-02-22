@@ -846,6 +846,7 @@ new VehTuningObjectId[MAX_VEHICLES][MAX_TUNING_MODELOS];
 new TuneoEditVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new TuneoEditSlotModelo[MAX_PLAYERS] = {-1, ...};
 new TuneoEditObjeto[MAX_PLAYERS] = {INVALID_OBJECT_ID, ...};
+new TuneoEditModelo[MAX_PLAYERS];
 new Float:TuneoEditPrevOffX[MAX_PLAYERS];
 new Float:TuneoEditPrevOffY[MAX_PLAYERS];
 new Float:TuneoEditPrevOffZ[MAX_PLAYERS];
@@ -1186,6 +1187,9 @@ stock AplicarTuneoVehiculoModelo(veh, modeloSlot);
 stock RemoverTuneoVehiculoModelo(veh, modeloSlot);
 stock RefrescarTuneosVehiculo(veh);
 stock GetNombreTuneoDisplay(modeloSlot, dest[], len);
+stock ConvertirOffsetTuneoAMundo(veh, Float:offX, Float:offY, Float:offZ, Float:rotX, Float:rotY, Float:rotZ, &Float:worldX, &Float:worldY, &Float:worldZ, &Float:worldRotX, &Float:worldRotY, &Float:worldRotZ);
+stock ConvertirMundoAOffsetTuneo(veh, Float:worldX, Float:worldY, Float:worldZ, Float:worldRotX, Float:worldRotY, Float:worldRotZ, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ);
+stock LimpiarEdicionTuneoJugador(playerid, bool:restaurarValores = false);
 stock GetLimiteMaleteroJugador(playerid);
 stock GetLimiteTrabajosJugador(playerid);
 stock GetBonusTrabajoMembresia(playerid);
@@ -1832,6 +1836,7 @@ public OnGameModeInit() {
     MigrarArchivoLegacy(PATH_TERRITORIOS_LEGACY, PATH_TERRITORIOS);
     CargarPrendasConfig();
     CargarVentaAutosConfig();
+    CargarVentaSkinsConfig();
     CargarVentaAdminAutos();
     CargarVentaAdminSkins();
     CargarTuningModelosConfig();
@@ -6862,6 +6867,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             if(VentaSkinsData[i][vsActiva] && VentaSkinsData[i][vsSkin] == skin) {
                 VentaSkinsData[i][vsPrecio] = precio;
                 ActualizarLabelVentaSkins();
+                GuardarVentaSkinsConfig();
                 SendClientMessage(playerid, 0x00FF00FF, "Skin actualizada correctamente.");
                 return ShowVentaSkinsAdminMenu(playerid);
             }
@@ -6873,6 +6879,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
                 VentaSkinsData[i][vsSkin] = skin;
                 VentaSkinsData[i][vsPrecio] = precio;
                 ActualizarLabelVentaSkins();
+                GuardarVentaSkinsConfig();
                 SendClientMessage(playerid, 0x00FF00FF, "Skin agregada correctamente.");
                 return ShowVentaSkinsAdminMenu(playerid);
             }
@@ -6889,6 +6896,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         VentaSkinsData[item][vsSkin] = 0;
         VentaSkinsData[item][vsPrecio] = 0;
         ActualizarLabelVentaSkins();
+        GuardarVentaSkinsConfig();
         SendClientMessage(playerid, 0x00FF00FF, "Skin eliminada de la venta.");
         return ShowVentaSkinsAdminMenu(playerid);
     }
@@ -7248,8 +7256,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(slot < 0 || slot >= MAX_TUNING_MODELOS || !VehTuningComprado[veh][slot]) return SendClientMessage(playerid, -1, "Tuneo invalido.");
 
         if(listitem == 0) {
-            if(VehTuningObjectId[veh][slot] == 0) AplicarTuneoVehiculoModelo(veh, slot);
-            if(VehTuningObjectId[veh][slot] == 0) return SendClientMessage(playerid, -1, "No se pudo preparar el objeto del tuneo para editar.");
+            new modelTuneo = TuningModelosData[slot][tmModelo];
+            if(modelTuneo <= 0) return SendClientMessage(playerid, -1, "Este tuneo no tiene un modelo valido para editar.");
 
             TuneoEditPrevOffX[playerid] = VehTuningOffX[veh][slot];
             TuneoEditPrevOffY[playerid] = VehTuningOffY[veh][slot];
@@ -7257,7 +7265,20 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             TuneoEditPrevRotX[playerid] = VehTuningRotX[veh][slot];
             TuneoEditPrevRotY[playerid] = VehTuningRotY[veh][slot];
             TuneoEditPrevRotZ[playerid] = VehTuningRotZ[veh][slot];
-            TuneoEditObjeto[playerid] = VehTuningObjectId[veh][slot];
+
+            RemoverTuneoVehiculoModelo(veh, slot);
+
+            new Float:wx, Float:wy, Float:wz, Float:wrx, Float:wry, Float:wrz;
+            if(!ConvertirOffsetTuneoAMundo(veh, VehTuningOffX[veh][slot], VehTuningOffY[veh][slot], VehTuningOffZ[veh][slot], VehTuningRotX[veh][slot], VehTuningRotY[veh][slot], VehTuningRotZ[veh][slot], wx, wy, wz, wrx, wry, wrz)) {
+                return SendClientMessage(playerid, -1, "No se pudo calcular la posicion del tuneo para editar.");
+            }
+
+            TuneoEditObjeto[playerid] = CreateObject(modelTuneo, wx, wy, wz, wrx, wry, wrz, 200.0);
+            if(TuneoEditObjeto[playerid] == INVALID_OBJECT_ID) {
+                AplicarTuneoVehiculoModelo(veh, slot);
+                return SendClientMessage(playerid, -1, "No se pudo crear el objeto temporal para editar tuneo.");
+            }
+            TuneoEditModelo[playerid] = modelTuneo;
 
             EditObject(playerid, TuneoEditObjeto[playerid]);
             SendClientMessage(playerid, 0x66FF66FF, "Editor de tuneo abierto. Mueve con el raton y confirma para guardar.");
@@ -7983,6 +8004,8 @@ public OcultarDineroCambioJugador(playerid) {
 public OnPlayerDisconnect(playerid, reason) {
     #pragma unused reason
 
+    LimpiarEdicionTuneoJugador(playerid, true);
+
     new nombreJugador[MAX_PLAYER_NAME], msgSalida[160];
     GetPlayerName(playerid, nombreJugador, sizeof(nombreJugador));
     format(msgSalida, sizeof(msgSalida), "{FF6666}- {FFFFFF}%s {AAAAAA}(Nivel PJ: %d)", nombreJugador, GetNivelPJ(playerid));
@@ -8154,6 +8177,10 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
             }
         }
     } else {
+        if(TuneoEditObjeto[playerid] != INVALID_OBJECT_ID) {
+            LimpiarEdicionTuneoJugador(playerid, true);
+            SendClientMessage(playerid, 0xFFAA00FF, "Se cancelo la edicion de tuneo al cambiar de estado.");
+        }
         UltimoVehiculoGasMostrado[playerid] = INVALID_VEHICLE_ID;
         PlayerTextDrawHide(playerid, TextoBarraGas[playerid]);
         PlayerTextDrawHide(playerid, BarraGasFondo[playerid]);
@@ -8282,6 +8309,7 @@ forward RespawnAutomaticoJugador(playerid);
 public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
     #pragma unused killerid
     #pragma unused reason
+    LimpiarEdicionTuneoJugador(playerid, true);
     TogglePlayerControllable(playerid, true);
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
@@ -11311,29 +11339,21 @@ public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:respon
         new slotTuneo = TuneoEditSlotModelo[playerid];
         if(veh > 0 && veh < MAX_VEHICLES && VehOwner[veh] == playerid && slotTuneo >= 0 && slotTuneo < MAX_TUNING_MODELOS && VehTuningComprado[veh][slotTuneo]) {
             if(response == EDIT_RESPONSE_FINAL) {
-                VehTuningOffX[veh][slotTuneo] = fX;
-                VehTuningOffY[veh][slotTuneo] = fY;
-                VehTuningOffZ[veh][slotTuneo] = fZ;
-                VehTuningRotX[veh][slotTuneo] = fRotX;
-                VehTuningRotY[veh][slotTuneo] = fRotY;
-                VehTuningRotZ[veh][slotTuneo] = fRotZ;
-                GuardarCuenta(playerid);
-                SendClientMessage(playerid, 0x66FF66FF, "Posicion del tuneo guardada correctamente.");
-                AplicarTuneoVehiculoModelo(veh, slotTuneo);
-                TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
+                if(ConvertirMundoAOffsetTuneo(veh, fX, fY, fZ, fRotX, fRotY, fRotZ, VehTuningOffX[veh][slotTuneo], VehTuningOffY[veh][slotTuneo], VehTuningOffZ[veh][slotTuneo], VehTuningRotX[veh][slotTuneo], VehTuningRotY[veh][slotTuneo], VehTuningRotZ[veh][slotTuneo])) {
+                    GuardarCuenta(playerid);
+                    SendClientMessage(playerid, 0x66FF66FF, "Posicion del tuneo guardada correctamente.");
+                } else {
+                    SendClientMessage(playerid, 0xFF0000FF, "No se pudo guardar la posicion del tuneo (vehiculo invalido).");
+                }
+                LimpiarEdicionTuneoJugador(playerid);
             } else if(response == EDIT_RESPONSE_CANCEL) {
-                VehTuningOffX[veh][slotTuneo] = TuneoEditPrevOffX[playerid];
-                VehTuningOffY[veh][slotTuneo] = TuneoEditPrevOffY[playerid];
-                VehTuningOffZ[veh][slotTuneo] = TuneoEditPrevOffZ[playerid];
-                VehTuningRotX[veh][slotTuneo] = TuneoEditPrevRotX[playerid];
-                VehTuningRotY[veh][slotTuneo] = TuneoEditPrevRotY[playerid];
-                VehTuningRotZ[veh][slotTuneo] = TuneoEditPrevRotZ[playerid];
+                LimpiarEdicionTuneoJugador(playerid, true);
                 SendClientMessage(playerid, 0xFFAA00FF, "Edicion de tuneo cancelada. Se restauraron los valores anteriores.");
-                AplicarTuneoVehiculoModelo(veh, slotTuneo);
-                TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
             } else {
                 return 1;
             }
+        } else {
+            LimpiarEdicionTuneoJugador(playerid, true);
         }
         return 1;
     }
@@ -12197,6 +12217,71 @@ stock GetNombreTuneoDisplay(modeloSlot, dest[], len) {
     if(modeloSlot < 0 || modeloSlot >= MAX_TUNING_MODELOS) return format(dest, len, "Tuneo");
     if(strlen(TuningModelosData[modeloSlot][tmNombre]) > 0) return format(dest, len, "%s", TuningModelosData[modeloSlot][tmNombre]);
     return format(dest, len, "Modelo %d", TuningModelosData[modeloSlot][tmModelo]);
+}
+
+stock ConvertirOffsetTuneoAMundo(veh, Float:offX, Float:offY, Float:offZ, Float:rotX, Float:rotY, Float:rotZ, &Float:worldX, &Float:worldY, &Float:worldZ, &Float:worldRotX, &Float:worldRotY, &Float:worldRotZ) {
+    if(!IsValidVehicle(veh)) return 0;
+    new Float:vx, Float:vy, Float:vz, Float:va;
+    GetVehiclePos(veh, vx, vy, vz);
+    GetVehicleZAngle(veh, va);
+
+    new Float:c = floatcos(va, degrees);
+    new Float:s = floatsin(va, degrees);
+    worldX = vx + (offX * c) - (offY * s);
+    worldY = vy + (offX * s) + (offY * c);
+    worldZ = vz + offZ;
+    worldRotX = rotX;
+    worldRotY = rotY;
+    worldRotZ = rotZ + va;
+    return 1;
+}
+
+stock ConvertirMundoAOffsetTuneo(veh, Float:worldX, Float:worldY, Float:worldZ, Float:worldRotX, Float:worldRotY, Float:worldRotZ, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ) {
+    if(!IsValidVehicle(veh)) return 0;
+    new Float:vx, Float:vy, Float:vz, Float:va;
+    GetVehiclePos(veh, vx, vy, vz);
+    GetVehicleZAngle(veh, va);
+
+    new Float:dx = worldX - vx;
+    new Float:dy = worldY - vy;
+    new Float:c = floatcos(va, degrees);
+    new Float:s = floatsin(va, degrees);
+    offX = (dx * c) + (dy * s);
+    offY = (-dx * s) + (dy * c);
+    offZ = worldZ - vz;
+    rotX = worldRotX;
+    rotY = worldRotY;
+    rotZ = worldRotZ - va;
+    return 1;
+}
+
+stock LimpiarEdicionTuneoJugador(playerid, bool:restaurarValores = false) {
+    if(playerid < 0 || playerid >= MAX_PLAYERS) return 0;
+
+    new veh = TuneoEditVehiculo[playerid];
+    new slotTuneo = TuneoEditSlotModelo[playerid];
+
+    if(restaurarValores && veh > 0 && veh < MAX_VEHICLES && slotTuneo >= 0 && slotTuneo < MAX_TUNING_MODELOS) {
+        VehTuningOffX[veh][slotTuneo] = TuneoEditPrevOffX[playerid];
+        VehTuningOffY[veh][slotTuneo] = TuneoEditPrevOffY[playerid];
+        VehTuningOffZ[veh][slotTuneo] = TuneoEditPrevOffZ[playerid];
+        VehTuningRotX[veh][slotTuneo] = TuneoEditPrevRotX[playerid];
+        VehTuningRotY[veh][slotTuneo] = TuneoEditPrevRotY[playerid];
+        VehTuningRotZ[veh][slotTuneo] = TuneoEditPrevRotZ[playerid];
+    }
+
+    if(TuneoEditObjeto[playerid] != INVALID_OBJECT_ID) {
+        if(IsValidObject(TuneoEditObjeto[playerid])) DestroyObject(TuneoEditObjeto[playerid]);
+        TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
+    }
+
+    TuneoEditModelo[playerid] = 0;
+    SetCameraBehindPlayer(playerid);
+
+    if(veh > 0 && veh < MAX_VEHICLES && slotTuneo >= 0 && slotTuneo < MAX_TUNING_MODELOS && VehTuningComprado[veh][slotTuneo]) {
+        AplicarTuneoVehiculoModelo(veh, slotTuneo);
+    }
+    return 1;
 }
 
 stock ContarTuneoVehiculo(veh) {
