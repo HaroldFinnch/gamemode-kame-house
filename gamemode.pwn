@@ -59,6 +59,7 @@
 #define MECANICO_DIST_SOLICITUD 4.0
 #define BIDON_ATTACH_SLOT 6
 #define ATTACH_SLOT_TRONCO 9
+#define MAX_WEAPON_ATTACH_OBJ 4
 
 #define SEMILLA_HIERBA_PRECIO 45
 #define SEMILLA_FLOR_PRECIO   65
@@ -659,6 +660,8 @@ new ArmeriaMuniItemJugador[MAX_PLAYERS] = {-1, ...};
 new ArmeriaAdminArmaPendiente[MAX_PLAYERS];
 new bool:PlayerArmaComprada[MAX_PLAYERS][MAX_WEAPON_ID_GM];
 new PlayerAmmoInventario[MAX_PLAYERS][MAX_WEAPON_ID_GM];
+new WeaponAttachSlots[MAX_PLAYERS][MAX_WEAPON_ATTACH_OBJ] = {{-1, -1, -1, -1}, ...};
+new WeaponAttachWeaponIds[MAX_PLAYERS][MAX_WEAPON_ATTACH_OBJ];
 
 #define MAX_RUTAS_BASURA 128
 new Float:BasuraRuta[MAX_RUTAS_BASURA][3];
@@ -1206,6 +1209,9 @@ stock ShowArmeriaArmasDisponibles(playerid);
 stock ShowArmeriaMunicionDisponible(playerid);
 stock ShowAdminArmasMenu(playerid);
 stock GetWeaponNameGM(weaponid, dest[], len);
+stock ActualizarArmasVisiblesJugador(playerid);
+stock LimpiarArmasVisiblesJugador(playerid);
+stock ObtenerModeloArmaVisible(weaponid, &modelid, &bone, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ, &Float:scX, &Float:scY, &Float:scZ);
 stock GetArmeriaItemByListIndex(listindex);
 stock GetArmeriaItemByStockMuniIndex(listindex);
 stock CrearVehiculoTrabajoUnico(playerid, modelid, Float:x, Float:y, Float:z, Float:a, c1, c2, &vehvar);
@@ -1931,7 +1937,6 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
         if(IsNearTiendaVirtual(playerid)) return MostrarMenuAdminPreciosMembresia(playerid);
-        if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MENU, DIALOG_STYLE_LIST, "Admin - Tuning", "Agregar tuneo\nEliminar tuneo", "Seleccionar", "Cerrar");
     }
 
     // Teclas B/L deshabilitadas por estabilidad del sistema.
@@ -2962,7 +2967,9 @@ public OnPlayerCommandText(playerid, cmdtext[])
         if(!PlayerTienePatinesKame[playerid]) return SendClientMessage(playerid, -1, "No tienes Patines Kame. Compralos en la tienda virtual.");
         if(IsPlayerInAnyVehicle(playerid)) return SendClientMessage(playerid, -1, "Baja del vehiculo para patinar.");
         PatinesKameActivo[playerid] = !PatinesKameActivo[playerid];
-        return SendClientMessage(playerid, 0x66CCFFFF, PatinesKameActivo[playerid] ? "Patines Kame activados." : "Patines Kame desactivados.");
+        if(PatinesKameActivo[playerid]) ApplyAnimation(playerid, "SKATE", "skate_idle", 4.0, true, true, true, true, 1, t_FORCE_SYNC:SYNC_ALL);
+        else ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
+        return SendClientMessage(playerid, 0x66CCFFFF, PatinesKameActivo[playerid] ? "Patines Kame activados. Usa W para impulsarte." : "Patines Kame desactivados.");
     }
 
     if(!strcmp(cmd, "/duda", true)) {
@@ -3096,14 +3103,6 @@ public OnPlayerCommandText(playerid, cmdtext[])
     if(!strcmp(cmd, "/tuning", true) || !strcmp(cmd, "/pintar", true)) {
         if(!IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return SendClientMessage(playerid, -1, "Debes estar en Tuning Kame House.");
         return MostrarMenuTuning(playerid);
-    }
-
-    if(!strcmp(cmd, "/t", true)) {
-        if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo tu vehiculo para usar /t.");
-        new veh = GetPlayerVehicleID(playerid);
-        if(VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "Solo puedes administrar tuneos en un vehiculo propio.");
-        TuneoEditVehiculo[playerid] = veh;
-        return ShowPlayerDialog(playerid, DIALOG_TUNEO_USUARIO_MENU, DIALOG_STYLE_LIST, "Tuneos del vehiculo", "Mis tuneos comprados\nAjustar tuneo", "Seleccionar", "Cerrar");
     }
 
     if(!strcmp(cmd, "/mina", true)) {
@@ -4302,6 +4301,7 @@ public OnPlayerConnect(playerid) {
     PlayerTieneTelefono[playerid] = false;
     PlayerTienePatinesKame[playerid] = false;
     PatinesKameActivo[playerid] = false;
+    LimpiarArmasVisiblesJugador(playerid);
     TelefonoMensajeDestino[playerid] = -1;
     CalcValor1Pendiente[playerid] = 0.0;
     CalcOperacionPendiente[playerid] = 0;
@@ -4395,6 +4395,7 @@ public OnPlayerSpawn(playerid) {
     if(!IsPlayerLoggedIn[playerid]) return Kick(playerid);
     SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
     PatinesKameActivo[playerid] = false;
+    LimpiarArmasVisiblesJugador(playerid);
     ExpirarMembresiaSiCorresponde(playerid);
     ActualizarBeneficiosMembresia(playerid);
     SetPlayerSkin(playerid, PlayerSkinGuardada[playerid]);
@@ -7090,30 +7091,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             return ShowPlayerDialog(playerid, DIALOG_PINTURA_COLOR, DIALOG_STYLE_LIST, "Tuning Kame House - Colores ($10000)", colores, "Pintar", "Atras");
         }
         if(listitem == 1) return MostrarListaVehiculosChatarra(playerid);
-        if(listitem == 2) {
-            new list[4096], line[96];
-            list[0] = EOS;
-            TuningModeloListaCount[playerid] = 0;
-            for(new i = 0; i < MAX_TUNING_MODELOS; i++) {
-                if(!TuningModelosData[i][tmActiva]) continue;
-                new nombreTuneo[40];
-                GetNombreTuneoDisplay(i, nombreTuneo, sizeof(nombreTuneo));
-                format(line, sizeof(line), "%s (ID %d) | $%d | %d diamantes", nombreTuneo, TuningModelosData[i][tmModelo], TuningModelosData[i][tmPrecioDinero], TuningModelosData[i][tmPrecioDiamantes]);
-                if(TuningModeloListaCount[playerid] > 0) strcat(list, "\n");
-                strcat(list, line);
-                TuningModeloListaSlots[playerid][TuningModeloListaCount[playerid]] = i;
-                TuningModeloListaCount[playerid]++;
-            }
-            if(TuningModeloListaCount[playerid] == 0) return SendClientMessage(playerid, -1, "No hay modelos de tuneo disponibles.");
-            return ShowPlayerDialog(playerid, DIALOG_TUNING_MODELOS_LISTA, DIALOG_STYLE_LIST, "Tuneo - Modelos", list, "Comprar", "Atras");
-        }
-        if(listitem == 3) {
-            if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER) return SendClientMessage(playerid, -1, "Debes estar conduciendo tu vehiculo para gestionar tuneos.");
-            new veh = GetPlayerVehicleID(playerid);
-            if(VehOwner[veh] != playerid) return SendClientMessage(playerid, -1, "Solo puedes gestionar tuneos en tu vehiculo propio.");
-            TuneoEditVehiculo[playerid] = veh;
-            return ShowPlayerDialog(playerid, DIALOG_TUNEO_USUARIO_MENU, DIALOG_STYLE_LIST, "Tuneos del vehiculo", "Mis tuneos comprados\nAjustar tuneo", "Seleccionar", "Cerrar");
-        }
         return 1;
     }
 
@@ -8263,11 +8240,19 @@ public OnPlayerUpdate(playerid) {
             new Float:ang, Float:vx, Float:vy, Float:vz;
             GetPlayerFacingAngle(playerid, ang);
             GetPlayerVelocity(playerid, vx, vy, vz);
-            vx += floatsin(-ang, degrees) * 0.02;
-            vy += floatcos(-ang, degrees) * 0.02;
+            vx += floatsin(-ang, degrees) * 0.035;
+            vy += floatcos(-ang, degrees) * 0.035;
             SetPlayerVelocity(playerid, vx, vy, vz);
+            ApplyAnimation(playerid, "SKATE", "skate_run", 4.1, true, true, true, true, 1, t_FORCE_SYNC:SYNC_ALL);
+        } else {
+            ApplyAnimation(playerid, "SKATE", "skate_idle", 4.0, true, true, true, true, 1, t_FORCE_SYNC:SYNC_ALL);
         }
+    } else if(PatinesKameActivo[playerid]) {
+        PatinesKameActivo[playerid] = false;
+        ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     }
+
+    ActualizarArmasVisiblesJugador(playerid);
     if(IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_DRIVER) {
         new vehid = GetPlayerVehicleID(playerid);
         if(vehid != INVALID_VEHICLE_ID) {
@@ -8314,6 +8299,7 @@ public OnPlayerDeath(playerid, killerid, WEAPON:reason) {
     ClearAnimations(playerid, t_FORCE_SYNC:SYNC_ALL);
     SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
     PatinesKameActivo[playerid] = false;
+    LimpiarArmasVisiblesJugador(playerid);
     if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_HACHA)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_HACHA);
     if(IsPlayerAttachedObjectSlotUsed(playerid, ATTACH_SLOT_TRONCO)) RemovePlayerAttachedObject(playerid, ATTACH_SLOT_TRONCO);
     if(IsPlayerAttachedObjectSlotUsed(playerid, BIDON_ATTACH_SLOT)) RemovePlayerAttachedObject(playerid, BIDON_ATTACH_SLOT);
@@ -12180,6 +12166,63 @@ stock SetCheckpointMinaMasCercana(playerid) {
     return 1;
 }
 
+stock LimpiarArmasVisiblesJugador(playerid) {
+    for(new i = 0; i < MAX_WEAPON_ATTACH_OBJ; i++) {
+        new slot = 10 + i;
+        if(IsPlayerAttachedObjectSlotUsed(playerid, slot)) RemovePlayerAttachedObject(playerid, slot);
+        WeaponAttachSlots[playerid][i] = -1;
+        WeaponAttachWeaponIds[playerid][i] = 0;
+    }
+    return 1;
+}
+
+stock ObtenerModeloArmaVisible(weaponid, &modelid, &bone, &Float:offX, &Float:offY, &Float:offZ, &Float:rotX, &Float:rotY, &Float:rotZ, &Float:scX, &Float:scY, &Float:scZ) {
+    modelid = 0; bone = 1;
+    offX = offY = offZ = 0.0;
+    rotX = rotY = rotZ = 0.0;
+    scX = scY = scZ = 1.0;
+    switch(weaponid) {
+        case 24: { modelid = 348; bone = 3; offX = 0.10; offY = 0.04; offZ = 0.02; rotY = -78.0; }
+        case 25: { modelid = 349; offX = -0.16; offY = -0.12; offZ = 0.16; rotY = 25.0; rotZ = 8.0; }
+        case 29: { modelid = 353; offX = -0.14; offY = -0.13; offZ = 0.08; rotY = 20.0; rotZ = 5.0; }
+        case 30: { modelid = 355; offX = -0.16; offY = -0.14; offZ = -0.03; rotY = 24.0; rotZ = 5.0; }
+        case 31: { modelid = 356; offX = -0.18; offY = -0.13; offZ = -0.02; rotY = 24.0; rotZ = 5.0; }
+        case 33: { modelid = 357; offX = -0.16; offY = -0.11; offZ = -0.16; rotY = 22.0; }
+        case 34: { modelid = 358; offX = -0.17; offY = -0.11; offZ = -0.22; rotY = 20.0; }
+    }
+    return modelid > 0;
+}
+
+stock ActualizarArmasVisiblesJugador(playerid) {
+    if(!IsPlayerConnected(playerid) || !IsPlayerLoggedIn[playerid]) return 0;
+    if(IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_ONFOOT) return LimpiarArmasVisiblesJugador(playerid);
+
+    new armaMano = GetPlayerWeapon(playerid);
+    new idx = 0;
+    for(new w = 0; w < MAX_WEAPON_ID_GM && idx < MAX_WEAPON_ATTACH_OBJ; w++) {
+        if(PlayerAmmoInventario[playerid][w] <= 0 || w == armaMano) continue;
+        new model, bone;
+        new Float:offX, Float:offY, Float:offZ, Float:rotX, Float:rotY, Float:rotZ, Float:scX, Float:scY, Float:scZ;
+        if(!ObtenerModeloArmaVisible(w, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ)) continue;
+
+        new slot = 10 + idx;
+        if(WeaponAttachWeaponIds[playerid][idx] != w || !IsPlayerAttachedObjectSlotUsed(playerid, slot)) {
+            SetPlayerAttachedObject(playerid, slot, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ);
+        }
+        WeaponAttachSlots[playerid][idx] = slot;
+        WeaponAttachWeaponIds[playerid][idx] = w;
+        idx++;
+    }
+
+    for(new i = idx; i < MAX_WEAPON_ATTACH_OBJ; i++) {
+        new slot = 10 + i;
+        if(IsPlayerAttachedObjectSlotUsed(playerid, slot)) RemovePlayerAttachedObject(playerid, slot);
+        WeaponAttachSlots[playerid][i] = -1;
+        WeaponAttachWeaponIds[playerid][i] = 0;
+    }
+    return 1;
+}
+
 stock GetPrecioOriginalVehiculo(modelo) {
     for(new i = 0; i < MAX_AUTOS_VENTA; i++) {
         if(VentaAutosData[i][vaActiva] && VentaAutosData[i][vaModelo] == modelo && VentaAutosData[i][vaPrecio] > 0) return VentaAutosData[i][vaPrecio];
@@ -12188,7 +12231,7 @@ stock GetPrecioOriginalVehiculo(modelo) {
 }
 
 stock MostrarMenuTuning(playerid) {
-    return ShowPlayerDialog(playerid, DIALOG_TUNING_MENU, DIALOG_STYLE_LIST, "Tuning Kame House", "Pintar vehiculo ($10000)\nVender auto como chatarra (70%)\nComprar modelo de tuneo\nGestionar tuneos del auto (/t)", "Seleccionar", "Cerrar");
+    return ShowPlayerDialog(playerid, DIALOG_TUNING_MENU, DIALOG_STYLE_LIST, "Tuning Kame House", "Pintar vehiculo ($10000)\nVender auto como chatarra (70%)", "Seleccionar", "Cerrar");
 }
 
 stock MostrarListaVehiculosChatarra(playerid) {
