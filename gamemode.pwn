@@ -11319,7 +11319,9 @@ public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:respon
                 VehTuningRotZ[veh][slotTuneo] = fRotZ;
                 GuardarCuenta(playerid);
                 SendClientMessage(playerid, 0x66FF66FF, "Posicion del tuneo guardada correctamente.");
-            } else {
+                AplicarTuneoVehiculoModelo(veh, slotTuneo);
+                TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
+            } else if(response == EDIT_RESPONSE_CANCEL) {
                 VehTuningOffX[veh][slotTuneo] = TuneoEditPrevOffX[playerid];
                 VehTuningOffY[veh][slotTuneo] = TuneoEditPrevOffY[playerid];
                 VehTuningOffZ[veh][slotTuneo] = TuneoEditPrevOffZ[playerid];
@@ -11327,10 +11329,12 @@ public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:respon
                 VehTuningRotY[veh][slotTuneo] = TuneoEditPrevRotY[playerid];
                 VehTuningRotZ[veh][slotTuneo] = TuneoEditPrevRotZ[playerid];
                 SendClientMessage(playerid, 0xFFAA00FF, "Edicion de tuneo cancelada. Se restauraron los valores anteriores.");
+                AplicarTuneoVehiculoModelo(veh, slotTuneo);
+                TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
+            } else {
+                return 1;
             }
-            AplicarTuneoVehiculoModelo(veh, slotTuneo);
         }
-        TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
         return 1;
     }
 
@@ -11805,6 +11809,22 @@ stock GuardarVentaAdminAutos() {
 }
 
 stock CargarVentaAdminAutos() {
+    for(new v = 1; v < MAX_VEHICLES; v++) {
+        if(VehOwner[v] != -2) continue;
+        if(VehVentaLabel[v] != Text3D:-1) { Delete3DTextLabel(VehVentaLabel[v]); VehVentaLabel[v] = Text3D:-1; }
+        if(IsValidVehicle(v)) DestroyVehicle(v);
+        VehOwner[v] = -1;
+        VehLocked[v] = false;
+        VehVentaPrecio[v] = 0;
+        VehVentaDiamantes[v] = 0;
+        VehVentaReponerTick[v] = 0;
+        VehModelData[v] = 0;
+        VehVentaSpawnPos[v][0] = 0.0;
+        VehVentaSpawnPos[v][1] = 0.0;
+        VehVentaSpawnPos[v][2] = 0.0;
+        VehVentaSpawnPos[v][3] = 0.0;
+    }
+
     new File:h = fopen(PATH_VENTA_ADMIN_AUTOS, io_read), line[160], bool:usarLegacy;
     if(h) {
         new bool:tieneDatos;
@@ -11887,6 +11907,9 @@ stock CargarVentaAdminSkins() {
     for(new i = 0; i < MAX_SKINS_VENTA; i++) {
         if(SkinVentaLabel[i] != Text3D:-1) { Delete3DTextLabel(SkinVentaLabel[i]); SkinVentaLabel[i] = Text3D:-1; }
         if(SkinVentaActor[i] != INVALID_ACTOR_ID) { DestroyActor(SkinVentaActor[i]); SkinVentaActor[i] = INVALID_ACTOR_ID; }
+        VentaSkinsData[i][vsActiva] = false;
+        VentaSkinsData[i][vsSkin] = 0;
+        VentaSkinsData[i][vsPrecio] = 0;
         SkinVentaPrecio[i] = 0;
         SkinVentaDiamantes[i] = 0;
     }
