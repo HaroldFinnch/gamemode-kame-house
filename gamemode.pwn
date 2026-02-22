@@ -7948,6 +7948,7 @@ public AutoGuardadoGlobal() {
     GuardarEditMap();
     GuardarVentagas();
     GuardarVentaAutosConfig();
+    GuardarVentaSkinsConfig();
     GuardarVentaAdminAutos();
     GuardarVentaAdminSkins();
     GuardarTuningModelosConfig();
@@ -8236,7 +8237,7 @@ public OnPlayerUpdate(playerid) {
     if(PatinesKameActivo[playerid] && !IsPlayerInAnyVehicle(playerid) && GetPlayerState(playerid) == PLAYER_STATE_ONFOOT) {
         new t_KEY:keys, ud, lr;
         GetPlayerKeys(playerid, keys, ud, lr);
-        if(ud > 0) {
+        if(ud < 0) {
             new Float:ang, Float:vx, Float:vy, Float:vz;
             GetPlayerFacingAngle(playerid, ang);
             GetPlayerVelocity(playerid, vx, vy, vz);
@@ -12199,8 +12200,14 @@ stock ActualizarArmasVisiblesJugador(playerid) {
 
     new armaMano = GetPlayerWeapon(playerid);
     new idx = 0;
-    for(new w = 0; w < MAX_WEAPON_ID_GM && idx < MAX_WEAPON_ATTACH_OBJ; w++) {
-        if(PlayerAmmoInventario[playerid][w] <= 0 || w == armaMano) continue;
+    for(new t_WEAPON_SLOT:slotData = t_WEAPON_SLOT:0; _:slotData < 13 && idx < MAX_WEAPON_ATTACH_OBJ; slotData++) {
+        new t_WEAPON:armaSlot;
+        new ammo;
+        GetPlayerWeaponData(playerid, slotData, armaSlot, ammo);
+
+        new w = _:armaSlot;
+        if(ammo <= 0 || w <= 0 || w >= MAX_WEAPON_ID_GM || w == armaMano) continue;
+
         new model, bone;
         new Float:offX, Float:offY, Float:offZ, Float:rotX, Float:rotY, Float:rotZ, Float:scX, Float:scY, Float:scZ;
         if(!ObtenerModeloArmaVisible(w, model, bone, offX, offY, offZ, rotX, rotY, rotZ, scX, scY, scZ)) continue;
