@@ -238,6 +238,7 @@
 #define DIALOG_ADMIN_TUNING_MODELO_DINERO 198
 #define DIALOG_ADMIN_TUNING_MODELO_DIAMANTES 199
 #define DIALOG_ADMIN_TUNING_ELIMINAR 200
+#define DIALOG_ADMIN_TUNING_MENU 201
 #define DIALOG_ADMIN_NIVELES_MENU 153
 #define DIALOG_ADMIN_SET_NIVEL_ID 154
 #define DIALOG_ADMIN_SET_NIVEL_VALOR 155
@@ -824,6 +825,8 @@ new TuningModeloAdminPrecioPendiente[MAX_PLAYERS];
 new TuningModeloListaSlots[MAX_PLAYERS][MAX_TUNING_MODELOS];
 new TuningModeloListaCount[MAX_PLAYERS];
 new TuningModeloSeleccionSlot[MAX_PLAYERS] = {-1, ...};
+new TuningAdminEliminarListaSlots[MAX_PLAYERS][MAX_TUNING_MODELOS];
+new TuningAdminEliminarListaCount[MAX_PLAYERS];
 new PlayerAutoTuningModelos[MAX_PLAYERS][MAX_AUTOS_NORMALES_JUGADOR][MAX_TUNING_MODELOS];
 new VentaAdminIdPendiente[MAX_PLAYERS];
 new VentaAdminPrecioPendiente[MAX_PLAYERS];
@@ -1893,7 +1896,7 @@ public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
         if(IsNearArmeria(playerid)) return ShowAdminArmasMenu(playerid);
         if(IsNearPrendas(playerid)) return ShowPrendasAdminMenu(playerid);
         if(IsNearTiendaVirtual(playerid)) return MostrarMenuAdminPreciosMembresia(playerid);
-        if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_ID, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Ingresa el modelo de tuning a vender (object model id):", "Siguiente", "Cerrar");
+        if(IsPlayerInRangeOfPoint(playerid, 3.0, PuntoPos[puntoPintura][0], PuntoPos[puntoPintura][1], PuntoPos[puntoPintura][2])) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MENU, DIALOG_STYLE_LIST, "Admin - Tuning", "Agregar tuneo\nEliminar tuneo", "Seleccionar", "Cerrar");
     }
 
     // Teclas B/L deshabilitadas por estabilidad del sistema.
@@ -5160,9 +5163,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         limpio[j] = EOS;
 
         KH_GivePlayerMoney(playerid, -COSTO_ANUNCIO);
-        new nombre[MAX_PLAYER_NAME];
+        new nombre[MAX_PLAYER_NAME], anuncioEmisor[48];
         GetPlayerName(playerid, nombre, sizeof(nombre));
-        MostrarAnuncioGlobal(nombre, limpio);
+        format(anuncioEmisor, sizeof(anuncioEmisor), "Anuncio De (%s y %d)", nombre, playerid);
+        MostrarAnuncioGlobal(anuncioEmisor, limpio);
         SendClientMessage(playerid, 0x66FF66FF, "Anuncio publicado por 10 segundos.");
         return 1;
     }
@@ -7116,6 +7120,40 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         SendClientMessage(playerid, 0x66FF66FF, "Tuneo comprado y aplicado al vehiculo.");
         GuardarCuenta(playerid);
         return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_TUNING_MENU) {
+        if(!response) return 1;
+        if(listitem == 0) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MODELO_ID, DIALOG_STYLE_INPUT, "Admin - Tuning Modelos", "Ingresa el modelo de tuning a vender (object model id):", "Siguiente", "Cerrar");
+        if(listitem == 1) {
+            new list[4096], line[96];
+            list[0] = EOS;
+            TuningAdminEliminarListaCount[playerid] = 0;
+            for(new i = 0; i < MAX_TUNING_MODELOS; i++) {
+                if(!TuningModelosData[i][tmActiva]) continue;
+                format(line, sizeof(line), "Modelo %d | $%d | %d diamantes", TuningModelosData[i][tmModelo], TuningModelosData[i][tmPrecioDinero], TuningModelosData[i][tmPrecioDiamantes]);
+                if(TuningAdminEliminarListaCount[playerid] > 0) strcat(list, "\n");
+                strcat(list, line);
+                TuningAdminEliminarListaSlots[playerid][TuningAdminEliminarListaCount[playerid]] = i;
+                TuningAdminEliminarListaCount[playerid]++;
+            }
+            if(TuningAdminEliminarListaCount[playerid] == 0) return SendClientMessage(playerid, -1, "No hay tuneos cargados para eliminar.");
+            return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_ELIMINAR, DIALOG_STYLE_LIST, "Admin - Eliminar tuneo", list, "Eliminar", "Atras");
+        }
+        return 1;
+    }
+
+    if(dialogid == DIALOG_ADMIN_TUNING_ELIMINAR) {
+        if(!response) return ShowPlayerDialog(playerid, DIALOG_ADMIN_TUNING_MENU, DIALOG_STYLE_LIST, "Admin - Tuning", "Agregar tuneo\nEliminar tuneo", "Seleccionar", "Cerrar");
+        if(listitem < 0 || listitem >= TuningAdminEliminarListaCount[playerid]) return SendClientMessage(playerid, -1, "Seleccion invalida.");
+        new slot = TuningAdminEliminarListaSlots[playerid][listitem];
+        if(slot < 0 || slot >= MAX_TUNING_MODELOS || !TuningModelosData[slot][tmActiva]) return SendClientMessage(playerid, -1, "Ese tuneo ya no existe.");
+        TuningModelosData[slot][tmActiva] = false;
+        TuningModelosData[slot][tmModelo] = 0;
+        TuningModelosData[slot][tmPrecioDinero] = 0;
+        TuningModelosData[slot][tmPrecioDiamantes] = 0;
+        GuardarTuningModelosConfig();
+        return SendClientMessage(playerid, 0x66FF66FF, "Tuneo eliminado correctamente.");
     }
 
     if(dialogid == DIALOG_ADMIN_TUNING_MODELO_ID) {
@@ -11799,7 +11837,7 @@ stock GetPrecioOriginalVehiculo(modelo) {
 }
 
 stock MostrarMenuTuning(playerid) {
-    return ShowPlayerDialog(playerid, DIALOG_TUNING_MENU, DIALOG_STYLE_LIST, "Tuning Kame House", "Pintar vehiculo ($10000)\nVender auto como chatarra (70%)", "Seleccionar", "Cerrar");
+    return ShowPlayerDialog(playerid, DIALOG_TUNING_MENU, DIALOG_STYLE_LIST, "Tuning Kame House", "Pintar vehiculo ($10000)\nVender auto como chatarra (70%)\nAgregar tuneo", "Seleccionar", "Cerrar");
 }
 
 stock MostrarListaVehiculosChatarra(playerid) {
