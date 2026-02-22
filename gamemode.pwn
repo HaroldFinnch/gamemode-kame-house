@@ -1023,6 +1023,7 @@ new AdminSetTrabajoTipo[MAX_PLAYERS] = {-1, ...};
 forward strtok(const string[], &index);
 forward strtok_sep(const string[], &index, separator = ' ');
 forward sscanf_manual(const string[], &Float:x, &Float:y, &Float:z);
+forward bool:sscanf_manual6(const string[], &Float:a, &Float:b, &Float:c, &Float:d, &Float:e, &Float:f);
 forward GuardarCasas();
 forward GuardarCuenta(playerid);
 stock CargarVehiculosJugadorDesdeCuenta(playerid, File:h);
@@ -4015,6 +4016,28 @@ stock sscanf_manual(const string[], &Float:x, &Float:y, &Float:z) {
     z = floatstr(strtok(string, idx));
 }
 
+stock bool:sscanf_manual6(const string[], &Float:a, &Float:b, &Float:c, &Float:d, &Float:e, &Float:f) {
+    new idx = 0;
+    new tokA[24], tokB[24], tokC[24], tokD[24], tokE[24], tokF[24];
+
+    format(tokA, sizeof(tokA), "%s", strtok(string, idx));
+    format(tokB, sizeof(tokB), "%s", strtok(string, idx));
+    format(tokC, sizeof(tokC), "%s", strtok(string, idx));
+    format(tokD, sizeof(tokD), "%s", strtok(string, idx));
+    format(tokE, sizeof(tokE), "%s", strtok(string, idx));
+    format(tokF, sizeof(tokF), "%s", strtok(string, idx));
+
+    if(!tokA[0] || !tokB[0] || !tokC[0] || !tokD[0] || !tokE[0] || !tokF[0]) return false;
+
+    a = floatstr(tokA);
+    b = floatstr(tokB);
+    c = floatstr(tokC);
+    d = floatstr(tokD);
+    e = floatstr(tokE);
+    f = floatstr(tokF);
+    return true;
+}
+
 stock bool:EsDueno(playerid) { return PlayerAdmin[playerid] == RANGO_DUENO; }
 stock bool:EsModerador(playerid) { return PlayerAdmin[playerid] == RANGO_MOD; }
 stock bool:EsStaff(playerid) { return PlayerAdmin[playerid] == RANGO_DUENO || PlayerAdmin[playerid] == RANGO_MOD; }
@@ -4633,7 +4656,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(listitem == 0) return ShowAyudaDialog(playerid);
         if(listitem == 1) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Trabajos", "{FFFFFF}Guia rapida de trabajos (usa /skills para revisar progreso, nivel y recompensas).\n\n{FFFF00}Camionero{FFFFFF}: inicia en su CP, carga y entrega mercancia en checkpoints.\n- Comandos utiles: /trabajos para dejarlo, GPS con /telefono.\n- Pago por viaje + bonus por nivel y membresia.\n\n{FF8C00}Pizzero{FFFFFF}: toma la moto de reparto y completa entregas en ruta.\n- Subes nivel por entregas exitosas.\n\n{00C853}Basurero{FFFFFF}: recoge bolsas con H y subelas a la Rumpo.\n- Al completar la ruta cobras por bolsas entregadas.\n\n{99CCFF}Armero{FFFFFF}: fabrica armas en la armeria usando materiales de inventario.\n- Sube nivel creando armas para desbloquear mejor rendimiento.\n\n{66CCFF}Mecanico{FFFFFF}: atiende jugadores con /reparar.\n- Skills: /usarkit (nivel 5) y /reparardl (nivel 10).\n\n{66FF99}Medico{FFFFFF}: cura vida con /curar y chaleco con /prote (nivel 4).\n- Ganas exp por tratamientos completados.\n\n{8B4513}Talador{FFFFFF}: tala arboles con H, carga troncos y entrega en la zona de trabajo.\n- Usa /dejartroncos para activar la entrega.\n\n{CCCCCC}Minero{FFFFFF}: mina rocas con H y procesa materiales en hornos.\n- Requiere mazo en buen estado para mantener produccion.", "Cerrar", "");
         if(listitem == 2) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Sistemas", "{33CCFF}Economia:{FFFFFF} /saldo, banco con H en Banco KameHouse, pago por hora segun nivel PJ.\n\n{66FF99}Propiedades:{FFFFFF} /comprar, /abrircasa, /salir.\n\n{FFCC66}Vehiculos:{FFFFFF} /maletero, /llave, /compartirllave, /encender, /apagar, /tuning, GPS desde /telefono (vehiculos).\n\n{CC99FF}Facciones:{FFFFFF} CP de facciones, /faccion, /fc para radio interna.\n\n{AAAAAA}Cultivo e inventario:{FFFFFF} /plantar, H para cosechar, /inventario, /consumir.\n\n{66FFFF}Identificacion:{FFFFFF} /id (panel) y /idd [ID] (chat) para ver datos publicos de jugadores.", "Cerrar", "");
-        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 3 tuneos por auto\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 10 tuneos por auto\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 25 tuneos por auto\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
+        if(listitem == 3) return ShowPlayerDialog(playerid, 0, DIALOG_STYLE_MSGBOX, "Ayuda - Membresias", "{66FFFF}Membresias Kame House{FFFFFF}\n\n{FFFFFF}Normal:\n- 1 casa\n- 1 vehiculo propio\n- Hasta 3 plantas en casa\n- 5 espacios de maletero\n- 5 prendas visibles\n- 5 tuneos por auto\n- 1 trabajo simultaneo\n- Bonus de trabajo: $0\n\n{FFD54F}VIP:\n- 3 casas\n- 3 vehiculos propios\n- Hasta 5 plantas\n- 7 espacios de maletero\n- 6 prendas visibles\n- 10 tuneos por auto\n- 2 trabajos simultaneos\n- Bonus de trabajo: +$100\n- Probabilidad de cosecha x2 en cultivos de casa\n\n{00E5FF}Diamante:\n- 10 casas\n- 10 vehiculos propios\n- Hasta 15 plantas\n- 15 espacios de maletero\n- 10 prendas visibles\n- 25 tuneos por auto\n- 4 trabajos simultaneos\n- Bonus de trabajo: +$500\n- Probabilidad de cosecha x4 en cultivos de casa\n\n{AAAAAA}Adquisicion:{FFFFFF} compra en Tienda Virtual Kame House (H en el punto) o mediante eventos del staff.", "Cerrar", "");
         if(listitem == 4) return ShowReglasDialog(playerid);
         return 1;
     }
@@ -7242,7 +7265,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(slot < 0 || slot >= MAX_TUNING_MODELOS || !VehTuningComprado[veh][slot]) return SendClientMessage(playerid, -1, "Tuneo invalido.");
 
         new Float:ox, Float:oy, Float:oz, Float:rx, Float:ry, Float:rz;
-        if(sscanf(inputtext, "ffffff", ox, oy, oz, rx, ry, rz)) return SendClientMessage(playerid, -1, "Formato invalido. Usa: offX offY offZ rotX rotY rotZ");
+        if(!sscanf_manual6(inputtext, ox, oy, oz, rx, ry, rz)) return SendClientMessage(playerid, -1, "Formato invalido. Usa: offX offY offZ rotX rotY rotZ");
 
         VehTuningOffX[veh][slot] = ox;
         VehTuningOffY[veh][slot] = oy;
@@ -8326,7 +8349,7 @@ stock GetLimiteTuningJugador(playerid) {
     ExpirarMembresiaSiCorresponde(playerid);
     if(PlayerMembresiaTipo[playerid] == MEMBRESIA_DIAMANTE) return 25;
     if(PlayerMembresiaTipo[playerid] == MEMBRESIA_VIP) return 10;
-    return 3;
+    return 5;
 }
 
 stock GetLimitePrendasJugador(playerid) {
