@@ -845,6 +845,13 @@ new Float:VehTuningRotZ[MAX_VEHICLES][MAX_TUNING_MODELOS];
 new VehTuningObjectId[MAX_VEHICLES][MAX_TUNING_MODELOS];
 new TuneoEditVehiculo[MAX_PLAYERS] = {INVALID_VEHICLE_ID, ...};
 new TuneoEditSlotModelo[MAX_PLAYERS] = {-1, ...};
+new TuneoEditObjeto[MAX_PLAYERS] = {INVALID_OBJECT_ID, ...};
+new Float:TuneoEditPrevOffX[MAX_PLAYERS];
+new Float:TuneoEditPrevOffY[MAX_PLAYERS];
+new Float:TuneoEditPrevOffZ[MAX_PLAYERS];
+new Float:TuneoEditPrevRotX[MAX_PLAYERS];
+new Float:TuneoEditPrevRotY[MAX_PLAYERS];
+new Float:TuneoEditPrevRotZ[MAX_PLAYERS];
 new TuneoUsuarioListaSlots[MAX_PLAYERS][MAX_TUNING_MODELOS];
 new TuneoUsuarioListaCount[MAX_PLAYERS];
 new VentaAdminIdPendiente[MAX_PLAYERS];
@@ -4077,6 +4084,10 @@ public OnPlayerText(playerid, text[]) {
 public OnPlayerConnect(playerid) {
     new nombreJugador[MAX_PLAYER_NAME];
     GetPlayerName(playerid, nombreJugador, sizeof(nombreJugador));
+
+    new msgConexion[144];
+    format(msgConexion, sizeof(msgConexion), "{66FF66}+ {FFFFFF}%s {AAAAAA}(Nivel PJ: 0)", nombreJugador);
+    SendClientMessageToAll(0xFFFFFFFF, msgConexion);
     if(!NombreRoleplayValido(nombreJugador)) {
         SendClientMessage(playerid, 0xFF4444FF, "Debes usar formato Nombre_Apellido para jugar (ej: Juan_Perez).");
         SendClientMessage(playerid, 0xFF4444FF, "Cambia tu nombre antes de registrarte para evitar nombres antirol.");
@@ -7177,10 +7188,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
             new m[96]; format(m, sizeof(m), "Tu membresia permite maximo %d tuneos por auto.", GetLimiteTuningJugador(playerid));
             return SendClientMessage(playerid, -1, m);
         }
+        if(VehTuningComprado[veh][slot]) return SendClientMessage(playerid, -1, "Ya tienes este tuneo en el vehiculo.");
         if(GetPlayerMoney(playerid) < TuningModelosData[slot][tmPrecioDinero] || PlayerDiamantes[playerid] < TuningModelosData[slot][tmPrecioDiamantes]) return SendClientMessage(playerid, -1, "No tienes suficiente dinero/diamantes.");
         KH_GivePlayerMoney(playerid, -TuningModelosData[slot][tmPrecioDinero]);
         PlayerDiamantes[playerid] -= TuningModelosData[slot][tmPrecioDiamantes];
-        if(VehTuningComprado[veh][slot]) return SendClientMessage(playerid, -1, "Ya tienes este tuneo en el vehiculo.");
         VehTuningComprado[veh][slot] = 1;
         VehTuningOffX[veh][slot] = 0.0;
         VehTuningOffY[veh][slot] = 0.0;
@@ -7237,9 +7248,20 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[]) {
         if(slot < 0 || slot >= MAX_TUNING_MODELOS || !VehTuningComprado[veh][slot]) return SendClientMessage(playerid, -1, "Tuneo invalido.");
 
         if(listitem == 0) {
-            new body[192];
-            format(body, sizeof(body), "Offset XYZ actual: %.3f %.3f %.3f\nRot XYZ actual: %.3f %.3f %.3f\n\nFormato:\noffsetX offsetY offsetZ rotX rotY rotZ", VehTuningOffX[veh][slot], VehTuningOffY[veh][slot], VehTuningOffZ[veh][slot], VehTuningRotX[veh][slot], VehTuningRotY[veh][slot], VehTuningRotZ[veh][slot]);
-            return ShowPlayerDialog(playerid, DIALOG_TUNEO_USUARIO_POSICION, DIALOG_STYLE_INPUT, "Ajustar tuneo", body, "Guardar", "Atras");
+            if(VehTuningObjectId[veh][slot] == 0) AplicarTuneoVehiculoModelo(veh, slot);
+            if(VehTuningObjectId[veh][slot] == 0) return SendClientMessage(playerid, -1, "No se pudo preparar el objeto del tuneo para editar.");
+
+            TuneoEditPrevOffX[playerid] = VehTuningOffX[veh][slot];
+            TuneoEditPrevOffY[playerid] = VehTuningOffY[veh][slot];
+            TuneoEditPrevOffZ[playerid] = VehTuningOffZ[veh][slot];
+            TuneoEditPrevRotX[playerid] = VehTuningRotX[veh][slot];
+            TuneoEditPrevRotY[playerid] = VehTuningRotY[veh][slot];
+            TuneoEditPrevRotZ[playerid] = VehTuningRotZ[veh][slot];
+            TuneoEditObjeto[playerid] = VehTuningObjectId[veh][slot];
+
+            EditObject(playerid, TuneoEditObjeto[playerid]);
+            SendClientMessage(playerid, 0x66FF66FF, "Editor de tuneo abierto. Mueve con el raton y confirma para guardar.");
+            return 1;
         }
 
         if(listitem == 1) {
@@ -7960,6 +7982,12 @@ public OcultarDineroCambioJugador(playerid) {
 
 public OnPlayerDisconnect(playerid, reason) {
     #pragma unused reason
+
+    new nombreJugador[MAX_PLAYER_NAME], msgSalida[160];
+    GetPlayerName(playerid, nombreJugador, sizeof(nombreJugador));
+    format(msgSalida, sizeof(msgSalida), "{FF6666}- {FFFFFF}%s {AAAAAA}(Nivel PJ: %d)", nombreJugador, GetNivelPJ(playerid));
+    SendClientMessageToAll(0xFFFFFFFF, msgSalida);
+
     if(PlayerInCasa[playerid] != -1) {
         new casa = PlayerInCasa[playerid];
         SetPlayerPos(playerid, CasaData[casa][cX], CasaData[casa][cY], CasaData[casa][cZ]);
@@ -8146,6 +8174,7 @@ public OnVehicleDeath(vehicleid, killerid) {
     GetVehicleHealth(vehicleid, VehHealthData[vehicleid]);
     GetVehicleZAngle(vehicleid, VehPosData[vehicleid][3]);
     VehOculto[vehicleid] = true;
+    RefrescarTuneosVehiculo(vehicleid);
     VehLastUseTick[vehicleid] = GetTickCount();
     return 1;
 }
@@ -9615,6 +9644,7 @@ public CheckInactiveVehicles() {
         GetVehicleZAngle(v, VehPosData[v][3]);
         DestroyVehicle(v);
         VehOculto[v] = true;
+        RefrescarTuneosVehiculo(v);
     }
     return 1;
 }
@@ -11276,6 +11306,34 @@ public OnPlayerEditAttachedObject(playerid, EDIT_RESPONSE:response, index, model
 public OnPlayerEditObject(playerid, playerobject, objectid, EDIT_RESPONSE:response, Float:fX, Float:fY, Float:fZ, Float:fRotX, Float:fRotY, Float:fRotZ) {
     #pragma unused playerobject
 
+    if(TuneoEditObjeto[playerid] != INVALID_OBJECT_ID && objectid == TuneoEditObjeto[playerid]) {
+        new veh = TuneoEditVehiculo[playerid];
+        new slotTuneo = TuneoEditSlotModelo[playerid];
+        if(veh > 0 && veh < MAX_VEHICLES && VehOwner[veh] == playerid && slotTuneo >= 0 && slotTuneo < MAX_TUNING_MODELOS && VehTuningComprado[veh][slotTuneo]) {
+            if(response == EDIT_RESPONSE_FINAL) {
+                VehTuningOffX[veh][slotTuneo] = fX;
+                VehTuningOffY[veh][slotTuneo] = fY;
+                VehTuningOffZ[veh][slotTuneo] = fZ;
+                VehTuningRotX[veh][slotTuneo] = fRotX;
+                VehTuningRotY[veh][slotTuneo] = fRotY;
+                VehTuningRotZ[veh][slotTuneo] = fRotZ;
+                GuardarCuenta(playerid);
+                SendClientMessage(playerid, 0x66FF66FF, "Posicion del tuneo guardada correctamente.");
+            } else {
+                VehTuningOffX[veh][slotTuneo] = TuneoEditPrevOffX[playerid];
+                VehTuningOffY[veh][slotTuneo] = TuneoEditPrevOffY[playerid];
+                VehTuningOffZ[veh][slotTuneo] = TuneoEditPrevOffZ[playerid];
+                VehTuningRotX[veh][slotTuneo] = TuneoEditPrevRotX[playerid];
+                VehTuningRotY[veh][slotTuneo] = TuneoEditPrevRotY[playerid];
+                VehTuningRotZ[veh][slotTuneo] = TuneoEditPrevRotZ[playerid];
+                SendClientMessage(playerid, 0xFFAA00FF, "Edicion de tuneo cancelada. Se restauraron los valores anteriores.");
+            }
+            AplicarTuneoVehiculoModelo(veh, slotTuneo);
+        }
+        TuneoEditObjeto[playerid] = INVALID_OBJECT_ID;
+        return 1;
+    }
+
     new slot = EditMapEditandoSlot[playerid];
     if(slot < 0 || slot >= TotalEditMap || !EditMapData[slot][emActivo] || EditMapData[slot][emObj] != objectid) {
         slot = -1;
@@ -11797,6 +11855,7 @@ stock CargarVentaAdminAutos() {
         VehVentaLabel[veh] = Create3DTextLabel(txt, 0x33CCFFFF, x, y, z + 1.0, 20.0, 0);
     }
     fclose(h);
+    GuardarVentaAdminAutos();
     return 1;
 }
 
@@ -11874,6 +11933,7 @@ stock CargarVentaAdminSkins() {
         slot++;
     }
     fclose(h);
+    GuardarVentaAdminSkins();
     return 1;
 }
 
@@ -12150,6 +12210,10 @@ stock AplicarTuneoVehiculoModelo(veh, modeloSlot) {
 
 stock RefrescarTuneosVehiculo(veh) {
     if(veh <= 0 || veh >= MAX_VEHICLES) return 0;
+    if(VehOculto[veh] || !IsValidVehicle(veh)) {
+        for(new i = 0; i < MAX_TUNING_MODELOS; i++) RemoverTuneoVehiculoModelo(veh, i);
+        return 1;
+    }
     for(new i = 0; i < MAX_TUNING_MODELOS; i++) {
         if(VehTuningComprado[veh][i]) AplicarTuneoVehiculoModelo(veh, i);
         else RemoverTuneoVehiculoModelo(veh, i);
